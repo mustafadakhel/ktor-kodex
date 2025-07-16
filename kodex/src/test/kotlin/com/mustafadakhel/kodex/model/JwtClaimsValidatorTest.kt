@@ -1,0 +1,74 @@
+package com.mustafadakhel.kodex.model
+
+import com.mustafadakhel.kodex.util.ClaimsConfig
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
+import java.util.UUID
+import java.time.Instant
+
+class JwtClaimsValidatorTest : FunSpec({
+    val issuer = "issuer"
+    val audience = "audience"
+    val realmValue = "realm"
+
+    // configure claims provider
+    val claimsConfig = ClaimsConfig().apply {
+        issuer(issuer)
+        audience(audience)
+    }
+    val realm = Realm(realmValue)
+    val validator = JwtClaimsValidator(claimProvider = claimsConfig, realm = realm)
+
+    fun futureExpSecs() = Instant.now().plusSeconds(60).epochSecond
+    fun pastExpSecs() = Instant.now().minusSeconds(60).epochSecond
+
+    fun baseClaims(
+        exp: Long = futureExpSecs(),
+        iss: String = issuer,
+        aud: String = audience,
+        roles: List<String> = listOf("admin"),
+        type: Claim.TokenType = Claim.TokenType.AccessToken,
+        realmClaim: String = realmValue,
+    ) = listOf(
+        Claim.ExpiresAt(exp),
+        Claim.Issuer(iss),
+        Claim.Audience(aud),
+        Claim.Roles(roles),
+        Claim.JwtId(UUID.randomUUID().toString()),
+        type,
+        Claim.Subject(UUID.randomUUID().toString()),
+        Claim.Realm(realmClaim),
+        Claim.Custom(emptyMap())
+    )
+
+    val expectedRoles = listOf("admin")
+    val expectedType = TokenType.AccessToken
+
+    test("returns true when claims are valid") {
+        validator.validate(baseClaims(), expectedType, expectedRoles) shouldBe true
+    }
+
+    test("returns false for expired token") {
+        validator.validate(baseClaims(exp = pastExpSecs()), expectedType, expectedRoles) shouldBe false
+    }
+
+    test("returns false when issuer mismatches") {
+        validator.validate(baseClaims(iss = "bad"), expectedType, expectedRoles) shouldBe false
+    }
+
+    test("returns false when audience mismatches") {
+        validator.validate(baseClaims(aud = "other"), expectedType, expectedRoles) shouldBe false
+    }
+
+    test("returns false when roles missing") {
+        validator.validate(baseClaims(roles = listOf("user")), expectedType, expectedRoles) shouldBe false
+    }
+
+    test("returns false when token type mismatches") {
+        validator.validate(baseClaims(type = Claim.TokenType.RefreshToken), expectedType, expectedRoles) shouldBe false
+    }
+
+    test("returns false when realm mismatches") {
+        validator.validate(baseClaims(realmClaim = "other"), expectedType, expectedRoles) shouldBe false
+    }
+})
