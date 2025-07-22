@@ -85,7 +85,6 @@ private object ExposedUserRepository : UserRepository {
     override fun authenticate(userId: UUID, hashedPassword: String): Boolean = exposedTransaction {
         UserDao.findById(userId)?.let {
             it.passwordHash == hashedPassword
-            true
         } ?: false
     }
 

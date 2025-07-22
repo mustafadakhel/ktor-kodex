@@ -412,6 +412,19 @@ class ExposedUserRepositoryTest : FunSpec({
         test("authenticate returns false for non‑existent user") {
             userRepository.authenticate(UUID.randomUUID(), "pw") shouldBe false
         }
+        test("authenticate returns false for wrong password") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val u = (userRepository.create(
+                "wrong@x",
+                null,
+                "correctpw",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+            userRepository.authenticate(u.id, "wrongpw") shouldBe false
+        }
     }
 
     context("User Verification") {
