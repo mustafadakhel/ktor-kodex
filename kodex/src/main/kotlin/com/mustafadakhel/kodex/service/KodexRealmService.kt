@@ -92,15 +92,16 @@ internal class KodexRealmService(
         return profile.toUserProfile()
     }
 
+    override fun getSeededRoles(): List<String> {
+        return userRepository.getAllRoles().map { it.name }
+    }
+
     override suspend fun tokenByEmail(email: String, password: String): TokenPair {
         val user = userRepository.findByEmail(email)
             ?: throw Authorization.InvalidCredentials
+        authenticateInternal(password, user.id)
         if (!user.isVerified) throw Authorization.UnverifiedAccount
-        return generateTokenInternal(user.id, password)
-    }
-
-    override fun getSeededRoles(): List<String> {
-        return userRepository.getAllRoles().map { it.name }
+        return generateTokenInternal(user.id)
     }
 
     override suspend fun tokenByPhone(
@@ -109,18 +110,18 @@ internal class KodexRealmService(
     ): TokenPair {
         val user = userRepository.findByPhone(phone)
             ?: throw Authorization.InvalidCredentials
+        authenticateInternal(password, user.id)
         if (!user.isVerified) throw Authorization.UnverifiedAccount
-        return generateTokenInternal(user.id, password)
+        return generateTokenInternal(user.id)
     }
 
-    private suspend fun generateTokenInternal(
-        userId: UUID,
-        password: String,
-    ): TokenPair {
+    private fun authenticateInternal(password: String, userId: UUID) {
         val hashedPassword = hashingService.hash(password)
         val success = userRepository.authenticate(userId, hashedPassword)
         if (!success) throw Authorization.InvalidCredentials
+    }
 
+    private suspend fun generateTokenInternal(userId: UUID): TokenPair {
         val token = tokenManager.issueNewTokens(userId)
         return token
     }
