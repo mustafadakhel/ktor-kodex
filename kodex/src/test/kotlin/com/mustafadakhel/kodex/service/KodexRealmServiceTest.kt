@@ -1,7 +1,6 @@
 package com.mustafadakhel.kodex.service
 
 import com.mustafadakhel.kodex.model.Realm
-import com.mustafadakhel.kodex.model.User
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
@@ -16,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import java.util.*
+
 class KodexRealmServiceTest : StringSpec({
 
     val userRepository = mockk<UserRepository>()
@@ -120,10 +120,10 @@ class KodexRealmServiceTest : StringSpec({
         every { userRepository.findByPhone("+100") } returns entity
         every { hashService.hash(plain) } returns hashed
         every { userRepository.authenticate(userId, hashed) } returns true
-        coEvery { tokenManager.issueNewTokens(userId) } returns TokenPair("a","r")
+        coEvery { tokenManager.issueNewTokens(userId) } returns TokenPair("a", "r")
 
         runTest {
-            service.tokenByPhone("+100", plain) shouldBe TokenPair("a","r")
+            service.tokenByPhone("+100", plain) shouldBe TokenPair("a", "r")
         }
 
         verifyOrder {
@@ -229,7 +229,7 @@ class KodexRealmServiceTest : StringSpec({
         } returns UserRepository.CreateUserResult.EmailAlreadyExists
 
         shouldThrow<KodexThrowable.EmailAlreadyExists> {
-            service.createUser("e@x", null, "pw", null, null)
+            service.createUser("e@x", null, "pw", emptyList(), null, null)
         }
     }
 
@@ -240,7 +240,7 @@ class KodexRealmServiceTest : StringSpec({
         } returns UserRepository.CreateUserResult.PhoneAlreadyExists
 
         shouldThrow<KodexThrowable.PhoneAlreadyExists> {
-            service.createUser(null, "p", "pw", null, null)
+            service.createUser(null, "p", "pw", emptyList(), null, null)
         }
     }
 
@@ -251,16 +251,16 @@ class KodexRealmServiceTest : StringSpec({
         } returns UserRepository.CreateUserResult.InvalidRole("X")
 
         shouldThrow<KodexThrowable.RoleNotFound> {
-            service.createUser(null, "p", "pw", null, null)
+            service.createUser(null, "p", "pw", emptyList(), null, null)
         }
     }
 
     "refresh delegates to tokenManager" {
         val userId = UUID.randomUUID()
-        coEvery { tokenManager.refreshTokens(userId, "rt") } returns TokenPair("a","r")
+        coEvery { tokenManager.refreshTokens(userId, "rt") } returns TokenPair("a", "r")
 
         runTest {
-            service.refresh(userId, "rt") shouldBe TokenPair("a","r")
+            service.refresh(userId, "rt") shouldBe TokenPair("a", "r")
         }
 
         coVerify { tokenManager.refreshTokens(userId, "rt") }

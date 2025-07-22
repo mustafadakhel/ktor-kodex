@@ -66,12 +66,13 @@ public interface KodexService {
     /**
      * Registers a new user using the supplied [password], [email] and/or [phone]
      * and returns the created [User] or `null` if the user already exists.
-     * Optionally, you can provide [customAttributes] and a [profile].
+     * Optionally, you can provide [customAttributes], [roleNames] and a [profile].
      */
     public fun createUser(
         email: String?,
         phone: String? = null,
         password: String,
+        roleNames: List<String> = emptyList(),
         customAttributes: Map<String, String>? = null,
         profile: UserProfile? = null,
     ): User?

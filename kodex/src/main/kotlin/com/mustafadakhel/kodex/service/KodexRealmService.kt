@@ -144,6 +144,7 @@ internal class KodexRealmService(
         email: String?,
         phone: String?,
         password: String,
+        roleNames: List<String>,
         customAttributes: Map<String, String>?,
         profile: UserProfile?,
     ): User? {
@@ -151,7 +152,7 @@ internal class KodexRealmService(
             email = email,
             phone = phone,
             hashedPassword = hashingService.hash(password),
-            roleNames = listOf(realm.owner),
+            roleNames = (listOf(realm.owner) + roleNames).distinct(),
             currentTime = getCurrentLocalDateTime(timeZone),
             customAttributes = customAttributes,
             profile = profile,
