@@ -94,6 +94,9 @@ public interface KodexService {
         customAttributes: Map<String, String>
     )
 
+    /** Returns a list of all roles in the realm. */
+    public fun getSeededRoles(): List<String>
+
     /** Sets verification status for the user. */
     public fun setVerified(userId: UUID, verified: Boolean)
 

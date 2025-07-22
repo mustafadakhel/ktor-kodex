@@ -171,6 +171,10 @@ private object ExposedUserRepository : UserRepository {
             ?: emptyList()
     }
 
+    override fun getAllRoles(): List<RoleEntity> = exposedTransaction {
+        RoleDao.all().map { it.toEntity() }
+    }
+
     override fun findProfileByUserId(userId: UUID): UserProfileEntity? = exposedTransaction {
         UserProfileDao.findById(userId)?.toEntity()
     }

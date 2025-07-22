@@ -61,8 +61,8 @@ public class Kodex private constructor(
             val databaseTokenRepository = databaseTokenRepository()
             val hashingService = saltedHashingService()
 
+            userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
             val services = realmConfigs.map { realmConfig ->
-                userRepository.seedRoles(realmConfig.rolesConfig.roles)
                 KodexRealmService(
                     userRepository = userRepository,
                     tokenManager = DefaultTokenManager(

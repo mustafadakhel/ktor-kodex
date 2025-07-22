@@ -46,6 +46,8 @@ internal interface UserRepository {
 
     fun findRoles(userId: UUID): List<RoleEntity>
 
+    fun getAllRoles(): List<RoleEntity>
+
     fun updateRolesForUser(
         userId: UUID,
         roleNames: List<String>,

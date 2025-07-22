@@ -99,6 +99,10 @@ internal class KodexRealmService(
         return generateTokenInternal(user.id, password)
     }
 
+    override fun getSeededRoles(): List<String> {
+        return userRepository.getAllRoles().map { it.name }
+    }
+
     override suspend fun tokenByPhone(
         phone: String,
         password: String
