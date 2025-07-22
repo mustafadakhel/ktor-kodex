@@ -116,8 +116,9 @@ internal class KodexRealmService(
     }
 
     private fun authenticateInternal(password: String, userId: UUID) {
-        val hashedPassword = hashingService.hash(password)
-        val success = userRepository.authenticate(userId, hashedPassword)
+        val storedPassword = userRepository.getHashedPassword(userId)
+            ?: throw Authorization.InvalidCredentials
+        val success = hashingService.verify(password, storedPassword)
         if (!success) throw Authorization.InvalidCredentials
     }
 

@@ -39,16 +39,17 @@ class KodexRealmServiceTest : StringSpec({
         val hashed = "h_pwd"
         val entity = UserEntity(
             id = userId,
-            createdAt = now, updatedAt = now,
+            createdAt = now,
+            updatedAt = now,
             isVerified = true,
             phoneNumber = null,
             email = "u@x",
             lastLoggedIn = null,
-            status = UserStatus.ACTIVE
+            status = UserStatus.ACTIVE,
         )
         every { userRepository.findByEmail("u@x") } returns entity
-        every { hashService.hash(plain) } returns hashed
-        every { userRepository.authenticate(userId, hashed) } returns true
+        every { hashService.verify(plain, hashed) } returns true
+        every { userRepository.getHashedPassword(userId) } returns hashed
         coEvery { tokenManager.issueNewTokens(userId) } returns TokenPair("access", "refresh")
 
         runTest {
@@ -57,8 +58,8 @@ class KodexRealmServiceTest : StringSpec({
 
         verifyOrder {
             userRepository.findByEmail("u@x")
-            hashService.hash(plain)
-            userRepository.authenticate(userId, hashed)
+            userRepository.getHashedPassword(userId)
+            hashService.verify(plain, hashed)
         }
         coVerify { tokenManager.issueNewTokens(userId) }
     }
@@ -80,6 +81,8 @@ class KodexRealmServiceTest : StringSpec({
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, false, null, "u@x", null, UserStatus.ACTIVE)
         every { userRepository.findByEmail("u@x") } returns entity
+        every { hashService.verify(any(), any()) } returns true
+        every { userRepository.getHashedPassword(userId) } returns "h_pwd"
 
         runTest {
             shouldThrow<KodexThrowable.Authorization.UnverifiedAccount> {
@@ -95,8 +98,8 @@ class KodexRealmServiceTest : StringSpec({
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, true, null, "u@x", null, UserStatus.ACTIVE)
         every { userRepository.findByEmail("u@x") } returns entity
-        every { hashService.hash("bad") } returns "h_bad"
-        every { userRepository.authenticate(userId, "h_bad") } returns false
+        every { hashService.verify("bad", "wrong_hash") } returns false
+        every { userRepository.getHashedPassword(userId) } returns "wrong_hash"
 
         runTest {
             shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
@@ -106,8 +109,8 @@ class KodexRealmServiceTest : StringSpec({
 
         verifySequence {
             userRepository.findByEmail("u@x")
-            hashService.hash("bad")
-            userRepository.authenticate(userId, "h_bad")
+            userRepository.getHashedPassword(userId)
+            hashService.verify("bad", "wrong_hash")
         }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
@@ -118,8 +121,8 @@ class KodexRealmServiceTest : StringSpec({
         val hashed = "h_pwd"
         val entity = UserEntity(userId, now, now, true, "+100", null, null, UserStatus.ACTIVE)
         every { userRepository.findByPhone("+100") } returns entity
-        every { hashService.hash(plain) } returns hashed
-        every { userRepository.authenticate(userId, hashed) } returns true
+        every { hashService.verify(plain, hashed) } returns true
+        every { userRepository.getHashedPassword(userId) } returns hashed
         coEvery { tokenManager.issueNewTokens(userId) } returns TokenPair("a", "r")
 
         runTest {
@@ -128,8 +131,8 @@ class KodexRealmServiceTest : StringSpec({
 
         verifyOrder {
             userRepository.findByPhone("+100")
-            hashService.hash(plain)
-            userRepository.authenticate(userId, hashed)
+            userRepository.getHashedPassword(userId)
+            hashService.verify(plain, hashed)
         }
         coVerify { tokenManager.issueNewTokens(userId) }
     }
@@ -151,6 +154,8 @@ class KodexRealmServiceTest : StringSpec({
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, false, "+200", null, null, UserStatus.ACTIVE)
         every { userRepository.findByPhone("+200") } returns entity
+        every { hashService.verify(any(), any()) } returns true
+        every { userRepository.getHashedPassword(userId) } returns "h_p"
 
         runTest {
             shouldThrow<KodexThrowable.Authorization.UnverifiedAccount> {
@@ -162,12 +167,12 @@ class KodexRealmServiceTest : StringSpec({
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
 
-    "tokenByPhone throws InvalidCredentials when phone password wrong" {
+    "tokenByPhone throws InvalidCredentials when password wrong" {
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, true, "+300", null, null, UserStatus.ACTIVE)
         every { userRepository.findByPhone("+300") } returns entity
-        every { hashService.hash("bad") } returns "h_bad"
-        every { userRepository.authenticate(userId, "h_bad") } returns false
+        every { hashService.verify("bad", "wrong_hash") } returns false
+        every { userRepository.getHashedPassword(userId) } returns "wrong_hash"
 
         runTest {
             shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
@@ -177,8 +182,8 @@ class KodexRealmServiceTest : StringSpec({
 
         verifySequence {
             userRepository.findByPhone("+300")
-            hashService.hash("bad")
-            userRepository.authenticate(userId, "h_bad")
+            userRepository.getHashedPassword(userId)
+            hashService.verify("bad", "wrong_hash")
         }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }

@@ -82,10 +82,8 @@ private object ExposedUserRepository : UserRepository {
         UserRepository.CreateUserResult.Success(newUser.toEntity())
     }
 
-    override fun authenticate(userId: UUID, hashedPassword: String): Boolean = exposedTransaction {
-        UserDao.findById(userId)?.let {
-            it.passwordHash == hashedPassword
-        } ?: false
+    override fun getHashedPassword(userId: UUID): String? = exposedTransaction {
+        UserDao.findById(userId)?.passwordHash
     }
 
     override fun seedRoles(roles: List<Role>) = exposedTransaction {

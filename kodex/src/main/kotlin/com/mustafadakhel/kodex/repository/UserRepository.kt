@@ -53,10 +53,9 @@ internal interface UserRepository {
         roleNames: List<String>,
     ): UpdateRolesResult
 
-    fun authenticate(
+    fun getHashedPassword(
         userId: UUID,
-        hashedPassword: String,
-    ): Boolean
+    ): String?
 
     fun findProfileByUserId(userId: UUID): UserProfileEntity?
 
