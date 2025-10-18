@@ -31,8 +31,29 @@ In your `dependencies` block:
 implementation("com.mustafadakhel.kodex:kodex:latest-version")
 ```
 
-Install and configure the plugin inside your `Application` module. The example below mirrors the setup found in the
-`sample` project:
+### Database driver
+
+Kodex supports any JDBC-compatible database. You must add the appropriate driver to your project dependencies:
+
+**PostgreSQL:**
+
+```kotlin
+runtimeOnly("org.postgresql:postgresql:42.7.2")
+```
+
+**MySQL:**
+
+```kotlin
+runtimeOnly("com.mysql:mysql-connector-j:8.3.0")
+```
+
+**H2 (for testing):**
+
+```kotlin
+runtimeOnly("com.h2database:h2:2.3.232")
+```
+
+Kodex uses the driver you provide through the `database` configuration block. Install and configure the plugin inside your `Application` module. The example below mirrors the setup found in the `sample` project:
 
 ```kotlin
 fun Application.configureKodex() {
