@@ -4,6 +4,8 @@ import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.security.AccountLockoutService
+import com.mustafadakhel.kodex.security.LockoutResult
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
@@ -21,6 +23,7 @@ class KodexRealmServiceTest : StringSpec({
     val userRepository = mockk<UserRepository>()
     val tokenManager = mockk<TokenManager>()
     val hashService = mockk<HashingService>()
+    val accountLockout = mockk<AccountLockoutService>()
     val timeZone = TimeZone.UTC
     val realm = Realm("owner")
     val service = KodexRealmService(
@@ -28,7 +31,8 @@ class KodexRealmServiceTest : StringSpec({
         tokenManager = tokenManager,
         hashingService = hashService,
         timeZone = timeZone,
-        realm = realm
+        realm = realm,
+        accountLockoutService = accountLockout
     )
     val now = LocalDateTime(2024, 1, 1, 0, 0)
     afterTest { clearMocks(userRepository, tokenManager, hashService) }
@@ -47,6 +51,8 @@ class KodexRealmServiceTest : StringSpec({
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
         )
+        every { accountLockout.checkLockout("u@x", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.clearFailedAttempts("u@x") } just Runs
         every { userRepository.findByEmail("u@x") } returns entity
         every { hashService.verify(plain, hashed) } returns true
         every { userRepository.getHashedPassword(userId) } returns hashed
@@ -57,14 +63,18 @@ class KodexRealmServiceTest : StringSpec({
         }
 
         verifyOrder {
+            accountLockout.checkLockout("u@x", timeZone)
             userRepository.findByEmail("u@x")
             userRepository.getHashedPassword(userId)
             hashService.verify(plain, hashed)
+            accountLockout.clearFailedAttempts("u@x")
         }
         coVerify { tokenManager.issueNewTokens(userId) }
     }
 
     "tokenByEmail throws InvalidCredentials when user not found" {
+        every { accountLockout.checkLockout("missing", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.recordFailedAttempt("missing", "unknown", null, "User not found") } just Runs
         every { userRepository.findByEmail("missing") } returns null
 
         runTest {
@@ -73,13 +83,19 @@ class KodexRealmServiceTest : StringSpec({
             }
         }
 
-        verify { userRepository.findByEmail("missing") }
+        verifyOrder {
+            accountLockout.checkLockout("missing", timeZone)
+            userRepository.findByEmail("missing")
+            accountLockout.recordFailedAttempt("missing", "unknown", null, "User not found")
+        }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
 
     "tokenByEmail throws UnverifiedAccount when not verified" {
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, false, null, "u@x", null, UserStatus.ACTIVE)
+        every { accountLockout.checkLockout("u@x", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.clearFailedAttempts("u@x") } just Runs
         every { userRepository.findByEmail("u@x") } returns entity
         every { hashService.verify(any(), any()) } returns true
         every { userRepository.getHashedPassword(userId) } returns "h_pwd"
@@ -90,13 +106,18 @@ class KodexRealmServiceTest : StringSpec({
             }
         }
 
-        verify { userRepository.findByEmail("u@x") }
+        verify {
+            accountLockout.checkLockout("u@x", timeZone)
+            userRepository.findByEmail("u@x")
+        }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
 
     "tokenByEmail throws InvalidCredentials when password wrong" {
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, true, null, "u@x", null, UserStatus.ACTIVE)
+        every { accountLockout.checkLockout("u@x", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.recordFailedAttempt("u@x", "unknown", null, "Invalid password") } just Runs
         every { userRepository.findByEmail("u@x") } returns entity
         every { hashService.verify("bad", "wrong_hash") } returns false
         every { userRepository.getHashedPassword(userId) } returns "wrong_hash"
@@ -107,10 +128,12 @@ class KodexRealmServiceTest : StringSpec({
             }
         }
 
-        verifySequence {
+        verifyOrder {
+            accountLockout.checkLockout("u@x", timeZone)
             userRepository.findByEmail("u@x")
             userRepository.getHashedPassword(userId)
             hashService.verify("bad", "wrong_hash")
+            accountLockout.recordFailedAttempt("u@x", "unknown", null, "Invalid password")
         }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
@@ -120,6 +143,8 @@ class KodexRealmServiceTest : StringSpec({
         val plain = "pwd"
         val hashed = "h_pwd"
         val entity = UserEntity(userId, now, now, true, "+100", null, null, UserStatus.ACTIVE)
+        every { accountLockout.checkLockout("+100", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.clearFailedAttempts("+100") } just Runs
         every { userRepository.findByPhone("+100") } returns entity
         every { hashService.verify(plain, hashed) } returns true
         every { userRepository.getHashedPassword(userId) } returns hashed
@@ -130,14 +155,18 @@ class KodexRealmServiceTest : StringSpec({
         }
 
         verifyOrder {
+            accountLockout.checkLockout("+100", timeZone)
             userRepository.findByPhone("+100")
             userRepository.getHashedPassword(userId)
             hashService.verify(plain, hashed)
+            accountLockout.clearFailedAttempts("+100")
         }
         coVerify { tokenManager.issueNewTokens(userId) }
     }
 
     "tokenByPhone throws InvalidCredentials when phone not found" {
+        every { accountLockout.checkLockout("x", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.recordFailedAttempt("x", "unknown", null, "User not found") } just Runs
         every { userRepository.findByPhone("x") } returns null
 
         runTest {
@@ -146,13 +175,18 @@ class KodexRealmServiceTest : StringSpec({
             }
         }
 
-        verify { userRepository.findByPhone("x") }
+        verifyOrder {
+            accountLockout.checkLockout("x", timeZone)
+            userRepository.findByPhone("x")
+            accountLockout.recordFailedAttempt("x", "unknown", null, "User not found")
+        }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
 
     "tokenByPhone throws UnverifiedAccount when not verified" {
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, false, "+200", null, null, UserStatus.ACTIVE)
+        every { accountLockout.checkLockout("+200", timeZone) } returns LockoutResult.NotLocked
         every { userRepository.findByPhone("+200") } returns entity
         every { hashService.verify(any(), any()) } returns true
         every { userRepository.getHashedPassword(userId) } returns "h_p"
@@ -163,13 +197,20 @@ class KodexRealmServiceTest : StringSpec({
             }
         }
 
-        verify { userRepository.findByPhone("+200") }
+        verifyOrder {
+            accountLockout.checkLockout("+200", timeZone)
+            userRepository.findByPhone("+200")
+            userRepository.getHashedPassword(userId)
+            hashService.verify(any(), any())
+        }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
 
     "tokenByPhone throws InvalidCredentials when password wrong" {
         val userId = UUID.randomUUID()
         val entity = UserEntity(userId, now, now, true, "+300", null, null, UserStatus.ACTIVE)
+        every { accountLockout.checkLockout("+300", timeZone) } returns LockoutResult.NotLocked
+        every { accountLockout.recordFailedAttempt("+300", "unknown", null, "Invalid password") } just Runs
         every { userRepository.findByPhone("+300") } returns entity
         every { hashService.verify("bad", "wrong_hash") } returns false
         every { userRepository.getHashedPassword(userId) } returns "wrong_hash"
@@ -180,10 +221,12 @@ class KodexRealmServiceTest : StringSpec({
             }
         }
 
-        verifySequence {
+        verifyOrder {
+            accountLockout.checkLockout("+300", timeZone)
             userRepository.findByPhone("+300")
             userRepository.getHashedPassword(userId)
             hashService.verify("bad", "wrong_hash")
+            accountLockout.recordFailedAttempt("+300", "unknown", null, "Invalid password")
         }
         coVerify(exactly = 0) { tokenManager.issueNewTokens(any()) }
     }
