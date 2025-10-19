@@ -7,6 +7,7 @@ import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.routes.auth.RealmConfig
+import com.mustafadakhel.kodex.security.accountLockoutService
 import com.mustafadakhel.kodex.service.KodexRealmService
 import com.mustafadakhel.kodex.service.KodexService
 import com.mustafadakhel.kodex.service.passwordHashingService
@@ -69,6 +70,7 @@ public class Kodex private constructor(
             val services = realmConfigs.map { realmConfig ->
                 // Slow hasher for passwords (needs Argon2id)
                 val passwordHasher = passwordHashingService(realmConfig.passwordHashingConfig.algorithm)
+                val accountLockout = accountLockoutService(realmConfig.accountLockoutConfig.policy)
                 KodexRealmService(
                     userRepository = userRepository,
                     tokenManager = DefaultTokenManager(
@@ -98,7 +100,8 @@ public class Kodex private constructor(
                     ),
                     realm = realmConfig.realm,
                     timeZone = realmConfig.timeZone,
-                    hashingService = passwordHasher
+                    hashingService = passwordHasher,
+                    accountLockoutService = accountLockout
                 )
             }.associateBy { it.realm }
 
