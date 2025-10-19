@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Argon2id password hashing using BouncyCastle with configurable parameters and industry presets (Spring Security, Keycloak, OWASP minimum, balanced)
+- `passwordHashing` DSL configuration block for realm-specific password hashing settings
+- Comprehensive test coverage for Argon2id hashing service (25 tests)
+
+### Changed
+
+- Separated password hashing (Argon2id) from token hashing (SHA-256) for security
+
+### Breaking Changes
+
+- SHA-256 removed for password hashing (Argon2id only)
+
 ## [0.1.7] - 2025-01-18
 
 ### Fixed
