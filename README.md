@@ -199,11 +199,6 @@ accountLockout {
 - Successful login clears all failed attempts
 - Prevents username enumeration by tracking non-existent users
 
-**Performance:**
-- Optimized for high-traffic systems (100-1000x faster than naive implementations)
-- Scoped database queries with proper indexing
-- No exception-based control flow
-
 ### Routing helpers
 
 The plugin ships with utilities for building routes that automatically supply the authenticated user ID. `me {}`
