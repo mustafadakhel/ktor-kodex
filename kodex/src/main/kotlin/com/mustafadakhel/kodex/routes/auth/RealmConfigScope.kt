@@ -12,6 +12,7 @@ internal data class RealmConfig(
     internal val claimProvider: ClaimsConfig,
     internal val tokenConfig: TokenConfig,
     internal val rolesConfig: RolesConfig,
+    internal val passwordHashingConfig: PasswordHashingConfig,
     val timeZone: TimeZone
 )
 
@@ -24,6 +25,7 @@ internal data class RealmConfig(
  * kodex {
  *     realm(Realm.Main) {
  *         tokenValidity { /* ... */ }
+ *         passwordHashing { /* ... */ }
  *     }
  * }
  * ```
@@ -35,6 +37,7 @@ public class RealmConfigScope internal constructor(
     private var claimsConfigScope: ClaimsConfig = ClaimsConfig()
     private var tokenValidityConfig: TokenConfig = TokenConfig()
     private var rolesConfig: RolesConfig = RolesConfig(realm)
+    private var passwordHashingConfigScope: PasswordHashingConfigScope = PasswordHashingConfigScope()
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
 
     /** Configure the secrets used to sign and verify tokens. */
@@ -57,6 +60,11 @@ public class RealmConfigScope internal constructor(
         tokenValidityConfig.block()
     }
 
+    /** Configure password hashing algorithm. */
+    public fun passwordHashing(block: PasswordHashingConfigScope.() -> Unit) {
+        passwordHashingConfigScope.apply(block)
+    }
+
     /**
      * Finalises this scope returning an immutable [RealmConfig].
      * Called by the plugin during installation.
@@ -65,6 +73,7 @@ public class RealmConfigScope internal constructor(
         val secretsConfig = secretsConfigScope
         val claimConfig = claimsConfigScope
         val tokenValidity = tokenValidityConfig
+        val passwordHashingConfig = passwordHashingConfigScope.build()
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")
         if (claimConfig.issuer.isNullOrBlank()) throw IllegalArgumentException("Issuer must be provided")
         if (claimConfig.audience.isNullOrBlank()) throw IllegalArgumentException("Audience must be provided")
@@ -74,6 +83,7 @@ public class RealmConfigScope internal constructor(
             claimProvider = claimConfig,
             tokenConfig = tokenValidity,
             rolesConfig = rolesConfig,
+            passwordHashingConfig = passwordHashingConfig,
             timeZone = timeZone,
         )
     }

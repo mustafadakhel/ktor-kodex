@@ -42,6 +42,7 @@ dependencies {
     api(libs.hikari)
     implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
+    implementation(libs.bouncycastle.bcprov)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)

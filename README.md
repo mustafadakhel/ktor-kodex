@@ -8,6 +8,7 @@ sample application is included in this repository.
 
 - **Multi realm support** – create independent authentication realms with their own secrets and claims
 - **JWT token generation and verification** – access and refresh tokens signed using HS256
+- **Secure password hashing** – Argon2id with configurable parameters and industry presets
 - **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
 - **Role management** – roles are stored per realm and attached to issued tokens
 - **Ktor routing helpers** – easily protect routes and retrieve the appropriate `KodexService`
@@ -121,6 +122,9 @@ realm("admin") {
         access(1.hours)
         refresh(30.days)
         persist(TokenType.AccessToken, true)
+    }
+    passwordHashing {
+        algorithm = Argon2id.balanced()
     }
 }
 ```

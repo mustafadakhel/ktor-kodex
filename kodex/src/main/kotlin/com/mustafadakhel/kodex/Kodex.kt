@@ -9,6 +9,7 @@ import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.routes.auth.RealmConfig
 import com.mustafadakhel.kodex.service.KodexRealmService
 import com.mustafadakhel.kodex.service.KodexService
+import com.mustafadakhel.kodex.service.passwordHashingService
 import com.mustafadakhel.kodex.service.saltedHashingService
 import com.mustafadakhel.kodex.token.DefaultTokenManager
 import com.mustafadakhel.kodex.token.JwtTokenIssuer
@@ -59,10 +60,15 @@ public class Kodex private constructor(
 
             val userRepository: UserRepository = databaseUserRepository()
             val databaseTokenRepository = databaseTokenRepository()
-            val hashingService = saltedHashingService()
 
             userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
+
+            // Fast hasher for tokens (tokens are already high-entropy)
+            val tokenHasher = saltedHashingService()
+
             val services = realmConfigs.map { realmConfig ->
+                // Slow hasher for passwords (needs Argon2id)
+                val passwordHasher = passwordHashingService(realmConfig.passwordHashingConfig.algorithm)
                 KodexRealmService(
                     userRepository = userRepository,
                     tokenManager = DefaultTokenManager(
@@ -80,19 +86,19 @@ public class Kodex private constructor(
                             timeZone = realmConfig.timeZone,
                             tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                             tokenRepository = databaseTokenRepository,
-                            hashingService = hashingService,
+                            hashingService = tokenHasher,
                             userRepository = userRepository
                         ),
                         tokenRepository = databaseTokenRepository,
                         tokenValidity = realmConfig.tokenConfig.validity(),
-                        hashingService = hashingService,
+                        hashingService = tokenHasher,
                         tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                         timeZone = realmConfig.timeZone,
                         realm = realmConfig.realm
                     ),
                     realm = realmConfig.realm,
                     timeZone = realmConfig.timeZone,
-                    hashingService = hashingService
+                    hashingService = passwordHasher
                 )
             }.associateBy { it.realm }
 
