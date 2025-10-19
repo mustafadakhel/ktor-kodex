@@ -8,6 +8,7 @@ mockk = "1.14.4"
 coroutines = "1.10.2"
 kotlin = "2.1.21"
 kodex = "0.1.7"
+bouncycastle = "1.79"
 
 [libraries]
 exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
@@ -25,6 +26,7 @@ mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
 ktor-client-mock = { group = "io.ktor", name = "ktor-client-mock", version.ref = "ktor" }
+bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 
 [bundles]
 exposed = ["exposed-dao", "exposed-jdbc", "exposed-datetime", "exposed-json"]
