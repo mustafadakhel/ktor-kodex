@@ -102,7 +102,9 @@ public class Kodex private constructor(
                         hashingService = tokenHasher,
                         tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                         timeZone = realmConfig.timeZone,
-                        realm = realmConfig.realm
+                        realm = realmConfig.realm,
+                        tokenRotationPolicy = realmConfig.tokenRotationConfig.policy,
+                        auditService = auditServiceInstance
                     ),
                     realm = realmConfig.realm,
                     timeZone = realmConfig.timeZone,

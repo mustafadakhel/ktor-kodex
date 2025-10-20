@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.repository
 
 import com.mustafadakhel.kodex.model.database.PersistedToken
+import kotlinx.datetime.LocalDateTime
 import java.util.*
 
 internal interface TokenRepository {
@@ -10,4 +11,8 @@ internal interface TokenRepository {
     fun deleteToken(tokenHash: String)
     fun revokeTokens(userId: UUID)
     fun revokeToken(tokenHash: String)
+    fun markTokenAsUsed(tokenId: UUID, usedAt: LocalDateTime)
+    fun findTokenByHash(tokenHash: String): PersistedToken?
+    fun revokeTokenFamily(tokenFamily: UUID)
+    fun findTokensByFamily(tokenFamily: UUID): List<PersistedToken>
 }

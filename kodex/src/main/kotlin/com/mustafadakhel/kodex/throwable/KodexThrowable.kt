@@ -71,6 +71,15 @@ public sealed class KodexThrowable(
             val lockedUntil: kotlinx.datetime.LocalDateTime,
             val reason: String
         ) : Authorization("Account is locked until $lockedUntil. Reason: $reason")
+
+        public data class InvalidToken(
+            val additionalInfo: String? = null
+        ) : Authorization("Invalid token: $additionalInfo")
+
+        public data class TokenReplayDetected(
+            val tokenFamily: UUID,
+            val originalTokenId: UUID
+        ) : Authorization("Refresh token replay attack detected. Token family $tokenFamily has been revoked.")
     }
 
     public data class RoleNotFound(
