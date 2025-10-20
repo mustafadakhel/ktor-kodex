@@ -15,6 +15,9 @@ internal object Tokens : UUIDTable() {
     val revoked = bool("revoked").default(false)
     val createdAt = datetime("created_at").defaultExpression(CurrentDateTime)
     val expiresAt = datetime("expires_at")
+    val tokenFamily = uuid("token_family").nullable().index()
+    val parentTokenId = uuid("parent_token_id").nullable()
+    val usedAt = datetime("used_at").nullable()
 }
 
 internal class TokenDao(id: EntityID<UUID>) : UUIDEntity(id) {
@@ -26,4 +29,7 @@ internal class TokenDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var revoked by Tokens.revoked
     var createdAt by Tokens.createdAt
     var expiresAt by Tokens.expiresAt
+    var tokenFamily by Tokens.tokenFamily
+    var parentTokenId by Tokens.parentTokenId
+    var usedAt by Tokens.usedAt
 }

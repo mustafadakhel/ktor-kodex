@@ -8,6 +8,7 @@
 - **JWT token generation and verification** – access and refresh tokens signed using HS256
 - **Secure password hashing** – Argon2id with configurable parameters and industry presets
 - **Account lockout protection** – automatic brute force protection with configurable policies
+- **Token rotation** – automatic refresh token rotation with replay attack detection
 - **Audit logging** – comprehensive event tracking with query and export capabilities for compliance
 - **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
 - **Role management** – roles are stored per realm and attached to issued tokens
@@ -129,6 +130,9 @@ realm("admin") {
     accountLockout {
         policy = AccountLockoutPolicy.moderate()  // 5 attempts, 15min window, 30min lockout
     }
+    tokenRotation {
+        policy = TokenRotationPolicy.balanced()   // Automatic rotation with 5s grace period
+    }
 }
 ```
 
@@ -199,6 +203,52 @@ accountLockout {
 - Lockout expires after the configured duration
 - Successful login clears all failed attempts
 - Prevents username enumeration by tracking non-existent users
+
+### Token rotation
+
+Automatic refresh token rotation protects against token theft and replay attacks:
+
+```kotlin
+tokenRotation {
+    policy = TokenRotationPolicy.balanced()  // 5s grace period (default)
+    // or
+    policy = TokenRotationPolicy.strict()    // No grace period
+    // or
+    policy = TokenRotationPolicy.lenient()   // 10s grace period, no replay detection
+    // or
+    policy = TokenRotationPolicy.disabled()  // Legacy behavior (not recommended)
+}
+```
+
+Custom policy:
+
+```kotlin
+tokenRotation {
+    policy = TokenRotationPolicy(
+        enabled = true,
+        detectReplayAttacks = true,
+        revokeOnReplay = true,
+        gracePeriod = 5.seconds
+    )
+}
+```
+
+**How it works:**
+- Each refresh creates a new access + refresh token pair
+- Old refresh token is marked as used and cannot be reused
+- All rotated tokens share a token family ID for lineage tracking
+- **Replay detection:** If a used token is presented again after the grace period, it triggers a security violation
+- **Automatic revocation:** When replay is detected, the entire token family is revoked
+- **Audit logging:** Replay attacks are automatically logged as security violations
+- **Grace period:** Prevents false positives from network retries (configurable, default 5 seconds)
+
+The rotation is transparent to your application code - simply call `refresh()` as usual:
+
+```kotlin
+val tokenPair = kodexService.refresh(userId, refreshToken)
+// Returns new access and refresh tokens
+// Old refresh token is now single-use and cannot be replayed
+```
 
 ### Audit logging
 

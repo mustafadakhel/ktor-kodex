@@ -14,6 +14,7 @@ internal data class RealmConfig(
     internal val rolesConfig: RolesConfig,
     internal val passwordHashingConfig: PasswordHashingConfig,
     internal val accountLockoutConfig: AccountLockoutConfig,
+    internal val tokenRotationConfig: TokenRotationConfig,
     val timeZone: TimeZone
 )
 
@@ -40,6 +41,7 @@ public class RealmConfigScope internal constructor(
     private var rolesConfig: RolesConfig = RolesConfig(realm)
     private var passwordHashingConfigScope: PasswordHashingConfigScope = PasswordHashingConfigScope()
     private var accountLockoutConfigScope: AccountLockoutConfigScope = AccountLockoutConfigScope()
+    private var tokenRotationConfigScope: TokenRotationConfigScope = TokenRotationConfigScope()
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
 
     /** Configure the secrets used to sign and verify tokens. */
@@ -72,6 +74,11 @@ public class RealmConfigScope internal constructor(
         accountLockoutConfigScope.apply(block)
     }
 
+    /** Configure token rotation policy for refresh tokens. */
+    public fun tokenRotation(block: TokenRotationConfigScope.() -> Unit) {
+        tokenRotationConfigScope.apply(block)
+    }
+
     /**
      * Finalises this scope returning an immutable [RealmConfig].
      * Called by the plugin during installation.
@@ -82,6 +89,7 @@ public class RealmConfigScope internal constructor(
         val tokenValidity = tokenValidityConfig
         val passwordHashingConfig = passwordHashingConfigScope.build()
         val accountLockoutConfig = accountLockoutConfigScope.build()
+        val tokenRotationConfig = tokenRotationConfigScope.build()
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")
         if (claimConfig.issuer.isNullOrBlank()) throw IllegalArgumentException("Issuer must be provided")
         if (claimConfig.audience.isNullOrBlank()) throw IllegalArgumentException("Audience must be provided")
@@ -93,6 +101,7 @@ public class RealmConfigScope internal constructor(
             rolesConfig = rolesConfig,
             passwordHashingConfig = passwordHashingConfig,
             accountLockoutConfig = accountLockoutConfig,
+            tokenRotationConfig = tokenRotationConfig,
             timeZone = timeZone,
         )
     }
