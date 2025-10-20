@@ -1,6 +1,10 @@
 package com.mustafadakhel.kodex.service
 
 import com.auth0.jwt.JWT
+import com.mustafadakhel.kodex.audit.AuditService
+import com.mustafadakhel.kodex.audit.auditLoginFailed
+import com.mustafadakhel.kodex.audit.auditLoginSuccess
+import com.mustafadakhel.kodex.audit.auditUserCreated
 import com.mustafadakhel.kodex.model.*
 import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.UserEntity
@@ -23,6 +27,7 @@ internal class KodexRealmService(
     private val timeZone: TimeZone,
     internal val realm: Realm,
     private val accountLockoutService: AccountLockoutService,
+    private val auditService: AuditService,
 ) : KodexService {
 
     override fun getAllUsers(): List<User> {
@@ -110,6 +115,13 @@ internal class KodexRealmService(
                 userAgent = null,
                 reason = "User not found"
             )
+            // Audit failed login
+            auditService.auditLoginFailed(
+                realmId = realm.owner,
+                identifier = email,
+                reason = "User not found",
+                ipAddress = "unknown"
+            )
             throw Authorization.InvalidCredentials
         }
 
@@ -120,6 +132,13 @@ internal class KodexRealmService(
                 userAgent = null,
                 reason = "Invalid password"
             )
+            // Audit failed login
+            auditService.auditLoginFailed(
+                realmId = realm.owner,
+                identifier = email,
+                reason = "Invalid password",
+                ipAddress = "unknown"
+            )
             throw Authorization.InvalidCredentials
         }
 
@@ -128,6 +147,16 @@ internal class KodexRealmService(
         }
 
         accountLockoutService.clearFailedAttempts(email)
+
+        // Audit successful login
+        auditService.auditLoginSuccess(
+            realmId = realm.owner,
+            userId = user.id,
+            ipAddress = "unknown",
+            userAgent = null,
+            method = "email"
+        )
+
         return generateTokenInternal(user.id)
     }
 
@@ -145,6 +174,13 @@ internal class KodexRealmService(
                 userAgent = null,
                 reason = "User not found"
             )
+            // Audit failed login
+            auditService.auditLoginFailed(
+                realmId = realm.owner,
+                identifier = phone,
+                reason = "User not found",
+                ipAddress = "unknown"
+            )
             throw Authorization.InvalidCredentials
         }
 
@@ -155,6 +191,13 @@ internal class KodexRealmService(
                 userAgent = null,
                 reason = "Invalid password"
             )
+            // Audit failed login
+            auditService.auditLoginFailed(
+                realmId = realm.owner,
+                identifier = phone,
+                reason = "Invalid password",
+                ipAddress = "unknown"
+            )
             throw Authorization.InvalidCredentials
         }
 
@@ -163,6 +206,16 @@ internal class KodexRealmService(
         }
 
         accountLockoutService.clearFailedAttempts(phone)
+
+        // Audit successful login
+        auditService.auditLoginSuccess(
+            realmId = realm.owner,
+            userId = user.id,
+            ipAddress = "unknown",
+            userAgent = null,
+            method = "phone"
+        )
+
         return generateTokenInternal(user.id)
     }
 
@@ -222,7 +275,20 @@ internal class KodexRealmService(
             customAttributes = customAttributes,
             profile = profile,
         )
-        return result.userOrThrow().toUser()
+        val user = result.userOrThrow().toUser()
+
+        // Audit user creation
+        kotlinx.coroutines.runBlocking {
+            auditService.auditUserCreated(
+                realmId = realm.owner,
+                userId = user.id,
+                createdBy = null, // System-created
+                email = email,
+                phone = phone
+            )
+        }
+
+        return user
     }
 
     override fun getFullUser(userId: UUID): FullUser {
