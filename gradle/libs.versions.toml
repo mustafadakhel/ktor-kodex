@@ -13,6 +13,9 @@ libphonenumber = "8.13.27"
 jsoup = "1.17.2"
 kotlinx-datetime = "0.6.1"
 flyway = "10.22.0"
+micrometer = "1.14.2"
+slf4j = "2.0.16"
+logback = "1.5.15"
 
 [libraries]
 exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
@@ -35,6 +38,9 @@ libphonenumber = { group = "com.googlecode.libphonenumber", name = "libphonenumb
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
 flyway-core = { group = "org.flywaydb", name = "flyway-core", version.ref = "flyway" }
+micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
+slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
+logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
 
 [bundles]
 exposed = ["exposed-dao", "exposed-jdbc", "exposed-datetime", "exposed-json"]
