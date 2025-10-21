@@ -4,6 +4,7 @@ import com.mustafadakhel.kodex.model.Secrets
 import com.mustafadakhel.kodex.routes.auth.RealmConfigScope
 import io.ktor.server.config.*
 import io.ktor.utils.io.*
+import java.security.SecureRandom
 
 /**
  * Scope used to provide secrets for JWT signing and verification.
@@ -25,6 +26,7 @@ public interface SecretsConfigScope {
 /** Default implementation of [SecretsConfigScope]. */
 internal class SecretsConfig : SecretsConfigScope {
 
+    private val secureRandom = SecureRandom()
     private var provider: SecretsConfigScope.Provider = RawProvider(Secrets.Raw(emptyList()))
 
     private class RawProvider(
@@ -53,7 +55,7 @@ internal class SecretsConfig : SecretsConfigScope {
 
     internal fun randomWithKid(): Pair<String, String> {
         val secrets = secrets()
-        val index = secrets.indices.random()
+        val index = secureRandom.nextInt(secrets.size)
         val secret = secrets[index]
         return secret to index.toString()
     }

@@ -3,9 +3,13 @@ package com.mustafadakhel.kodex.util
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.*
+import org.jetbrains.exposed.sql.Table
 
-internal fun Application.connectDatabase(dataSource: HikariDataSource) {
-    setupExposedEngine(dataSource)
+internal fun Application.connectDatabase(
+    dataSource: HikariDataSource,
+    extensionTables: List<Table> = emptyList()
+) {
+    setupExposedEngine(dataSource, extensionTables)
     monitor.subscribe(ApplicationStopping) {
         Db.clearEngine()
         dataSource.close()
