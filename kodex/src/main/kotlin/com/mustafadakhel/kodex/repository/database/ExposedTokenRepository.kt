@@ -7,6 +7,10 @@ import com.mustafadakhel.kodex.model.database.Tokens
 import com.mustafadakhel.kodex.repository.TokenRepository
 import com.mustafadakhel.kodex.util.exposedTransaction
 import org.jetbrains.exposed.sql.insertAndGetId
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import java.util.*
 
 internal fun databaseTokenRepository(): TokenRepository = ExposedTokenRepository
@@ -48,10 +52,20 @@ private object ExposedTokenRepository : TokenRepository {
         TokenDao.find { Tokens.userId eq userId }.forEach { it.revoked = true }
     }
 
-    override fun markTokenAsUsed(tokenId: UUID, usedAt: kotlinx.datetime.LocalDateTime) = exposedTransaction {
+    override fun markTokenAsUsed(tokenId: UUID, usedAt: kotlinx.datetime.LocalDateTime): Unit = exposedTransaction {
         TokenDao.findById(tokenId)?.apply {
             this.usedAt = usedAt
         }
+        Unit
+    }
+
+    override fun markTokenAsUsedIfUnused(tokenId: UUID, usedAt: kotlinx.datetime.LocalDateTime): Boolean = exposedTransaction {
+        val updated = Tokens.update({
+            (Tokens.id eq tokenId) and Tokens.usedAt.isNull()
+        }) {
+            it[Tokens.usedAt] = usedAt
+        }
+        updated > 0
     }
 
     override fun findTokenByHash(tokenHash: String): PersistedToken? = exposedTransaction {
