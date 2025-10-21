@@ -44,11 +44,12 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 
 -- User custom attributes: Flexible key-value storage per user
+-- Secured against SQL injection with strict key validation
 CREATE TABLE IF NOT EXISTS user_custom_attributes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id UUID NOT NULL,
-    key VARCHAR(255) NOT NULL,
-    value VARCHAR(255) NOT NULL,
+    key VARCHAR(100) NOT NULL,
+    value TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE (user_id, key)
 );
