@@ -8,6 +8,7 @@ import com.mustafadakhel.kodex.repository.TokenRepository
 import com.mustafadakhel.kodex.util.exposedTransaction
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
@@ -46,9 +47,9 @@ private object ExposedTokenRepository : TokenRepository {
         TokenDao.findById(tokenId)?.delete() ?: throw NoSuchElementException("Token with id $tokenId not found")
     }
 
-    override fun deleteToken(tokenHash: String) = exposedTransaction {
-        TokenDao.find { Tokens.tokenHash eq tokenHash }
-            .forEach { it.delete() }
+    override fun deleteToken(tokenHash: String): Unit = exposedTransaction {
+        Tokens.deleteWhere { Tokens.tokenHash eq tokenHash }
+        Unit
     }
 
     override fun revokeTokens(userId: UUID): Unit = exposedTransaction {
