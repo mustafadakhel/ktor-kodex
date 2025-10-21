@@ -164,6 +164,12 @@ public class RealmConfigScope internal constructor(
         val tokenValidity = tokenValidityConfig
         val passwordHashingConfig = passwordHashingConfigScope.build()
         val tokenRotationConfig = tokenRotationConfigScope.build()
+
+        // Register built-in default validation hook if no custom validation hooks registered
+        if (UserLifecycleHooks::class !in extensionsMap) {
+            registerExtension(UserLifecycleHooks::class, com.mustafadakhel.kodex.extension.DefaultValidationHook())
+        }
+
         val extensionRegistry = ExtensionRegistry.fromLists(extensionsMap.toMap())
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")
         if (claimConfig.issuer.isNullOrBlank()) throw IllegalArgumentException("Issuer must be provided")

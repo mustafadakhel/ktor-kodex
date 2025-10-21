@@ -75,6 +75,9 @@ internal class UpdateCommandProcessor(
      */
     private fun convertValidationExceptionToResult(e: KodexThrowable.Validation): UpdateResult.Failure.ValidationFailed {
         val errors = when (e) {
+            is KodexThrowable.Validation.ValidationFailed -> listOf(
+                ValidationError(field = "unknown", message = e.message ?: "Validation failed", code = "VALIDATION_FAILED")
+            )
             is KodexThrowable.Validation.InvalidEmail -> listOf(
                 ValidationError(field = "email", message = e.errors.joinToString(", "), code = "INVALID_EMAIL")
             )

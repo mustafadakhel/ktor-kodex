@@ -91,6 +91,10 @@ public sealed class KodexThrowable(
         message: String? = null,
         cause: Throwable? = null
     ) : KodexThrowable(message, cause) {
+        public data class ValidationFailed(
+            override val message: String
+        ) : Validation(message)
+
         public data class InvalidEmail(
             val email: String,
             val errors: List<String>
