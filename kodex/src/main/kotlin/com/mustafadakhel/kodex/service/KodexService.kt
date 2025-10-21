@@ -19,6 +19,15 @@ public interface KodexService {
     /** Returns all users in the realm. */
     public fun getAllUsers(): List<User>
 
+    /**
+     * Returns all users with complete data (roles, profiles, custom attributes).
+     * Uses eager loading to avoid N+1 query problem.
+     *
+     * Performance: Fetches all related data in ≤5 queries regardless of user count,
+     * compared to 1 + 3N queries with naive approach (N users).
+     */
+    public fun getAllFullUsers(): List<FullUser>
+
     /** Returns the user with the supplied [userId] or throws if absent. */
     public fun getUser(userId: UUID): User
 

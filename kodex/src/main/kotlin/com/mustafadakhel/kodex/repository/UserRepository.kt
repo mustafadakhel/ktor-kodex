@@ -14,6 +14,14 @@ internal interface UserRepository {
 
     fun getAll(): List<UserEntity>
 
+    /**
+     * Retrieves all users with their complete data (roles, profiles, custom attributes)
+     * using eager loading to avoid N+1 query problem.
+     *
+     * Performance: Uses joins to fetch all related data in ≤5 queries regardless of user count.
+     */
+    fun getAllFull(): List<FullUserEntity>
+
     fun findById(userId: UUID): UserEntity?
 
     fun findByPhone(phone: String): UserEntity?

@@ -52,6 +52,12 @@ internal class KodexRealmService(
         }
     }
 
+    override fun getAllFullUsers(): List<FullUser> {
+        return userRepository.getAllFull().map { fullUserEntity ->
+            fullUserEntity.toFullUser()
+        }
+    }
+
     override fun getUser(userId: UUID): User {
         return userRepository.findById(userId)?.toUser()
             ?: throw UserNotFound("User with id $userId not found")
