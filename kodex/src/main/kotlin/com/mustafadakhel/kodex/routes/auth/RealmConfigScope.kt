@@ -95,11 +95,19 @@ public class RealmConfigScope internal constructor(
      * Extension configuration DSL.
      * Allows registering extensions with type-safe configuration.
      *
+     * Note: Prefer using the extension-specific DSL functions (validation, audit, accountLockout)
+     * for built-in extensions. This method is primarily for custom extensions.
+     *
      * Example:
      * ```kotlin
-     * extension(ValidationConfig()) {
+     * // Prefer this (for built-in extensions):
+     * validation {
      *     email { allowDisposable = false }
-     *     phone { requireE164 = true }
+     * }
+     *
+     * // Use extension() for custom extensions:
+     * extension(MyCustomConfig()) {
+     *     customSetting = "value"
      * }
      * ```
      *
@@ -139,6 +147,11 @@ public class RealmConfigScope internal constructor(
      */
     public fun <T : RealmExtension> registerExtension(extensionClass: KClass<T>, extension: T) {
         extensionsMap.getOrPut(extensionClass) { mutableListOf() }.add(extension)
+    }
+
+    /** Configure time zone for this realm. */
+    public fun timeZone(zone: TimeZone) {
+        this.timeZone = zone
     }
 
     /**

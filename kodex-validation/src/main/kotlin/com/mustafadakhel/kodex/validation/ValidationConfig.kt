@@ -10,7 +10,7 @@ import io.ktor.utils.io.*
  * Example usage:
  * ```kotlin
  * realm("admin") {
- *     extension(ValidationConfig()) {
+ *     validation {
  *         email {
  *             allowDisposable = false
  *         }

@@ -1,14 +1,14 @@
 package com.mustafadakhel.kodex.sample
 
 import com.mustafadakhel.kodex.Kodex
-import com.mustafadakhel.kodex.audit.AuditConfig
+import com.mustafadakhel.kodex.audit.audit
 import com.mustafadakhel.kodex.audit.ConsoleAuditProvider
 import com.mustafadakhel.kodex.kodex
-import com.mustafadakhel.kodex.lockout.AccountLockoutConfig
+import com.mustafadakhel.kodex.lockout.accountLockout
 import com.mustafadakhel.kodex.lockout.AccountLockoutPolicy
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.throwable.KodexThrowable
-import com.mustafadakhel.kodex.validation.ValidationConfig
+import com.mustafadakhel.kodex.validation.validation
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -57,7 +57,7 @@ private fun Application.setupAuthentication() {
                 }
 
                 // Configure validation extension
-                extension(ValidationConfig()) {
+                validation {
                     email {
                         allowDisposable = false
                     }
@@ -77,7 +77,7 @@ private fun Application.setupAuthentication() {
                 }
 
                 // Configure account lockout extension
-                extension(AccountLockoutConfig()) {
+                accountLockout {
                     policy = AccountLockoutPolicy(
                         maxFailedAttempts = 5,
                         attemptWindow = 15.minutes,
@@ -86,7 +86,7 @@ private fun Application.setupAuthentication() {
                 }
 
                 // Configure audit logging extension
-                extension(AuditConfig()) {
+                audit {
                     provider = ConsoleAuditProvider()
                 }
             }

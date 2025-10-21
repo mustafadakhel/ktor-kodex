@@ -11,7 +11,7 @@ import kotlinx.datetime.TimeZone
  * Example usage:
  * ```kotlin
  * realm("admin") {
- *     extension(AccountLockoutConfig()) {
+ *     accountLockout {
  *         policy = AccountLockoutPolicy.strict()
  *         // Or configure inline:
  *         policy = AccountLockoutPolicy(
