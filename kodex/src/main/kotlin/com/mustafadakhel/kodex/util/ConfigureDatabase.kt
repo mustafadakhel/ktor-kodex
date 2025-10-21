@@ -3,6 +3,7 @@ package com.mustafadakhel.kodex.util
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.*
+import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Table
 
 internal fun Application.connectDatabase(
@@ -38,4 +39,42 @@ internal fun hikariDataSource(): HikariDataSource {
 
     config.validate()
     return HikariDataSource(config)
+}
+
+/**
+ * Run Flyway database migrations on the provided datasource.
+ *
+ * This provides version-controlled database schema management for production deployments.
+ * Migrations are located in `src/main/resources/db/migration` and follow the naming
+ * convention `V<version>__<description>.sql`.
+ *
+ * Example usage:
+ * ```kotlin
+ * install(Kodex) {
+ *     database {
+ *         jdbcUrl = "jdbc:postgresql://localhost:5432/mydb"
+ *         username = "user"
+ *         password = "pass"
+ *     }
+ * }
+ * // Run migrations after plugin installation
+ * runFlywayMigrations(kodex.getDataSource())
+ * ```
+ *
+ * @param dataSource The HikariDataSource to run migrations against
+ * @param locations Custom migration locations (defaults to classpath:db/migration)
+ * @param baselineOnMigrate Whether to baseline on migrate for existing databases
+ */
+public fun runFlywayMigrations(
+    dataSource: HikariDataSource,
+    locations: Array<String> = arrayOf("classpath:db/migration"),
+    baselineOnMigrate: Boolean = true
+) {
+    val flyway = Flyway.configure()
+        .dataSource(dataSource)
+        .locations(*locations)
+        .baselineOnMigrate(baselineOnMigrate)
+        .load()
+
+    flyway.migrate()
 }

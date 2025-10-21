@@ -12,6 +12,7 @@ bouncycastle = "1.79"
 libphonenumber = "8.13.27"
 jsoup = "1.17.2"
 kotlinx-datetime = "0.6.1"
+flyway = "10.22.0"
 
 [libraries]
 exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
@@ -33,6 +34,7 @@ bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", ver
 libphonenumber = { group = "com.googlecode.libphonenumber", name = "libphonenumber", version.ref = "libphonenumber" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
+flyway-core = { group = "org.flywaydb", name = "flyway-core", version.ref = "flyway" }
 
 [bundles]
 exposed = ["exposed-dao", "exposed-jdbc", "exposed-datetime", "exposed-json"]
