@@ -68,11 +68,17 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var sessionId by AuditLogs.sessionId
 
     /**
-     * Metadata stored as JSON string.
+     * Metadata stored as JSON string with automatic sanitization.
+     *
+     * All metadata values are:
+     * - HTML-escaped to prevent XSS attacks
+     * - Redacted if they contain sensitive field names (password, token, etc.)
      */
     var metadata: Map<String, Any>
         get() = if (metadataJson.isBlank()) emptyMap() else json.decodeFromString(metadataJson)
         set(value) {
-            metadataJson = json.encodeToString(value)
+            // Sanitize metadata to prevent XSS and redact sensitive fields
+            val sanitized = com.mustafadakhel.kodex.audit.MetadataSanitizer.sanitize(value)
+            metadataJson = json.encodeToString(sanitized)
         }
 }
