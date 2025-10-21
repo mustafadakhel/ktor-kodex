@@ -40,6 +40,7 @@ tasks {
 dependencies {
     implementation(libs.h2.database)
     api(libs.hikari)
+    api(libs.kotlinx.datetime)
     implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
