@@ -88,10 +88,10 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    email = "new@example.com",
-                    phone = null,
-                    isVerified = null,
-                    status = null,
+                    email = FieldUpdate.SetValue("new@example.com"),
+                    phone = FieldUpdate.NoChange(),
+                    isVerified = FieldUpdate.NoChange(),
+                    status = FieldUpdate.NoChange(),
                     currentTime = any()
                 )}
             }
@@ -126,10 +126,10 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    email = null,
-                    phone = null,
-                    isVerified = null,
-                    status = UserStatus.SUSPENDED,
+                    email = FieldUpdate.NoChange(),
+                    phone = FieldUpdate.NoChange(),
+                    isVerified = FieldUpdate.NoChange(),
+                    status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
                     currentTime = any()
                 )}
             }
@@ -239,12 +239,12 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateBatch(
                     userId = testUserId,
-                    email = "new@example.com",
-                    phone = null,
-                    isVerified = null,
-                    status = null,
+                    email = FieldUpdate.SetValue("new@example.com"),
+                    phone = FieldUpdate.NoChange(),
+                    isVerified = FieldUpdate.NoChange(),
+                    status = FieldUpdate.NoChange(),
                     profile = any(),
-                    customAttributes = mapOf("key" to "value"),
+                    customAttributes = FieldUpdate.SetValue(mapOf("key" to "value")),
                     currentTime = any()
                 )}
             }

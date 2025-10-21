@@ -261,37 +261,13 @@ internal class UpdateCommandProcessor(
         updates: UserFieldUpdates
     ): UpdateResult {
         // Determine new values
-        val newEmail = when (val update = updates.email) {
-            is FieldUpdate.SetValue -> update.value
-            is FieldUpdate.ClearValue -> null
-            is FieldUpdate.NoChange -> null
-        }
-
-        val newPhone = when (val update = updates.phone) {
-            is FieldUpdate.SetValue -> update.value
-            is FieldUpdate.ClearValue -> null
-            is FieldUpdate.NoChange -> null
-        }
-
-        val newIsVerified = when (val update = updates.isVerified) {
-            is FieldUpdate.SetValue -> update.value
-            is FieldUpdate.ClearValue -> null
-            is FieldUpdate.NoChange -> null
-        }
-
-        val newStatus = when (val update = updates.status) {
-            is FieldUpdate.SetValue -> update.value
-            is FieldUpdate.ClearValue -> null
-            is FieldUpdate.NoChange -> null
-        }
-
         // Apply update through repository
         val repositoryResult = userRepository.updateById(
             userId = current.id,
-            email = newEmail,
-            phone = newPhone,
-            isVerified = newIsVerified,
-            status = newStatus,
+            email = updates.email,
+            phone = updates.phone,
+            isVerified = updates.isVerified,
+            status = updates.status,
             currentTime = getCurrentLocalDateTime(timeZone)
         )
 
@@ -436,92 +412,60 @@ internal class UpdateCommandProcessor(
         batch: UpdateUserBatch
     ): UpdateResult {
         // Extract values from batch fields
-        val email = batch.userFields?.email?.let {
-            when (it) {
-                is FieldUpdate.SetValue -> it.value
-                is FieldUpdate.ClearValue -> null
-                is FieldUpdate.NoChange -> null
-            }
-        }
-
-        val phone = batch.userFields?.phone?.let {
-            when (it) {
-                is FieldUpdate.SetValue -> it.value
-                is FieldUpdate.ClearValue -> null
-                is FieldUpdate.NoChange -> null
-            }
-        }
-
-        val isVerified = batch.userFields?.isVerified?.let {
-            when (it) {
-                is FieldUpdate.SetValue -> it.value
-                is FieldUpdate.ClearValue -> null
-                is FieldUpdate.NoChange -> null
-            }
-        }
-
-        val status = batch.userFields?.status?.let {
-            when (it) {
-                is FieldUpdate.SetValue -> it.value
-                is FieldUpdate.ClearValue -> null
-                is FieldUpdate.NoChange -> null
-            }
-        }
-
-        // Build profile from profile fields if any changes exist
-        val profile = if (batch.profileFields?.hasChanges() == true) {
-            val currentProfile = current.profile
-            UserProfile(
-                firstName = when (val update = batch.profileFields.firstName) {
-                    is FieldUpdate.SetValue -> update.value
-                    is FieldUpdate.ClearValue -> null
-                    is FieldUpdate.NoChange -> currentProfile?.firstName
-                },
-                lastName = when (val update = batch.profileFields.lastName) {
-                    is FieldUpdate.SetValue -> update.value
-                    is FieldUpdate.ClearValue -> null
-                    is FieldUpdate.NoChange -> currentProfile?.lastName
-                },
-                address = when (val update = batch.profileFields.address) {
-                    is FieldUpdate.SetValue -> update.value
-                    is FieldUpdate.ClearValue -> null
-                    is FieldUpdate.NoChange -> currentProfile?.address
-                },
-                profilePicture = when (val update = batch.profileFields.profilePicture) {
-                    is FieldUpdate.SetValue -> update.value
-                    is FieldUpdate.ClearValue -> null
-                    is FieldUpdate.NoChange -> currentProfile?.profilePicture
-                }
-            )
-        } else null
-
-        // Build custom attributes map if any changes exist
-        val customAttributes = if (batch.attributeChanges?.hasChanges() == true) {
-            val currentAttrs = current.customAttributes ?: emptyMap()
-            val newAttrs = currentAttrs.toMutableMap()
-
-            batch.attributeChanges.changes.forEach { change ->
-                when (change) {
-                    is AttributeChange.Set -> newAttrs[change.key] = change.value
-                    is AttributeChange.Remove -> newAttrs.remove(change.key)
-                    is AttributeChange.ReplaceAll -> {
-                        newAttrs.clear()
-                        newAttrs.putAll(change.attributes)
-                    }
-                }
-            }
-            newAttrs
-        } else null
-
         // Execute batch update atomically in single transaction
         val repositoryResult = userRepository.updateBatch(
             userId = current.id,
-            email = email,
-            phone = phone,
-            isVerified = isVerified,
-            status = status,
-            profile = profile,
-            customAttributes = customAttributes,
+            email = batch.userFields?.email ?: FieldUpdate.NoChange(),
+            phone = batch.userFields?.phone ?: FieldUpdate.NoChange(),
+            isVerified = batch.userFields?.isVerified ?: FieldUpdate.NoChange(),
+            status = batch.userFields?.status ?: FieldUpdate.NoChange(),
+            profile = if (batch.profileFields?.hasChanges() == true) {
+                val currentProfile = current.profile
+                FieldUpdate.SetValue(
+                    UserProfile(
+                        firstName = when (val update = batch.profileFields.firstName) {
+                            is FieldUpdate.SetValue -> update.value
+                            is FieldUpdate.ClearValue -> null
+                            is FieldUpdate.NoChange -> currentProfile?.firstName
+                        },
+                        lastName = when (val update = batch.profileFields.lastName) {
+                            is FieldUpdate.SetValue -> update.value
+                            is FieldUpdate.ClearValue -> null
+                            is FieldUpdate.NoChange -> currentProfile?.lastName
+                        },
+                        address = when (val update = batch.profileFields.address) {
+                            is FieldUpdate.SetValue -> update.value
+                            is FieldUpdate.ClearValue -> null
+                            is FieldUpdate.NoChange -> currentProfile?.address
+                        },
+                        profilePicture = when (val update = batch.profileFields.profilePicture) {
+                            is FieldUpdate.SetValue -> update.value
+                            is FieldUpdate.ClearValue -> null
+                            is FieldUpdate.NoChange -> currentProfile?.profilePicture
+                        }
+                    )
+                )
+            } else {
+                FieldUpdate.NoChange()
+            },
+            customAttributes = if (batch.attributeChanges?.hasChanges() == true) {
+                val currentAttrs = current.customAttributes ?: emptyMap()
+                val newAttrs = currentAttrs.toMutableMap()
+
+                batch.attributeChanges.changes.forEach { change ->
+                    when (change) {
+                        is AttributeChange.Set -> newAttrs[change.key] = change.value
+                        is AttributeChange.Remove -> newAttrs.remove(change.key)
+                        is AttributeChange.ReplaceAll -> {
+                            newAttrs.clear()
+                            newAttrs.putAll(change.attributes)
+                        }
+                    }
+                }
+                FieldUpdate.SetValue(newAttrs)
+            } else {
+                FieldUpdate.NoChange()
+            },
             currentTime = getCurrentLocalDateTime(timeZone)
         )
 

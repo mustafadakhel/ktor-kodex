@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.UserRepository.*
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
+import com.mustafadakhel.kodex.update.FieldUpdate
 import com.mustafadakhel.kodex.util.Db
 import com.mustafadakhel.kodex.util.exposedTransaction
 import com.mustafadakhel.kodex.util.setupExposedEngine
@@ -248,7 +249,14 @@ class ExposedUserRepositoryTest : FunSpec({
                 now
             ) as CreateUserResult.Success).user
 
-            userRepository.updateById(u.id, "new@x", "+1", null, null, now) shouldBe UpdateUserResult.Success
+            userRepository.updateById(
+                u.id,
+                FieldUpdate.SetValue("new@x"),
+                FieldUpdate.SetValue("+1"),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.Success
 
             val updated = userRepository.findById(u.id)!!
             updated.email shouldBe "new@x"
@@ -257,7 +265,14 @@ class ExposedUserRepositoryTest : FunSpec({
         }
 
         test("updateById reports NotFound if user absent") {
-            userRepository.updateById(UUID.randomUUID(), "x@x", null, null, null, now) shouldBe UpdateUserResult.NotFound
+            userRepository.updateById(
+                UUID.randomUUID(),
+                FieldUpdate.SetValue("x@x"),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.NotFound
         }
 
         test("updateById rejects duplicate email or phone") {
@@ -281,8 +296,22 @@ class ExposedUserRepositoryTest : FunSpec({
                 now
             ) as CreateUserResult.Success).user
 
-            userRepository.updateById(u2.id, u1.email, null, null, null, now) shouldBe UpdateUserResult.EmailAlreadyExists
-            userRepository.updateById(u2.id, null, u1.phoneNumber, null, null, now) shouldBe UpdateUserResult.PhoneAlreadyExists
+            userRepository.updateById(
+                u2.id,
+                u1.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.EmailAlreadyExists
+            userRepository.updateById(
+                u2.id,
+                FieldUpdate.NoChange(),
+                u1.phoneNumber?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.PhoneAlreadyExists
         }
     }
 

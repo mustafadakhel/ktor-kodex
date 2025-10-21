@@ -16,6 +16,7 @@ import com.mustafadakhel.kodex.throwable.KodexThrowable.*
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
 import com.mustafadakhel.kodex.update.ChangeTracker
+import com.mustafadakhel.kodex.update.FieldUpdate
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
@@ -96,10 +97,10 @@ internal class KodexRealmService(
 
         val result = userRepository.updateById(
             userId = userId,
-            email = transformed.email,
-            phone = transformed.phone,
-            isVerified = null,
-            status = null,
+            email = transformed.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
+            phone = transformed.phone?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
+            isVerified = FieldUpdate.NoChange(),
+            status = FieldUpdate.NoChange(),
             currentTime = getCurrentLocalDateTime(timeZone)
         )
 
