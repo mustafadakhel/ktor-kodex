@@ -19,12 +19,18 @@ internal fun setupExposedEngine(
 ): ExposedDbEngine {
     val existing = Db.getEngineOrNull<Transaction>() as? ExposedDbEngine?
     if (existing != null) {
-        if (existing.dataSource != dataSource)
-            existing.dataSource.close()
-        if (existing.dataSource.isClosed.not()) {
+        // If datasources are different, we need a new engine
+        if (existing.dataSource != dataSource) {
+            // Clean up the old engine only if datasource is still open
+            if (existing.dataSource.isClosed.not()) {
+                existing.clear()
+            }
+            // Fall through to create new engine below
+        } else if (existing.dataSource.isClosed.not()) {
+            // Same datasource and it's still open - reuse existing engine
             return existing
         }
-        existing.clear()
+        // If datasource is closed, fall through to create new engine
     }
     return ExposedDbEngine(dataSource, extensionTables, log).apply { Db.setEngine(this) }
 }

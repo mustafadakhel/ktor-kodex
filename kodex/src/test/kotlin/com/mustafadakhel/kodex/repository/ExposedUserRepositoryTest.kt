@@ -353,12 +353,13 @@ class ExposedUserRepositoryTest : FunSpec({
             userRepository.findProfileByUserId(u.id)!!.lastName shouldBe "Doe"
 
             val upd = UserProfile("Janet", "Smith", "34 Ave", "new.png")
-            userRepository.updateProfileByUserId(u.id, upd) shouldBe true
+            val result = userRepository.updateProfileByUserId(u.id, upd)
+            result.shouldBeInstanceOf<UpdateProfileResult.Success>()
             userRepository.findProfileByUserId(u.id)!!.firstName shouldBe "Janet"
         }
 
-        test("updateProfileByUserId returns false if user absent") {
-            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe false
+        test("updateProfileByUserId returns NotFound if user absent") {
+            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe UpdateProfileResult.NotFound
         }
     }
 
