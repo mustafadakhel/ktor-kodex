@@ -1,6 +1,10 @@
 # Database Migrations with Flyway
 
-Kodex supports database schema migrations using [Flyway](https://flywaydb.org/), providing version-controlled, repeatable database changes for production deployments.
+Kodex provides **optional** database schema migrations using [Flyway](https://flywaydb.org/) for production deployments.
+
+**⚠️ IMPORTANT: Flyway is OPT-IN, not required**
+
+By default, Kodex uses Exposed ORM's `SchemaUtils.create()` which automatically creates tables from your code. Most users don't need Flyway.
 
 ## Migration Modes
 

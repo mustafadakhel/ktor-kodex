@@ -1,5 +1,15 @@
 -- Kodex Database Schema V1 - Baseline
 -- This migration creates all core tables for the Kodex authentication library
+--
+-- DATABASE COMPATIBILITY:
+-- This migration uses H2/MySQL syntax. For other databases, customize as needed:
+-- - PostgreSQL: Change INT AUTO_INCREMENT → SERIAL or INT GENERATED ALWAYS AS IDENTITY
+-- - PostgreSQL: UUID type is native, no changes needed
+-- - SQLite: Change AUTO_INCREMENT → AUTOINCREMENT
+--
+-- NOTE: Most users should use the default SchemaUtils.create() behavior
+-- which automatically adapts to your database. This migration is optional
+-- for users who prefer version-controlled schema management.
 
 -- ============================================================================
 -- Core User Tables

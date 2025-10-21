@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.model.database
 
 import com.mustafadakhel.kodex.audit.ActorType
 import com.mustafadakhel.kodex.audit.EventResult
+import com.mustafadakhel.kodex.audit.MetadataSanitizer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.dao.UUIDEntity
@@ -70,6 +71,9 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
     /**
      * Metadata stored as JSON string with automatic sanitization.
      *
+     * Sanitization happens on WRITE to prevent malicious data storage.
+     * Data is stored already-sanitized in the database.
+     *
      * All metadata values are:
      * - HTML-escaped to prevent XSS attacks
      * - Redacted if they contain sensitive field names (password, token, etc.)
@@ -77,8 +81,7 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var metadata: Map<String, Any>
         get() = if (metadataJson.isBlank()) emptyMap() else json.decodeFromString(metadataJson)
         set(value) {
-            // Sanitize metadata to prevent XSS and redact sensitive fields
-            val sanitized = com.mustafadakhel.kodex.audit.MetadataSanitizer.sanitize(value)
+            val sanitized = MetadataSanitizer.sanitize(value)
             metadataJson = json.encodeToString(sanitized)
         }
 }
