@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 import java.util.*
 
 internal object Tokens : UUIDTable() {
-    val userId = reference("user_id", Users)
+    val userId = reference("user_id", Users).index()
     val tokenHash = text("token_hash").index()
     val type = varchar("type", 16)
     val revoked = bool("revoked").default(false)

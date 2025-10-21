@@ -1,7 +1,6 @@
 package com.mustafadakhel.kodex.model.database
 
 import com.mustafadakhel.kodex.audit.ActorType
-import com.mustafadakhel.kodex.audit.AuditEntry
 import com.mustafadakhel.kodex.audit.EventResult
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -76,21 +75,4 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
         set(value) {
             metadataJson = json.encodeToString(value)
         }
-
-    /**
-     * Convert DAO entity to immutable AuditEntry for API responses.
-     */
-    fun toAuditEntry() = AuditEntry(
-        id = id.value,
-        eventType = eventType,
-        timestamp = timestamp,
-        actorId = actorId,
-        actorType = actorType,
-        targetId = targetId,
-        targetType = targetType,
-        result = result,
-        metadata = metadata,
-        realmId = realmId,
-        sessionId = sessionId
-    )
 }

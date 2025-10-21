@@ -5,6 +5,7 @@ import java.util.*
 
 /**
  * Audit event with type-safe core fields and flexible metadata.
+ * This is a core data class used by extensions for audit logging.
  */
 public data class AuditEvent(
     val eventType: String,
@@ -19,6 +20,9 @@ public data class AuditEvent(
     val sessionId: UUID? = null
 )
 
+/**
+ * Type of actor performing the action.
+ */
 public enum class ActorType {
     USER,
     ADMIN,
@@ -26,6 +30,9 @@ public enum class ActorType {
     ANONYMOUS
 }
 
+/**
+ * Result of the audited operation.
+ */
 public enum class EventResult {
     SUCCESS,
     FAILURE,
