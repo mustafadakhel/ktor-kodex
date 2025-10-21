@@ -89,7 +89,8 @@ internal class DefaultTokenManager(
                         .toLocalDateTime(timeZone),
                     tokenFamily = tokenFamily,
                     parentTokenId = parentTokenId,
-                    usedAt = null
+                    firstUsedAt = null,
+                    lastUsedAt = null
                 )
             )
         return token
@@ -131,7 +132,7 @@ internal class DefaultTokenManager(
         val wasMarked = tokenRepository.markTokenAsUsedIfUnused(tokenId, now)
 
         if (!wasMarked) {
-            val gracePeriodEnd = persistedToken.usedAt!!.toInstant(timeZone) + tokenRotationPolicy.gracePeriod
+            val gracePeriodEnd = persistedToken.firstUsedAt!!.toInstant(timeZone) + tokenRotationPolicy.gracePeriod
             val withinGracePeriod = clockNow < gracePeriodEnd
 
             if (!withinGracePeriod && tokenRotationPolicy.detectReplayAttacks) {
@@ -154,7 +155,8 @@ internal class DefaultTokenManager(
                             "reason" to "Refresh token replay attack detected",
                             "tokenId" to tokenId.toString(),
                             "tokenFamily" to tokenFamily.toString(),
-                            "originalUsedAt" to persistedToken.usedAt.toString()
+                            "firstUsedAt" to persistedToken.firstUsedAt.toString(),
+                            "gracePeriodEnd" to gracePeriodEnd.toString()
                         ),
                         realmId = realm.owner
                     )

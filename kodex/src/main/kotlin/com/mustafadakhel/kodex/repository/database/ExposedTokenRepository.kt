@@ -26,7 +26,8 @@ private object ExposedTokenRepository : TokenRepository {
             it[Tokens.expiresAt] = token.expiresAt
             it[Tokens.tokenFamily] = token.tokenFamily
             it[Tokens.parentTokenId] = token.parentTokenId
-            it[Tokens.usedAt] = token.usedAt
+            it[Tokens.firstUsedAt] = token.firstUsedAt
+            it[Tokens.lastUsedAt] = token.lastUsedAt
         }
     }.value
 
@@ -52,18 +53,12 @@ private object ExposedTokenRepository : TokenRepository {
         TokenDao.find { Tokens.userId eq userId }.forEach { it.revoked = true }
     }
 
-    override fun markTokenAsUsed(tokenId: UUID, usedAt: kotlinx.datetime.LocalDateTime): Unit = exposedTransaction {
-        TokenDao.findById(tokenId)?.apply {
-            this.usedAt = usedAt
-        }
-        Unit
-    }
-
-    override fun markTokenAsUsedIfUnused(tokenId: UUID, usedAt: kotlinx.datetime.LocalDateTime): Boolean = exposedTransaction {
+    override fun markTokenAsUsedIfUnused(tokenId: UUID, now: kotlinx.datetime.LocalDateTime): Boolean = exposedTransaction {
         val updated = Tokens.update({
-            (Tokens.id eq tokenId) and Tokens.usedAt.isNull()
+            (Tokens.id eq tokenId) and Tokens.firstUsedAt.isNull()
         }) {
-            it[Tokens.usedAt] = usedAt
+            it[Tokens.firstUsedAt] = now
+            it[Tokens.lastUsedAt] = now
         }
         updated > 0
     }
@@ -94,6 +89,7 @@ private object ExposedTokenRepository : TokenRepository {
         expiresAt = expiresAt,
         tokenFamily = tokenFamily,
         parentTokenId = parentTokenId,
-        usedAt = usedAt,
+        firstUsedAt = firstUsedAt,
+        lastUsedAt = lastUsedAt,
     )
 }
