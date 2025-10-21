@@ -1,9 +1,18 @@
-package com.mustafadakhel.kodex.security
+package com.mustafadakhel.kodex.lockout
 
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
+/**
+ * Configuration policy for account lockout protection.
+ * Defines thresholds and durations for failed login attempt tracking.
+ *
+ * @property maxFailedAttempts Maximum failed attempts before lockout
+ * @property attemptWindow Time window for counting failed attempts
+ * @property lockoutDuration Duration of account lockout
+ * @property enabled Whether lockout protection is enabled
+ */
 public data class AccountLockoutPolicy(
     val maxFailedAttempts: Int = 5,
     val attemptWindow: Duration = 15.minutes,
