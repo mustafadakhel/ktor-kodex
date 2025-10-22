@@ -3,6 +3,9 @@ package com.mustafadakhel.kodex.token
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
 import com.mustafadakhel.kodex.audit.AuditEvents
+import com.mustafadakhel.kodex.event.DefaultEventBus
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.SecurityEvent
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Claim
@@ -42,6 +45,7 @@ internal class DefaultTokenManager(
     private val extensions: ExtensionRegistry,
 ) : TokenManager {
     private val hookExecutor = HookExecutor(extensions)
+    private val eventBus: EventBus = DefaultEventBus(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
         val accessToken = issueToken(
@@ -140,22 +144,18 @@ internal class DefaultTokenManager(
                     tokenRepository.revokeTokenFamily(tokenFamily)
                 }
 
-                hookExecutor.logAuditEvent(
-                    eventType = AuditEvents.SECURITY_VIOLATION,
-                    timestamp = clockNow,
-                    actorId = userId,
-                    actorType = "USER",
-                    targetId = tokenId,
-                    targetType = "refresh_token",
-                    result = "FAILURE",
-                    metadata = mapOf(
-                        "reason" to "Refresh token replay attack detected",
-                        "tokenId" to tokenId.toString(),
-                        "tokenFamily" to tokenFamily.toString(),
-                        "firstUsedAt" to persistedToken.firstUsedAt.toString(),
-                        "gracePeriodEnd" to gracePeriodEnd.toString()
-                    ),
-                    realmId = realm.owner
+                // Publish security event (new event bus system)
+                eventBus.publish(
+                    SecurityEvent.TokenReplayDetected(
+                        eventId = UUID.randomUUID(),
+                        timestamp = clockNow,
+                        realmId = realm.owner,
+                        userId = userId,
+                        tokenId = tokenId,
+                        tokenFamily = tokenFamily,
+                        firstUsedAt = persistedToken.firstUsedAt.toString(),
+                        gracePeriodEnd = gracePeriodEnd.toString()
+                    )
                 )
 
                 throw KodexThrowable.Authorization.TokenReplayDetected(

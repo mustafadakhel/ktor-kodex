@@ -202,69 +202,35 @@ internal class KodexRealmService(
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {
         val result = updateCommandProcessor.execute(command)
 
-        // Audit the update attempt
+        // Publish events for successful updates
         when (result) {
             is UpdateResult.Success -> {
                 if (result.hasChanges()) {
-                    // Build detailed change metadata
+                    // Build change metadata for event
                     val changeMetadata = buildMap<String, String> {
-                        put("changeCount", result.changes.changedFields.size.toString())
-
-                        // Add each field change with old → new values
                         result.changes.changedFields.forEach { (fieldName, change) ->
-                            put("$fieldName.old", change.oldValue?.toString() ?: "null")
-                            put("$fieldName.new", change.newValue?.toString() ?: "null")
+                            put(fieldName, change.newValue?.toString() ?: "")
                         }
                     }
 
                     runCatching {
-                        hookExecutor.logAuditEvent(
-                            eventType = "USER_UPDATED",
-                            timestamp = result.changes.timestamp,
-                            actorId = command.userId,
-                            actorType = "USER",
-                            targetId = command.userId,
-                            result = "SUCCESS",
-                            metadata = changeMetadata,
-                            realmId = realm.owner
+                        eventBus.publish(
+                            UserEvent.Updated(
+                                eventId = UUID.randomUUID(),
+                                timestamp = result.changes.timestamp,
+                                realmId = realm.owner,
+                                userId = command.userId,
+                                actorId = command.userId,
+                                changes = changeMetadata
+                            )
                         )
                     }
                 }
             }
             is UpdateResult.Failure -> {
-                // Audit failed update attempts
-                val failureMetadata = when (result) {
-                    is UpdateResult.Failure.NotFound -> mapOf(
-                        "reason" to "User not found",
-                        "userId" to result.userId.toString()
-                    )
-                    is UpdateResult.Failure.ValidationFailed -> mapOf(
-                        "reason" to "Validation failed",
-                        "errors" to result.errors.joinToString("; ") { "${it.field}: ${it.message}" }
-                    )
-                    is UpdateResult.Failure.ConstraintViolation -> mapOf(
-                        "reason" to "Constraint violation",
-                        "field" to result.field,
-                        "details" to result.reason
-                    )
-                    is UpdateResult.Failure.Unknown -> mapOf(
-                        "reason" to "Unknown error",
-                        "message" to result.message
-                    )
-                }
-
-                runCatching {
-                    hookExecutor.logAuditEvent(
-                        eventType = "USER_UPDATE_FAILED",
-                        timestamp = Clock.System.now(),
-                        actorId = command.userId,
-                        actorType = "USER",
-                        targetId = command.userId,
-                        result = "FAILURE",
-                        metadata = failureMetadata,
-                        realmId = realm.owner
-                    )
-                }
+                // TODO: Define failure event types for audit logging
+                // Failed operations don't change state, so they may not be domain events
+                // Consider adding a separate audit/error tracking mechanism
             }
         }
 
@@ -531,22 +497,8 @@ internal class KodexRealmService(
         )
         val user = result.userOrThrow().toUser()
 
-        // Audit user creation
+        // Publish event (new event bus system)
         kotlinx.coroutines.runBlocking {
-            hookExecutor.logAuditEvent(
-                eventType = "USER_CREATED",
-                timestamp = Clock.System.now(),
-                actorType = "SYSTEM",
-                targetId = user.id,
-                result = "SUCCESS",
-                metadata = mapOf(
-                    "email" to (email ?: ""),
-                    "phone" to (phone ?: "")
-                ),
-                realmId = realm.owner
-            )
-
-            // Publish event to event bus (new event system)
             eventBus.publish(
                 UserEvent.Created(
                     eventId = UUID.randomUUID(),
