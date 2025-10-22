@@ -2,10 +2,7 @@ package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
-import com.mustafadakhel.kodex.audit.ActorType
-import com.mustafadakhel.kodex.audit.AuditEvent
 import com.mustafadakhel.kodex.audit.AuditEvents
-import com.mustafadakhel.kodex.audit.EventResult
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Claim
@@ -142,24 +139,22 @@ internal class DefaultTokenManager(
                     tokenRepository.revokeTokenFamily(tokenFamily)
                 }
 
-                hookExecutor.executeAuditEvent(
-                    AuditEvent(
-                        eventType = AuditEvents.SECURITY_VIOLATION,
-                        timestamp = clockNow,
-                        actorId = userId,
-                        actorType = ActorType.USER,
-                        targetId = tokenId,
-                        targetType = "refresh_token",
-                        result = EventResult.FAILURE,
-                        metadata = mapOf(
-                            "reason" to "Refresh token replay attack detected",
-                            "tokenId" to tokenId.toString(),
-                            "tokenFamily" to tokenFamily.toString(),
-                            "firstUsedAt" to persistedToken.firstUsedAt.toString(),
-                            "gracePeriodEnd" to gracePeriodEnd.toString()
-                        ),
-                        realmId = realm.owner
-                    )
+                hookExecutor.logAuditEvent(
+                    eventType = AuditEvents.SECURITY_VIOLATION,
+                    timestamp = clockNow,
+                    actorId = userId,
+                    actorType = "USER",
+                    targetId = tokenId,
+                    targetType = "refresh_token",
+                    result = "FAILURE",
+                    metadata = mapOf(
+                        "reason" to "Refresh token replay attack detected",
+                        "tokenId" to tokenId.toString(),
+                        "tokenFamily" to tokenFamily.toString(),
+                        "firstUsedAt" to persistedToken.firstUsedAt.toString(),
+                        "gracePeriodEnd" to gracePeriodEnd.toString()
+                    ),
+                    realmId = realm.owner
                 )
 
                 throw KodexThrowable.Authorization.TokenReplayDetected(

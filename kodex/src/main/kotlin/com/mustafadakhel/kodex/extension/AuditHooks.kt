@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.extension
 
-import com.mustafadakhel.kodex.audit.AuditEvent
+import kotlinx.datetime.Instant
+import java.util.UUID
 
 /**
  * Extension interface for audit logging.
@@ -12,7 +13,18 @@ public interface AuditHooks : RealmExtension {
      * Called when an audit event occurs.
      * Extensions can log, store, or forward the event.
      *
-     * @param event The audit event to process
+     * Core only passes simple parameters - the extension builds any domain objects internally.
      */
-    public suspend fun onAuditEvent(event: AuditEvent)
+    public suspend fun logEvent(
+        eventType: String,
+        timestamp: Instant,
+        realmId: String,
+        actorId: UUID? = null,
+        actorType: String = "USER",
+        targetId: UUID? = null,
+        targetType: String? = null,
+        result: String = "SUCCESS",
+        metadata: Map<String, String> = emptyMap(),
+        sessionId: UUID? = null
+    )
 }
