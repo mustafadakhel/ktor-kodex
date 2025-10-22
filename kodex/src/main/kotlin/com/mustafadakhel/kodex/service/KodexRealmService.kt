@@ -2,6 +2,9 @@ package com.mustafadakhel.kodex.service
 
 import com.auth0.jwt.JWT
 import com.mustafadakhel.kodex.audit.AuditEvents
+import com.mustafadakhel.kodex.event.DefaultEventBus
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.*
@@ -35,6 +38,7 @@ internal class KodexRealmService(
 ) : KodexService {
 
     private val hookExecutor = HookExecutor(extensions)
+    private val eventBus: EventBus = DefaultEventBus(extensions)
     private val changeTracker = ChangeTracker()
     private val updateCommandProcessor = UpdateCommandProcessor(
         userRepository = userRepository,
@@ -536,6 +540,18 @@ internal class KodexRealmService(
                     "phone" to (phone ?: "")
                 ),
                 realmId = realm.owner
+            )
+
+            // Publish event to event bus (new event system)
+            eventBus.publish(
+                UserEvent.Created(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realm.owner,
+                    userId = user.id,
+                    email = email,
+                    phone = phone
+                )
             )
         }
 
