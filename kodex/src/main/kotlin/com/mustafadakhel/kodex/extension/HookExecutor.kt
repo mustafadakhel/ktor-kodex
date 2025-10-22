@@ -123,7 +123,15 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Logs an audit event by calling all registered AuditHooks extensions.
      * All extensions receive the same parameters.
+     *
+     * @deprecated Use EventBus.publish() with typed events instead.
+     * This method will be removed when AuditHooks interface is removed.
      */
+    @Deprecated(
+        message = "Use EventBus.publish() with typed events (e.g., UserEvent.Created) instead",
+        level = DeprecationLevel.WARNING
+    )
+    @Suppress("DEPRECATION")
     suspend fun logAuditEvent(
         eventType: String,
         timestamp: kotlinx.datetime.Instant,

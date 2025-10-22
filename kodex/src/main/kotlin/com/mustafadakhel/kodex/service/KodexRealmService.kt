@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.audit.AuditEvents
 import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.UserEvent
+import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.*
@@ -28,6 +29,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.*
 
+@Suppress("DEPRECATION") // Old audit hooks kept for backward compatibility during migration
 internal class KodexRealmService(
     private val userRepository: UserRepository,
     private val tokenManager: TokenManager,
@@ -40,6 +42,27 @@ internal class KodexRealmService(
     private val hookExecutor = HookExecutor(extensions)
     private val eventBus: EventBus = DefaultEventBus(extensions)
     private val changeTracker = ChangeTracker()
+
+    init {
+        // Automatically register event subscribers from extensions
+        registerEventSubscribers()
+    }
+
+    /**
+     * Registers event subscribers from all extensions that implement EventSubscriberProvider.
+     * This allows extensions to automatically subscribe to events without manual wiring.
+     */
+    private fun registerEventSubscribers() {
+        // Get all extensions from the registry
+        val allExtensions = extensions.getAllOfType(com.mustafadakhel.kodex.extension.RealmExtension::class)
+
+        // Find extensions that provide event subscribers
+        allExtensions.filterIsInstance<EventSubscriberProvider>().forEach { provider ->
+            provider.getEventSubscribers().forEach { subscriber ->
+                eventBus.subscribe(subscriber)
+            }
+        }
+    }
     private val updateCommandProcessor = UpdateCommandProcessor(
         userRepository = userRepository,
         hookExecutor = hookExecutor,

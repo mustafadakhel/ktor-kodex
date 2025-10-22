@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION") // AuditHooks still supported during migration period
+
 package com.mustafadakhel.kodex.routes.auth
 
 import com.mustafadakhel.kodex.extension.AuditHooks

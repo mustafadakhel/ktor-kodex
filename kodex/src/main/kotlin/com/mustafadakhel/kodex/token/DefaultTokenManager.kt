@@ -27,6 +27,7 @@ import kotlinx.datetime.toLocalDateTime
 import java.util.*
 import kotlin.time.Duration
 
+@Suppress("DEPRECATION") // Old audit hooks kept for backward compatibility during migration
 internal class DefaultTokenManager(
     private val jwtTokenIssuer: TokenIssuer,
     private val jwtTokenVerifier: TokenVerifier,

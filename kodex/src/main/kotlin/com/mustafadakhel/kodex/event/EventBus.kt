@@ -7,11 +7,75 @@ package com.mustafadakhel.kodex.event
  * emit events without knowing about subscribers, and subscribers register
  * interest in specific event types.
  *
- * Key features:
+ * ## Key Features:
  * - Non-blocking publishing (events queued for async processing)
  * - Type-safe event routing
  * - Subscriber isolation (failures don't propagate)
  * - Security (only registered extensions can subscribe)
+ *
+ * ## Usage Pattern:
+ *
+ * **Publishers (Service Layer):**
+ * ```kotlin
+ * eventBus.publish(
+ *     UserEvent.Created(
+ *         eventId = UUID.randomUUID(),
+ *         timestamp = Clock.System.now(),
+ *         realmId = realm.owner,
+ *         userId = user.id,
+ *         email = email,
+ *         phone = phone
+ *     )
+ * )
+ * ```
+ *
+ * **Subscribers (Extensions):**
+ * ```kotlin
+ * class MyExtension : EventSubscriberProvider {
+ *     override fun getEventSubscribers() = listOf(
+ *         MyEventSubscriber()
+ *     )
+ * }
+ *
+ * class MyEventSubscriber : EventSubscriber<UserEvent> {
+ *     override val eventType = UserEvent::class
+ *     override suspend fun onEvent(event: UserEvent) {
+ *         // Handle event
+ *     }
+ * }
+ * ```
+ *
+ * ## Migration from AuditHooks:
+ *
+ * The old hook-based system (AuditHooks.logEvent) is deprecated.
+ * Use EventBus.publish() with typed events instead.
+ *
+ * **Before:**
+ * ```kotlin
+ * hookExecutor.logAuditEvent(
+ *     eventType = "USER_CREATED",
+ *     timestamp = timestamp,
+ *     actorType = "SYSTEM",
+ *     targetId = userId,
+ *     result = "SUCCESS",
+ *     metadata = mapOf(...),
+ *     realmId = realm.owner
+ * )
+ * ```
+ *
+ * **After:**
+ * ```kotlin
+ * eventBus.publish(
+ *     UserEvent.Created(
+ *         eventId = UUID.randomUUID(),
+ *         timestamp = timestamp,
+ *         realmId = realm.owner,
+ *         userId = userId,
+ *         email = email,
+ *         phone = phone
+ *     )
+ * )
+ * ```
  */
 public interface EventBus {
 
