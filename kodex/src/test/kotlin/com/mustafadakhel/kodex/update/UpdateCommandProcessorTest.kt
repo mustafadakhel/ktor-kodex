@@ -1,6 +1,8 @@
 package com.mustafadakhel.kodex.update
 
 import com.mustafadakhel.kodex.extension.HookExecutor
+import com.mustafadakhel.kodex.extension.UserProfileUpdateData
+import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.*
@@ -26,13 +28,13 @@ class UpdateCommandProcessorTest : DescribeSpec({
         val mockHookExecutor = mockk<HookExecutor>(relaxed = true) {
             // Mock hooks to return pass-through values
             coEvery { executeBeforeUserUpdate(any(), any(), any()) } answers {
-                com.mustafadakhel.kodex.extension.UserUpdateData(
+                UserUpdateData(
                     email = secondArg(),
                     phone = thirdArg()
                 )
             }
             coEvery { executeBeforeProfileUpdate(any(), any(), any(), any(), any()) } answers {
-                com.mustafadakhel.kodex.extension.UserProfileUpdateData(
+                UserProfileUpdateData(
                     firstName = secondArg(),
                     lastName = thirdArg(),
                     address = arg(3),
