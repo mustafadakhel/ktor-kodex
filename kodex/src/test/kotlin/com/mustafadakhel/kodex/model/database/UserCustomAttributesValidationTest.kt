@@ -21,10 +21,11 @@ class UserCustomAttributesValidationTest : DescribeSpec({
     beforeEach {
         transaction {
             // Create test user
+            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
             UserDao.new {
                 passwordHash = "hash"
-                createdAt = Clock.System.now().toLocalDateTime(TimeZone.UTC)
-                updatedAt = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                createdAt = now
+                updatedAt = now
             }
         }
     }
