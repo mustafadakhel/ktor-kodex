@@ -16,7 +16,6 @@ public interface TokenConfigScope {
 }
 
 @KtorDsl
-/** Default implementation of [TokenConfigScope] used by the plugin. */
 internal class TokenConfig : TokenConfigScope {
     internal val persistenceFlags: MutableMap<TokenType, Boolean> = mutableMapOf(
         TokenType.RefreshToken to true,

@@ -29,7 +29,6 @@ public class Kodex private constructor(
     private val realmConfigs: List<RealmConfig>,
     private val services: Map<Realm, KodexRealmService>,
 ) {
-    /** Returns the [KodexService] for the given [realm]. */
     public fun serviceOf(realm: Realm): KodexService {
         return services[realm] ?: throw MissingRealmServiceException(realm)
     }
@@ -47,7 +46,6 @@ public class Kodex private constructor(
         route.authenticate(*providerNames, build = block)
     }
 
-    /** Plugin definition used by Ktor to install [Kodex]. */
     public companion object Plugin : BaseApplicationPlugin<Application, KodexConfig, Kodex> {
         override val key: AttributeKey<Kodex> = AttributeKey("Kodex")
 
@@ -133,7 +131,6 @@ public class Kodex private constructor(
     }
 }
 
-/** Accessor for the installed [Kodex] plugin. */
 public val Application.kodex: Kodex
     get() =
         this.pluginOrNull(Kodex) ?: throw KodexNotConfiguredException()

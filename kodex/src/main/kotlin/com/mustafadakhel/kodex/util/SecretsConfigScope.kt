@@ -23,7 +23,6 @@ public interface SecretsConfigScope {
 }
 
 @KtorDsl
-/** Default implementation of [SecretsConfigScope]. */
 internal class SecretsConfig : SecretsConfigScope {
 
     private val secureRandom = SecureRandom()
