@@ -79,9 +79,10 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
      * - Redacted if they contain sensitive field names (password, token, etc.)
      */
     var metadata: Map<String, Any>
-        get() = if (metadataJson.isBlank()) emptyMap() else json.decodeFromString(metadataJson)
+        get() = if (metadataJson.isBlank()) emptyMap() else json.decodeFromString<Map<String, String>>(metadataJson)
         set(value) {
             val sanitized = MetadataSanitizer.sanitize(value)
-            metadataJson = json.encodeToString(sanitized)
+            val stringified = sanitized.mapValues { (_, v) -> v.toString() }
+            metadataJson = json.encodeToString(stringified)
         }
 }

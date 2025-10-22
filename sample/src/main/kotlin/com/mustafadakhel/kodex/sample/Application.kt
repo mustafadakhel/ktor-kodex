@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.sample
 
 import com.mustafadakhel.kodex.Kodex
 import com.mustafadakhel.kodex.audit.audit
-import com.mustafadakhel.kodex.audit.ConsoleAuditProvider
+import com.mustafadakhel.kodex.audit.DatabaseAuditProvider
 import com.mustafadakhel.kodex.kodex
 import com.mustafadakhel.kodex.lockout.accountLockout
 import com.mustafadakhel.kodex.lockout.AccountLockoutPolicy
@@ -87,7 +87,7 @@ private fun Application.setupAuthentication() {
 
                 // Configure audit logging extension
                 audit {
-                    provider = ConsoleAuditProvider()
+                    provider = DatabaseAuditProvider()
                 }
             }
         }
