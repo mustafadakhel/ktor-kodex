@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.service
 
 import com.auth0.jwt.JWT
 import com.mustafadakhel.kodex.audit.AuditEvents
+import com.mustafadakhel.kodex.event.AuthEvent
 import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.UserEvent
@@ -133,19 +134,19 @@ internal class KodexRealmService(
 
         result.successOrThrow()
 
-        // Audit user update
-        hookExecutor.logAuditEvent(
-            eventType = "USER_UPDATED",
-            timestamp = timestamp,
-            actorId = userId,
-            actorType = "USER",
-            targetId = userId,
-            result = "SUCCESS",
-            metadata = mapOf(
-                "email" to (transformed.email ?: ""),
-                "phone" to (transformed.phone ?: "")
-            ),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            UserEvent.Updated(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = userId,
+                actorId = userId,
+                changes = mapOf(
+                    "email" to (transformed.email ?: ""),
+                    "phone" to (transformed.phone ?: "")
+                )
+            )
         )
     }
 
@@ -180,21 +181,21 @@ internal class KodexRealmService(
 
         result.successOrThrow()
 
-        // Audit profile update
-        hookExecutor.logAuditEvent(
-            eventType = "USER_PROFILE_UPDATED",
-            timestamp = timestamp,
-            actorId = userId,
-            actorType = "USER",
-            targetId = userId,
-            result = "SUCCESS",
-            metadata = mapOf(
-                "firstName" to (transformed.firstName ?: ""),
-                "lastName" to (transformed.lastName ?: ""),
-                "address" to (transformed.address ?: ""),
-                "profilePicture" to (transformed.profilePicture ?: "")
-            ),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            UserEvent.ProfileUpdated(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = userId,
+                actorId = userId,
+                changes = mapOf(
+                    "firstName" to (transformed.firstName ?: ""),
+                    "lastName" to (transformed.lastName ?: ""),
+                    "address" to (transformed.address ?: ""),
+                    "profilePicture" to (transformed.profilePicture ?: "")
+                )
+            )
         )
     }
 
@@ -293,36 +294,20 @@ internal class KodexRealmService(
 
         when (result) {
             is UserRepository.UpdateRolesResult.Success -> {
-                // Audit role update
-                hookExecutor.logAuditEvent(
-                    eventType = "USER_ROLES_UPDATED",
-                    timestamp = timestamp,
-                    actorType = "ADMIN",
-                    targetId = userId,
-                    result = "SUCCESS",
-                    metadata = mapOf(
-                        "previousRoles" to currentRoles.joinToString(","),
-                        "newRoles" to roleNames.joinToString(","),
-                        "addedRoles" to (roleNames - currentRoles.toSet()).joinToString(","),
-                        "removedRoles" to (currentRoles - roleNames.toSet()).joinToString(",")
-                    ),
-                    realmId = realm.owner
+                // Publish event (new event bus system)
+                eventBus.publish(
+                    UserEvent.RolesUpdated(
+                        eventId = UUID.randomUUID(),
+                        timestamp = timestamp,
+                        realmId = realm.owner,
+                        userId = userId,
+                        actorType = "ADMIN",
+                        previousRoles = currentRoles.toSet(),
+                        newRoles = roleNames.toSet()
+                    )
                 )
             }
             is UserRepository.UpdateRolesResult.InvalidRole -> {
-                // Audit failed role update
-                hookExecutor.logAuditEvent(
-                    eventType = "USER_ROLES_UPDATE_FAILED",
-                    timestamp = timestamp,
-                    actorType = "ADMIN",
-                    targetId = userId,
-                    result = "FAILURE",
-                    metadata = mapOf(
-                        "reason" to "Invalid role",
-                        "roleName" to result.roleName
-                    ),
-                    realmId = realm.owner
-                )
                 throw RoleNotFound(result.roleName)
             }
         }
@@ -382,18 +367,18 @@ internal class KodexRealmService(
                 else -> "Invalid password"
             }
 
-            hookExecutor.logAuditEvent(
-                eventType = "LOGIN_FAILED",
-                timestamp = timestamp,
-                actorType = if (user == null) "ANONYMOUS" else "USER",
-                targetId = user?.id,
-                result = "FAILURE",
-                metadata = mapOf(
-                    "identifier" to identifier,
-                    "reason" to actualReason, // Detailed reason only in audit logs
-                    "method" to identifierType
-                ),
-                realmId = realm.owner
+            // Publish event (new event bus system)
+            eventBus.publish(
+                AuthEvent.LoginFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = timestamp,
+                    realmId = realm.owner,
+                    identifier = identifier,
+                    reason = actualReason,
+                    method = identifierType,
+                    userId = user?.id,
+                    actorType = if (user == null) "ANONYMOUS" else "USER"
+                )
             )
 
             // Always throw same exception regardless of reason
@@ -408,19 +393,16 @@ internal class KodexRealmService(
         // Update last login time
         userRepository.updateLastLogin(user.id, getCurrentLocalDateTime(timeZone))
 
-        // Audit successful login
-        hookExecutor.logAuditEvent(
-            eventType = "LOGIN_SUCCESS",
-            timestamp = timestamp,
-            actorId = user.id,
-            actorType = "USER",
-            targetId = user.id,
-            result = "SUCCESS",
-            metadata = mapOf(
-                "identifier" to identifier,
-                "method" to identifierType
-            ),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            AuthEvent.LoginSuccess(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = user.id,
+                identifier = identifier,
+                method = identifierType
+            )
         )
 
         return generateTokenInternal(user.id)
@@ -456,16 +438,16 @@ internal class KodexRealmService(
 
         // Verify old password
         if (!authenticateInternal(oldPassword, userId)) {
-            // Audit failed password change
-            hookExecutor.logAuditEvent(
-                eventType = "PASSWORD_CHANGE_FAILED",
-                timestamp = timestamp,
-                actorId = userId,
-                actorType = "USER",
-                targetId = userId,
-                result = "FAILURE",
-                metadata = mapOf("reason" to "Invalid old password"),
-                realmId = realm.owner
+            // Publish event (new event bus system)
+            eventBus.publish(
+                AuthEvent.PasswordChangeFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = timestamp,
+                    realmId = realm.owner,
+                    userId = userId,
+                    actorId = userId,
+                    reason = "Invalid old password"
+                )
             )
             throw Authorization.InvalidCredentials
         }
@@ -479,16 +461,15 @@ internal class KodexRealmService(
             throw UserNotFound("User with id $userId not found")
         }
 
-        // Audit successful password change
-        hookExecutor.logAuditEvent(
-            eventType = "PASSWORD_CHANGED",
-            timestamp = timestamp,
-            actorId = userId,
-            actorType = "USER",
-            targetId = userId,
-            result = "SUCCESS",
-            metadata = emptyMap(),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            AuthEvent.PasswordChanged(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = userId,
+                actorId = userId
+            )
         )
     }
 
@@ -507,15 +488,15 @@ internal class KodexRealmService(
             throw UserNotFound("User with id $userId not found")
         }
 
-        // Audit password reset
-        hookExecutor.logAuditEvent(
-            eventType = "PASSWORD_RESET",
-            timestamp = timestamp,
-            actorType = "ADMIN",
-            targetId = userId,
-            result = "SUCCESS",
-            metadata = emptyMap(),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            AuthEvent.PasswordReset(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = userId,
+                actorType = "ADMIN"
+            )
         )
     }
 
@@ -609,19 +590,17 @@ internal class KodexRealmService(
 
         result.successOrThrow()
 
-        // Audit custom attributes replacement
-        hookExecutor.logAuditEvent(
-            eventType = "CUSTOM_ATTRIBUTES_REPLACED",
-            timestamp = timestamp,
-            actorId = userId,
-            actorType = "USER",
-            targetId = userId,
-            result = "SUCCESS",
-            metadata = mapOf(
-                "attributeCount" to sanitized.size.toString(),
-                "keys" to sanitized.keys.joinToString(",")
-            ),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            UserEvent.CustomAttributesReplaced(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = userId,
+                actorId = userId,
+                attributeCount = sanitized.size,
+                keys = sanitized.keys
+            )
         )
     }
 
@@ -637,19 +616,17 @@ internal class KodexRealmService(
             customAttributes = sanitized
         ).successOrThrow()
 
-        // Audit custom attributes update
-        hookExecutor.logAuditEvent(
-            eventType = "CUSTOM_ATTRIBUTES_UPDATED",
-            timestamp = timestamp,
-            actorId = userId,
-            actorType = "USER",
-            targetId = userId,
-            result = "SUCCESS",
-            metadata = mapOf(
-                "attributeCount" to sanitized.size.toString(),
-                "keys" to sanitized.keys.joinToString(",")
-            ),
-            realmId = realm.owner
+        // Publish event (new event bus system)
+        eventBus.publish(
+            UserEvent.CustomAttributesUpdated(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = userId,
+                actorId = userId,
+                attributeCount = sanitized.size,
+                keys = sanitized.keys
+            )
         )
     }
 
