@@ -1,7 +1,7 @@
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.model.database.AuditLogDao
-import com.mustafadakhel.kodex.util.exposedTransaction
+import com.mustafadakhel.kodex.audit.database.AuditLogDao
+import com.mustafadakhel.kodex.util.kodexTransaction
 
 /**
  * Database-backed audit provider that persists events to the AuditLogs table.
@@ -18,7 +18,7 @@ public class DatabaseAuditProvider : AuditProvider {
 
     override suspend fun log(event: AuditEvent) {
         try {
-            exposedTransaction {
+            kodexTransaction {
                 AuditLogDao.new {
                     this.eventType = event.eventType
                     this.timestamp = event.timestamp

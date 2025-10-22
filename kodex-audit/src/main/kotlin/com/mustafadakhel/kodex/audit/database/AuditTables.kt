@@ -1,4 +1,4 @@
-package com.mustafadakhel.kodex.model.database
+package com.mustafadakhel.kodex.audit.database
 
 import com.mustafadakhel.kodex.audit.ActorType
 import com.mustafadakhel.kodex.audit.EventResult
@@ -21,30 +21,30 @@ import java.util.*
  * - JSONB metadata: Flexible storage for event-specific data
  * - Supports both PostgreSQL (JSONB) and H2/other databases (JSON)
  */
-internal object AuditLogs : UUIDTable("audit_events") {
+public object AuditLogs : UUIDTable("audit_events") {
 
     // Event identification
-    val eventType = varchar("event_type", 100).index()
-    val timestamp = timestamp("timestamp").index()
+    public val eventType: org.jetbrains.exposed.sql.Column<String> = varchar("event_type", 100).index()
+    public val timestamp: org.jetbrains.exposed.sql.Column<kotlinx.datetime.Instant> = timestamp("timestamp").index()
 
     // Actor (who performed the action)
-    val actorId = uuid("actor_id").nullable().index()
-    val actorType = enumerationByName<ActorType>("actor_type", 20)
+    public val actorId: org.jetbrains.exposed.sql.Column<UUID?> = uuid("actor_id").nullable().index()
+    public val actorType: org.jetbrains.exposed.sql.Column<ActorType> = enumerationByName<ActorType>("actor_type", 20)
 
     // Target (what was acted upon)
-    val targetId = uuid("target_id").nullable().index()
-    val targetType = varchar("target_type", 100).nullable()
+    public val targetId: org.jetbrains.exposed.sql.Column<UUID?> = uuid("target_id").nullable().index()
+    public val targetType: org.jetbrains.exposed.sql.Column<String?> = varchar("target_type", 100).nullable()
 
     // Result
-    val result = enumerationByName<EventResult>("result", 20)
+    public val result: org.jetbrains.exposed.sql.Column<EventResult> = enumerationByName<EventResult>("result", 20)
 
     // Flexible metadata stored as JSON
     // Note: For PostgreSQL, this will use JSONB. For H2/SQLite, it uses JSON or TEXT.
-    val metadata = text("metadata")
+    public val metadata: org.jetbrains.exposed.sql.Column<String> = text("metadata")
 
     // Context
-    val realmId = varchar("realm_id", 50).index()
-    val sessionId = uuid("session_id").nullable()
+    public val realmId: org.jetbrains.exposed.sql.Column<String> = varchar("realm_id", 50).index()
+    public val sessionId: org.jetbrains.exposed.sql.Column<UUID?> = uuid("session_id").nullable()
 }
 
 /**
@@ -52,21 +52,21 @@ internal object AuditLogs : UUIDTable("audit_events") {
  *
  * Provides object-relational mapping for audit events.
  */
-internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
-    companion object : UUIDEntityClass<AuditLogDao>(AuditLogs) {
+public class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
+    public companion object : UUIDEntityClass<AuditLogDao>(AuditLogs) {
         private val json = Json { ignoreUnknownKeys = true }
     }
 
-    var eventType by AuditLogs.eventType
-    var timestamp by AuditLogs.timestamp
-    var actorId by AuditLogs.actorId
-    var actorType by AuditLogs.actorType
-    var targetId by AuditLogs.targetId
-    var targetType by AuditLogs.targetType
-    var result by AuditLogs.result
-    private var metadataJson by AuditLogs.metadata
-    var realmId by AuditLogs.realmId
-    var sessionId by AuditLogs.sessionId
+    public var eventType: String by AuditLogs.eventType
+    public var timestamp: kotlinx.datetime.Instant by AuditLogs.timestamp
+    public var actorId: UUID? by AuditLogs.actorId
+    public var actorType: ActorType by AuditLogs.actorType
+    public var targetId: UUID? by AuditLogs.targetId
+    public var targetType: String? by AuditLogs.targetType
+    public var result: EventResult by AuditLogs.result
+    private var metadataJson: String by AuditLogs.metadata
+    public var realmId: String by AuditLogs.realmId
+    public var sessionId: UUID? by AuditLogs.sessionId
 
     /**
      * Metadata stored as JSON string with automatic sanitization.
@@ -78,7 +78,7 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
      * - HTML-escaped to prevent XSS attacks
      * - Redacted if they contain sensitive field names (password, token, etc.)
      */
-    var metadata: Map<String, Any>
+    public var metadata: Map<String, Any>
         get() = if (metadataJson.isBlank()) emptyMap() else json.decodeFromString<Map<String, String>>(metadataJson)
         set(value) {
             val sanitized = MetadataSanitizer.sanitize(value)

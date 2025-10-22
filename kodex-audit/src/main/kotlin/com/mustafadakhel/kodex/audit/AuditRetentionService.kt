@@ -1,7 +1,7 @@
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.model.database.AuditLogs
-import com.mustafadakhel.kodex.util.exposedTransaction
+import com.mustafadakhel.kodex.audit.database.AuditLogs
+import com.mustafadakhel.kodex.util.kodexTransaction
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -83,7 +83,7 @@ internal class DefaultAuditRetentionService(
     }
 
     override fun cleanupAuditLogsOlderThan(cutoffDate: LocalDateTime): Int {
-        return exposedTransaction {
+        return kodexTransaction {
             // Delete all audit logs with timestamp less than cutoff
             // Uses indexed timestamp column for efficient query
             // Convert LocalDateTime to Instant for comparison
