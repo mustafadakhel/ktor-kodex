@@ -18,53 +18,76 @@
 
 ## Extension system
 
-Kodex features a flexible extension system that allows you to customize and extend authentication behavior without modifying core code. Extensions hook into user lifecycle events like login attempts, user creation, and data updates.
+Kodex features a flexible extension system that allows you to customize and extend authentication behavior without modifying core code. Extensions use two complementary patterns:
 
 **Built-in extensions:**
 - **Account Lockout** (`kodex-lockout`) – Brute force protection via failed attempt tracking
 - **Input Validation** (`kodex-validation`) – Email, phone, password validation and XSS protection
 - **Audit Logging** (`kodex-audit`) – Comprehensive event tracking for compliance
 
-**How extensions work:**
+**Two extension patterns:**
 
-Extensions implement lifecycle hooks that execute at specific points in the authentication flow:
+Kodex provides two ways to extend functionality, each serving a different purpose:
 
-- `beforeLogin()` – Validate/modify login identifier before authentication
-- `afterLoginFailure()` – React to failed login attempts (e.g., record failed attempt)
-- `beforeUserCreate()` – Validate/transform user data before creation
-- `beforeUserUpdate()` – Validate/transform update data before persistence
-- `beforeCustomAttributesUpdate()` – Validate/sanitize custom attributes
+1. **Lifecycle Hooks (Interception)** – For validation, transformation, and blocking operations
+   - Execute synchronously before operations
+   - Can modify data or reject operations
+   - Used for: validation, sanitization, authorization checks
+   - Example hooks: `beforeLogin()`, `beforeUserCreate()`, `beforeUserUpdate()`
 
-**Creating a custom extension:**
+2. **Event Subscribers (Observation)** – For audit logging, notifications, and side effects
+   - Execute asynchronously after operations
+   - Read-only observation of domain events
+   - Cannot block or modify operations
+   - Used for: audit logging, notifications, analytics, external system sync
+
+**Lifecycle hooks (for validation/transformation):**
 
 ```kotlin
-class RateLimitExtension internal constructor(
-    private val requestsPerMinute: Int
-) : UserLifecycleHooks {
-
-    private val attempts = ConcurrentHashMap<String, AtomicInteger>()
-
-    override suspend fun beforeLogin(identifier: String): String {
-        val count = attempts.computeIfAbsent(identifier) { AtomicInteger(0) }
-        if (count.incrementAndGet() > requestsPerMinute) {
-            throw KodexThrowable.Authorization.RateLimitExceeded
+class ValidationExtension : UserLifecycleHooks {
+    override suspend fun beforeUserCreate(
+        email: String?,
+        phone: String?,
+        password: String,
+        customAttributes: Map<String, String>?,
+        profile: UserProfile?
+    ): UserCreateData {
+        // Validate and transform data
+        val sanitizedEmail = email?.trim()?.lowercase()
+        if (sanitizedEmail != null && !isValidEmail(sanitizedEmail)) {
+            throw KodexThrowable.Validation.InvalidEmail(listOf("Invalid email format"))
         }
-        return identifier
+        return UserCreateData(sanitizedEmail, phone, customAttributes, profile)
     }
+}
+```
 
-    override suspend fun afterLoginFailure(identifier: String) {
-        // Extension point for tracking failures
+**Event subscribers (for observation/audit):**
+
+```kotlin
+class NotificationExtension : EventSubscriberProvider {
+    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
+        return listOf(
+            object : EventSubscriber<UserEvent.Created> {
+                override val eventType = UserEvent.Created::class
+
+                override suspend fun onEvent(event: UserEvent.Created) {
+                    // React to user creation
+                    emailService.sendWelcomeEmail(event.email)
+                }
+            }
+        )
     }
 }
 ```
 
 **Registering extensions:**
 
-Extensions are configured per realm during plugin installation:
+Extensions are configured per realm during plugin installation. Built-in extensions use DSL functions, while custom extensions use the `extension()` function:
 
 ```kotlin
 realm("admin") {
-    // Built-in extensions are enabled via DSL
+    // Built-in extensions use DSL functions
     accountLockout {
         policy = AccountLockoutPolicy.moderate()
     }
@@ -74,18 +97,24 @@ realm("admin") {
         password { minScore = 3 }
     }
 
-    // Custom extensions can be added programmatically
-    // extension(RateLimitExtension(requestsPerMinute = 60))
+    audit {
+        provider = DatabaseAuditProvider()
+    }
+
+    // Custom extensions use the extension() function
+    // extension(MyCustomConfig()) { /* config */ }
 }
 ```
 
 **Extension capabilities:**
 
-- **Database access:** Extensions can manage their own tables using `kodexTransaction()` for safe database operations
-- **Hook chaining:** Multiple extensions execute in registration order
-- **Type safety:** Strongly-typed hook interfaces prevent runtime errors
-- **Validation hooks:** Return transformed data or throw exceptions to reject operations
-- **Async support:** All hooks are suspendable for non-blocking operations
+- **Lifecycle hooks:** Validate, transform, or reject operations before they execute
+- **Event subscribers:** Automatically registered and notified of domain events
+- **Database access:** Extensions can manage their own tables via `PersistentExtension`
+- **Hook chaining:** Multiple lifecycle hooks execute in registration order
+- **Type safety:** Strongly-typed interfaces prevent runtime errors
+- **Async support:** Both hooks and event handlers are suspendable
+- **Error isolation:** Event subscriber failures don't affect main operations
 
 **Example: Account lockout flow**
 
@@ -437,88 +466,93 @@ val strength = kodexService.analyzePasswordStrength("password123")
 
 ### Audit logging
 
-Comprehensive audit logging for compliance and security monitoring. All authentication events are automatically tracked, and you can log custom events using a flexible DSL.
+Comprehensive audit logging for compliance and security monitoring. All authentication events are automatically tracked via an event-driven architecture.
 
 **Configuration:**
 
+Audit logging is configured as an extension per realm:
+
 ```kotlin
 install(Kodex) {
-    audit {
-        enabled = true
-        queueCapacity = 10000
-        batchSize = 100
-        flushInterval = 5.seconds
-        retentionPeriod = 90.days
+    realm("admin") {
+        // ... other configuration
+
+        // Enable audit logging extension
+        audit {
+            provider = DatabaseAuditProvider()
+        }
     }
 }
 ```
 
-**Automatic audit events:**
-- Login success and failure (with IP address and reason)
-- User creation
-- Account lockout events
+**How it works:**
 
-**Query and export:**
+Kodex uses an event bus architecture where domain events are published automatically for all authentication and user management operations. The audit extension subscribes to these events and persists them to the database.
+
+**Automatically tracked events:**
+
+All user and authentication operations publish typed events:
+
+- **User events:** `UserEvent.Created`, `UserEvent.Updated`, `UserEvent.ProfileUpdated`, `UserEvent.RolesUpdated`, `UserEvent.CustomAttributesUpdated`
+- **Auth events:** `AuthEvent.LoginSuccess`, `AuthEvent.LoginFailed`, `AuthEvent.PasswordChanged`, `AuthEvent.PasswordReset`
+- **Security events:** `SecurityEvent.TokenReplayDetected`
+
+**Event bus architecture:**
+
+The event bus provides a clean separation between domain logic and audit logging:
 
 ```kotlin
-val auditService = application.kodex.auditService
+// Events are published automatically by the service layer
+kodexService.createUser(email, phone, password, ...)
+// Publishes: UserEvent.Created
 
-// Query events with filters
-val events = auditService.query(AuditFilter(
-    eventTypes = listOf(AuditEvents.LOGIN_SUCCESS, AuditEvents.LOGIN_FAILED),
-    startDate = yesterday,
-    endDate = now,
-    actorId = userId,
-    limit = 100
-))
+kodexService.tokenByEmail(email, password)
+// Publishes: AuthEvent.LoginSuccess or AuthEvent.LoginFailed
 
-// Export to JSON or CSV
-val jsonExport = auditService.export(filter, ExportFormat.JSON)
-val csvExport = auditService.export(filter, ExportFormat.CSV)
-
-// Count events
-val failedLogins = auditService.count(AuditFilter(
-    eventTypes = listOf(AuditEvents.LOGIN_FAILED),
-    startDate = today
-))
+// The audit extension subscribes to these events and logs them
 ```
 
-**Custom events using the DSL:**
+**Custom event subscribers:**
+
+You can create custom extensions to subscribe to domain events:
 
 ```kotlin
-// Flexible DSL for custom events
-auditService.audit(realmId = "admin") {
-    event(AuditEvents.PERMISSION_CHANGED)
-    actor(adminUserId, ipAddress = "192.168.1.1", userAgent = "Mozilla/5.0")
-    target(targetUserId, "user")
-    success()
-    context {
-        "oldRoles" to listOf("user")
-        "newRoles" to listOf("user", "admin")
-        "reason" to "Promotion"
+class CustomAuditExtension : EventSubscriberProvider {
+    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
+        return listOf(
+            object : EventSubscriber<UserEvent> {
+                override val eventType = UserEvent::class
+
+                override suspend fun onEvent(event: UserEvent) {
+                    when (event) {
+                        is UserEvent.Created -> {
+                            // Send welcome email
+                            emailService.sendWelcome(event.email)
+                        }
+                        is UserEvent.Updated -> {
+                            // Sync to external system
+                            externalSystem.syncUser(event.userId)
+                        }
+                    }
+                }
+            }
+        )
     }
 }
 
-// Extension functions for common patterns
-auditService.auditLoginSuccess(
-    realmId = "admin",
-    userId = userId,
-    ipAddress = call.request.origin.remoteHost,
-    userAgent = call.request.userAgent(),
-    method = "email"
-)
+// Register extension
+realm("admin") {
+    extension(CustomAuditConfig()) { /* config */ }
+}
 ```
 
-**Available event types:**
+**Benefits of event-driven architecture:**
 
-The `AuditEvents` object provides 50+ predefined event type constants including:
-- Authentication: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`, `TOKEN_REFRESHED`
-- User management: `USER_CREATED`, `USER_UPDATED`, `USER_DELETED`, `EMAIL_VERIFIED`
-- Authorization: `PERMISSION_GRANTED`, `PERMISSION_DENIED`, `ROLE_ASSIGNED`
-- Security: `PASSWORD_CHANGED`, `ACCOUNT_LOCKED`, `ACCOUNT_UNLOCKED`, `MFA_ENABLED`
-- Data access: `DATA_ACCESSED`, `DATA_MODIFIED`, `DATA_DELETED`, `DATA_EXPORTED`
-
-You can also use custom event type strings for application-specific events.
+- **Decoupling:** Audit logic is separated from business logic
+- **Type safety:** Strongly-typed events prevent errors
+- **Extensibility:** Multiple subscribers can react to the same events
+- **Async processing:** Events are processed asynchronously without blocking operations
+- **Error isolation:** Subscriber failures don't affect the main operation
 
 ### Routing helpers
 
