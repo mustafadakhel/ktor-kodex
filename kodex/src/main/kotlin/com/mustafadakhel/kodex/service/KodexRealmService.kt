@@ -30,7 +30,6 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.*
 
-@Suppress("DEPRECATION") // Old audit hooks kept for backward compatibility during migration
 internal class KodexRealmService(
     private val userRepository: UserRepository,
     private val tokenManager: TokenManager,
@@ -110,93 +109,6 @@ internal class KodexRealmService(
     override fun getUserByPhone(phone: String): User {
         return userRepository.findByPhone(phone)?.toUser()
             ?: throw UserNotFound("User with phone number $phone not found")
-    }
-
-    @Deprecated("Use updateUser() with UpdateUserFields", level = DeprecationLevel.WARNING)
-    override suspend fun updateUserById(
-        userId: UUID,
-        email: String?,
-        phone: String?
-    ) {
-        val timestamp = Clock.System.now()
-
-        // Execute beforeUserUpdate hooks (validation, transformation)
-        val transformed = hookExecutor.executeBeforeUserUpdate(userId, email, phone)
-
-        val result = userRepository.updateById(
-            userId = userId,
-            email = transformed.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
-            phone = transformed.phone?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
-            isVerified = FieldUpdate.NoChange(),
-            status = FieldUpdate.NoChange(),
-            currentTime = getCurrentLocalDateTime(timeZone)
-        )
-
-        result.successOrThrow()
-
-        // Publish event (new event bus system)
-        eventBus.publish(
-            UserEvent.Updated(
-                eventId = UUID.randomUUID(),
-                timestamp = timestamp,
-                realmId = realm.owner,
-                userId = userId,
-                actorId = userId,
-                changes = mapOf(
-                    "email" to (transformed.email ?: ""),
-                    "phone" to (transformed.phone ?: "")
-                )
-            )
-        )
-    }
-
-    @Deprecated("Use updateUser() with UpdateProfileFields", level = DeprecationLevel.WARNING)
-    override suspend fun updateUserProfileById(
-        userId: UUID,
-        firstName: String?,
-        lastName: String?,
-        address: String?,
-        profilePicture: String?
-    ) {
-        val timestamp = Clock.System.now()
-
-        // Execute beforeProfileUpdate hooks (validation, transformation)
-        val transformed = hookExecutor.executeBeforeProfileUpdate(
-            userId = userId,
-            firstName = firstName,
-            lastName = lastName,
-            address = address,
-            profilePicture = profilePicture
-        )
-
-        val result = userRepository.updateProfileByUserId(
-            userId = userId,
-            profile = UserProfile(
-                firstName = transformed.firstName,
-                lastName = transformed.lastName,
-                address = transformed.address,
-                profilePicture = transformed.profilePicture,
-            )
-        )
-
-        result.successOrThrow()
-
-        // Publish event (new event bus system)
-        eventBus.publish(
-            UserEvent.ProfileUpdated(
-                eventId = UUID.randomUUID(),
-                timestamp = timestamp,
-                realmId = realm.owner,
-                userId = userId,
-                actorId = userId,
-                changes = mapOf(
-                    "firstName" to (transformed.firstName ?: ""),
-                    "lastName" to (transformed.lastName ?: ""),
-                    "address" to (transformed.address ?: ""),
-                    "profilePicture" to (transformed.profilePicture ?: "")
-                )
-            )
-        )
     }
 
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {
@@ -526,60 +438,6 @@ internal class KodexRealmService(
 
     override fun getCustomAttributes(userId: UUID): Map<String, String> {
         return userRepository.findCustomAttributesByUserId(userId)
-    }
-
-    @Deprecated("Use updateUser() with UpdateAttributes", level = DeprecationLevel.WARNING)
-    override suspend fun replaceAllCustomAttributes(userId: UUID, customAttributes: Map<String, String>) {
-        val timestamp = Clock.System.now()
-
-        // Execute beforeCustomAttributesUpdate hooks (validation, sanitization)
-        val sanitized = hookExecutor.executeBeforeCustomAttributesUpdate(userId, customAttributes)
-
-        val result = userRepository.replaceAllCustomAttributesByUserId(
-            userId = userId,
-            customAttributes = sanitized
-        )
-
-        result.successOrThrow()
-
-        // Publish event (new event bus system)
-        eventBus.publish(
-            UserEvent.CustomAttributesReplaced(
-                eventId = UUID.randomUUID(),
-                timestamp = timestamp,
-                realmId = realm.owner,
-                userId = userId,
-                actorId = userId,
-                attributeCount = sanitized.size,
-                keys = sanitized.keys
-            )
-        )
-    }
-
-    @Deprecated("Use updateUser() with UpdateAttributes", level = DeprecationLevel.WARNING)
-    override suspend fun updateCustomAttributes(userId: UUID, customAttributes: Map<String, String>) {
-        val timestamp = Clock.System.now()
-
-        // Execute beforeCustomAttributesUpdate hooks (validation, sanitization)
-        val sanitized = hookExecutor.executeBeforeCustomAttributesUpdate(userId, customAttributes)
-
-        userRepository.updateCustomAttributesByUserId(
-            userId = userId,
-            customAttributes = sanitized
-        ).successOrThrow()
-
-        // Publish event (new event bus system)
-        eventBus.publish(
-            UserEvent.CustomAttributesUpdated(
-                eventId = UUID.randomUUID(),
-                timestamp = timestamp,
-                realmId = realm.owner,
-                userId = userId,
-                actorId = userId,
-                attributeCount = sanitized.size,
-                keys = sanitized.keys
-            )
-        )
     }
 
     override fun verifyAccessToken(token: String): KodexPrincipal? {

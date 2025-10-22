@@ -119,44 +119,4 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
             hook.afterLoginFailure(identifier)
         }
     }
-
-    /**
-     * Logs an audit event by calling all registered AuditHooks extensions.
-     * All extensions receive the same parameters.
-     *
-     * @deprecated Use EventBus.publish() with typed events instead.
-     * This method will be removed when AuditHooks interface is removed.
-     */
-    @Deprecated(
-        message = "Use EventBus.publish() with typed events (e.g., UserEvent.Created) instead",
-        level = DeprecationLevel.WARNING
-    )
-    @Suppress("DEPRECATION")
-    suspend fun logAuditEvent(
-        eventType: String,
-        timestamp: kotlinx.datetime.Instant,
-        realmId: String,
-        actorId: java.util.UUID? = null,
-        actorType: String = "USER",
-        targetId: java.util.UUID? = null,
-        targetType: String? = null,
-        result: String = "SUCCESS",
-        metadata: Map<String, String> = emptyMap(),
-        sessionId: java.util.UUID? = null
-    ) {
-        registry.getAllOfType(AuditHooks::class).forEach { hook ->
-            hook.logEvent(
-                eventType = eventType,
-                timestamp = timestamp,
-                realmId = realmId,
-                actorId = actorId,
-                actorType = actorType,
-                targetId = targetId,
-                targetType = targetType,
-                result = result,
-                metadata = metadata,
-                sessionId = sessionId
-            )
-        }
-    }
 }
