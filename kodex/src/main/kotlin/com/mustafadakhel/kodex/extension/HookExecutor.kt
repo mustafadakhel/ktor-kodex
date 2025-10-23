@@ -5,13 +5,22 @@ import java.util.UUID
 
 /**
  * Executes hooks from registered extensions in a chained manner.
- * Supports multiple extensions of the same type, executing them in registration order.
+ * Supports multiple extensions of the same type, executing them in priority order.
+ *
+ * Lower priority extensions run first (e.g., priority 10 runs before priority 100).
+ *
+ * @param registry Extension registry containing all registered extensions
+ * @param failureStrategy Strategy for handling hook execution failures
  */
-internal class HookExecutor(private val registry: ExtensionRegistry) {
+internal class HookExecutor(
+    private val registry: ExtensionRegistry,
+    private val failureStrategy: HookFailureStrategy = HookFailureStrategy.FAIL_FAST
+) {
 
     /**
      * Executes beforeUserCreate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeUserCreate(
         email: String?,
@@ -22,15 +31,17 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     ): UserCreateData {
         var current = UserCreateData(email, phone, customAttributes, profile)
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeUserCreate(
-                current.email,
-                current.phone,
-                password,
-                current.customAttributes,
-                current.profile
-            )
-        }
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                current = hook.beforeUserCreate(
+                    current.email,
+                    current.phone,
+                    password,
+                    current.customAttributes,
+                    current.profile
+                )
+            }
 
         return current
     }
@@ -38,6 +49,7 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeUserUpdate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeUserUpdate(
         userId: UUID,
@@ -46,9 +58,11 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     ): UserUpdateData {
         var current = UserUpdateData(email, phone)
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeUserUpdate(userId, current.email, current.phone)
-        }
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                current = hook.beforeUserUpdate(userId, current.email, current.phone)
+            }
 
         return current
     }
@@ -56,6 +70,7 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeProfileUpdate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeProfileUpdate(
         userId: UUID,
@@ -66,15 +81,17 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     ): UserProfileUpdateData {
         var current = UserProfileUpdateData(firstName, lastName, address, profilePicture)
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeProfileUpdate(
-                userId,
-                current.firstName,
-                current.lastName,
-                current.address,
-                current.profilePicture
-            )
-        }
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                current = hook.beforeProfileUpdate(
+                    userId,
+                    current.firstName,
+                    current.lastName,
+                    current.address,
+                    current.profilePicture
+                )
+            }
 
         return current
     }
@@ -82,6 +99,7 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeCustomAttributesUpdate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeCustomAttributesUpdate(
         userId: UUID,
@@ -89,9 +107,11 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     ): Map<String, String> {
         var current = customAttributes
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeCustomAttributesUpdate(userId, current)
-        }
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                current = hook.beforeCustomAttributesUpdate(userId, current)
+            }
 
         return current
     }
@@ -99,13 +119,16 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeLogin hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeLogin(identifier: String): String {
         var current = identifier
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeLogin(current)
-        }
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                current = hook.beforeLogin(current)
+            }
 
         return current
     }
@@ -113,10 +136,13 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes afterLoginFailure hooks from all UserLifecycleHooks extensions.
      * All extensions receive the same identifier.
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeAfterLoginFailure(identifier: String) {
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            hook.afterLoginFailure(identifier)
-        }
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                hook.afterLoginFailure(identifier)
+            }
     }
 }

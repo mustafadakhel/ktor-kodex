@@ -6,8 +6,24 @@ import kotlin.reflect.KClass
 /**
  * Base interface for realm extensions.
  * Extensions can add custom functionality like validation, rate limiting, etc.
+ *
+ * Extensions are executed in priority order (lower priority runs first).
+ * Default priority is 100 (medium priority).
  */
-public interface RealmExtension
+public interface RealmExtension {
+    /**
+     * Priority for hook execution order.
+     * Lower values run first (e.g., 10 runs before 100).
+     *
+     * Recommended priorities:
+     * - 10-50: Critical checks (account lockout, rate limiting) - runs early
+     * - 100: Default (validation, sanitization) - runs middle
+     * - 200+: Logging, audit trails - runs last
+     *
+     * @return Priority value (default: 100)
+     */
+    public val priority: Int get() = 100
+}
 
 /**
  * Interface for extensions that require database persistence.

@@ -15,11 +15,15 @@ import java.util.*
 /**
  * Account lockout extension that protects against brute force attacks.
  * Tracks failed login attempts and automatically locks accounts when thresholds are exceeded.
+ *
+ * Priority: 10 (critical) - runs early to block locked accounts before other checks.
  */
 public class AccountLockoutExtension internal constructor(
     private val service: AccountLockoutService,
     private val timeZone: TimeZone
 ) : UserLifecycleHooks, PersistentExtension {
+
+    override val priority: Int = 10
 
     override fun tables(): List<Table> = listOf(
         FailedLoginAttempts,

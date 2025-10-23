@@ -15,8 +15,11 @@ import java.util.UUID
  *
  * For advanced validation (disposable email blocking, password strength scoring),
  * use the kodex-validation extension module.
+ *
+ * Priority: 100 (default) - runs after critical security checks like account lockout.
  */
 internal class DefaultValidationHook : UserLifecycleHooks {
+    override val priority: Int = 100
 
     companion object {
         private const val MIN_PASSWORD_LENGTH = 8

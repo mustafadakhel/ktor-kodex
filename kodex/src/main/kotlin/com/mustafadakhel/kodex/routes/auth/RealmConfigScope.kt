@@ -21,7 +21,8 @@ internal data class RealmConfig(
     internal val passwordHashingConfig: PasswordHashingConfig,
     internal val tokenRotationConfig: TokenRotationConfig,
     internal val extensions: ExtensionRegistry,
-    val timeZone: TimeZone
+    val timeZone: TimeZone,
+    val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy
 )
 
 @KtorDsl
@@ -49,6 +50,13 @@ public class RealmConfigScope internal constructor(
     private var tokenRotationConfigScope: TokenRotationConfigScope = TokenRotationConfigScope()
     private val extensionsMap = mutableMapOf<KClass<out RealmExtension>, MutableList<RealmExtension>>()
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
+
+    /**
+     * Strategy for handling hook execution failures.
+     * Default is FAIL_FAST (stop on first error).
+     */
+    public var hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy =
+        com.mustafadakhel.kodex.extension.HookFailureStrategy.FAIL_FAST
 
     /**
      * Gets the extension context for this realm configuration.
@@ -172,6 +180,7 @@ public class RealmConfigScope internal constructor(
             tokenRotationConfig = tokenRotationConfig,
             extensions = extensionRegistry,
             timeZone = timeZone,
+            hookFailureStrategy = hookFailureStrategy
         )
     }
 }
