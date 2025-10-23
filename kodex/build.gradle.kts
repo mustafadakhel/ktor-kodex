@@ -8,6 +8,7 @@ version = libs.versions.kodex.get()
 plugins {
     kotlin("jvm")
     id("com.vanniktech.maven.publish")
+    jacoco
 }
 
 java {
@@ -21,7 +22,28 @@ java {
 tasks {
     test {
         useJUnitPlatform()
+        finalizedBy(jacocoTestReport)
     }
+
+    jacocoTestReport {
+        dependsOn(test)
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+            csv.required.set(false)
+        }
+    }
+
+    jacocoTestCoverageVerification {
+        violationRules {
+            rule {
+                limit {
+                    minimum = "0.80".toBigDecimal()
+                }
+            }
+        }
+    }
+
     compileKotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
