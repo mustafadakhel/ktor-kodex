@@ -11,6 +11,7 @@ internal interface TokenRepository {
     fun deleteToken(tokenHash: String)
     fun revokeTokens(userId: UUID)
     fun revokeToken(tokenHash: String)
+    fun revokeToken(tokenId: UUID)
     fun markTokenAsUsedIfUnused(tokenId: UUID, now: LocalDateTime): Boolean
     fun findTokenByHash(tokenHash: String): PersistedToken?
     fun revokeTokenFamily(tokenFamily: UUID)
