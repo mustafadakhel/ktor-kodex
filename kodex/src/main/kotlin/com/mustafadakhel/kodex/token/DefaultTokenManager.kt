@@ -14,6 +14,7 @@ import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.model.TokenValidity
 import com.mustafadakhel.kodex.model.database.PersistedToken
 import com.mustafadakhel.kodex.repository.TokenRepository
+import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.routes.auth.DefaultKodexPrincipal
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.service.HashingService
@@ -35,7 +36,7 @@ internal class DefaultTokenManager(
     private val jwtTokenVerifier: TokenVerifier,
     private val tokenValidity: TokenValidity,
     private val tokenRepository: TokenRepository,
-    private val userRepository: com.mustafadakhel.kodex.repository.UserRepository,
+    private val userRepository: UserRepository,
     private val tokenPersistence: Map<TokenType, Boolean>,
     private val hashingService: HashingService,
     private val timeZone: TimeZone,

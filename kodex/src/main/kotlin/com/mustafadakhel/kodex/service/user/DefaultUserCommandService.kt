@@ -6,6 +6,7 @@ import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.User
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
@@ -88,18 +89,16 @@ internal class DefaultUserCommandService(
                         }
                     }
 
-                    runCatching {
-                        eventBus.publish(
-                            UserEvent.Updated(
-                                eventId = UUID.randomUUID(),
-                                timestamp = result.changes.timestamp,
-                                realmId = realm.owner,
-                                userId = command.userId,
-                                actorId = command.userId,
-                                changes = changeMetadata
-                            )
+                    eventBus.publish(
+                        UserEvent.Updated(
+                            eventId = UUID.randomUUID(),
+                            timestamp = result.changes.timestamp,
+                            realmId = realm.owner,
+                            userId = command.userId,
+                            actorId = command.userId,
+                            changes = changeMetadata
                         )
-                    }
+                    )
                 }
             }
             is UpdateResult.Failure -> {
@@ -120,7 +119,7 @@ internal class DefaultUserCommandService(
             throw KodexThrowable.PhoneAlreadyExists()
     }
 
-    private fun com.mustafadakhel.kodex.model.database.UserEntity.toUser() = User(
+    private fun UserEntity.toUser() = User(
         id = id,
         createdAt = createdAt,
         updatedAt = updatedAt,

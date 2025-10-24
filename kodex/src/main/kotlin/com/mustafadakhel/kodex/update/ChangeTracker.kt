@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.update
 
 import com.mustafadakhel.kodex.model.FullUser
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.model.database.toUserProfile
 import kotlinx.datetime.Clock
@@ -186,9 +187,10 @@ internal class ChangeTracker {
      * Detects all changes for a batch update.
      */
     fun detectBatchChanges(
-        current: com.mustafadakhel.kodex.model.FullUser,
+        current: FullUser,
         batch: UpdateUserBatch
     ): ChangeSet {
+        val timestamp = Clock.System.now()
         val allChanges = mutableMapOf<String, FieldChange>()
 
         batch.userFields?.let { updates ->
@@ -204,7 +206,7 @@ internal class ChangeTracker {
         }
 
         return ChangeSet(
-            timestamp = Clock.System.now(),
+            timestamp = timestamp,
             changedFields = allChanges
         )
     }
@@ -213,7 +215,7 @@ internal class ChangeTracker {
      * Detects changes for a single command type.
      */
     fun detectChanges(
-        current: com.mustafadakhel.kodex.model.database.FullUserEntity,
+        current: FullUserEntity,
         command: UpdateCommand
     ): ChangeSet {
         val timestamp = Clock.System.now()

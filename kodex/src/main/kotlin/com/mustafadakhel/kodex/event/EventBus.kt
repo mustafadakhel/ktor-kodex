@@ -108,4 +108,12 @@ public interface EventBus {
      * @param subscriber The subscriber to unregister
      */
     public fun <T : KodexEvent> unsubscribe(subscriber: EventSubscriber<T>)
+
+    /**
+     * Shut down the event bus, canceling all pending event processing.
+     *
+     * This method should be called when the application is shutting down
+     * to ensure all resources are properly released.
+     */
+    public fun shutdown()
 }

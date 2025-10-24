@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
@@ -107,5 +108,10 @@ internal class DefaultEventBus(
         }
 
         return result.distinctBy { it }
+    }
+
+    override fun shutdown() {
+        scope.cancel()
+        eventQueue.close()
     }
 }
