@@ -120,9 +120,9 @@ class AuthenticationFlowTest : FunSpec({
                         }
                     }
 
-                    val service = kodex.serviceOf(realm)
+                    val services = kodex.servicesOf(realm)
 
-                    val user = service.createUser(
+                    val user = services.userCommand.createUser(
                         email = "test@example.com",
                         phone = null,
                         password = "SecurePass123",
@@ -135,9 +135,9 @@ class AuthenticationFlowTest : FunSpec({
                     user.email shouldBe "test@example.com"
                     user.isVerified shouldBe false
 
-                    service.setVerified(user.id, true)
+                    services.verification.setVerified(user.id, true)
 
-                    val tokens = service.tokenByEmail("test@example.com", "SecurePass123")
+                    val tokens = services.authentication.tokenByEmail("test@example.com", "SecurePass123")
                     tokens.shouldNotBeNull()
                 }
             }
@@ -166,9 +166,9 @@ class AuthenticationFlowTest : FunSpec({
                         }
                     }
 
-                    val service = kodex.serviceOf(realm)
+                    val services = kodex.servicesOf(realm)
 
-                    val user = service.createUser(
+                    val user = services.userCommand.createUser(
                         email = "wrongpass@example.com",
                         phone = null,
                         password = "CorrectPass123",
@@ -177,10 +177,10 @@ class AuthenticationFlowTest : FunSpec({
                         profile = null
                     )!!
 
-                    service.setVerified(user.id, true)
+                    services.verification.setVerified(user.id, true)
 
                     val result = runCatching {
-                        service.tokenByEmail("wrongpass@example.com", "WrongPassword")
+                        services.authentication.tokenByEmail("wrongpass@example.com", "WrongPassword")
                     }
 
                     result.isFailure shouldBe true
@@ -211,9 +211,9 @@ class AuthenticationFlowTest : FunSpec({
                         }
                     }
 
-                    val service = kodex.serviceOf(realm)
+                    val services = kodex.servicesOf(realm)
 
-                    val user = service.createUser(
+                    val user = services.userCommand.createUser(
                         email = "refresh@example.com",
                         phone = null,
                         password = "SecurePass123",
@@ -222,10 +222,10 @@ class AuthenticationFlowTest : FunSpec({
                         profile = null
                     )!!
 
-                    service.setVerified(user.id, true)
+                    services.verification.setVerified(user.id, true)
 
-                    val originalTokens = service.tokenByEmail("refresh@example.com", "SecurePass123")
-                    val refreshedTokens = service.refresh(user.id, originalTokens.refresh)
+                    val originalTokens = services.authentication.tokenByEmail("refresh@example.com", "SecurePass123")
+                    val refreshedTokens = services.tokens.refresh(user.id, originalTokens.refresh)
 
                     refreshedTokens.shouldNotBeNull()
                     refreshedTokens.access.shouldNotBeNull()
