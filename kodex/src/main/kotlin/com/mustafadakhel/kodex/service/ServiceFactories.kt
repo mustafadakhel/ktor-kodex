@@ -1,7 +1,6 @@
 package com.mustafadakhel.kodex.service
 
 import com.mustafadakhel.kodex.event.EventBus
-import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.repository.UserRepository

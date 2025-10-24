@@ -41,6 +41,8 @@ internal class DefaultUserCommandService(
         customAttributes: Map<String, String>?,
         profile: UserProfile?
     ): User? {
+        val timestamp = Clock.System.now()
+
         // Execute beforeUserCreate hooks (validation, transformation)
         val transformed = hookExecutor.executeBeforeUserCreate(
             email, phone, password, customAttributes, profile
@@ -58,18 +60,16 @@ internal class DefaultUserCommandService(
         val user = result.userOrThrow().toUser()
 
         // Publish event
-        kotlinx.coroutines.runBlocking {
-            eventBus.publish(
-                UserEvent.Created(
-                    eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
-                    realmId = realm.owner,
-                    userId = user.id,
-                    email = email,
-                    phone = phone
-                )
+        eventBus.publish(
+            UserEvent.Created(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.owner,
+                userId = user.id,
+                email = email,
+                phone = phone
             )
-        }
+        )
 
         return user
     }
