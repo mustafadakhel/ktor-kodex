@@ -1,13 +1,12 @@
 package com.mustafadakhel.kodex.update
 
 import com.mustafadakhel.kodex.extension.HookExecutor
-import com.mustafadakhel.kodex.model.FullUser
 import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.throwable.KodexThrowable
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 
 /**
@@ -269,7 +268,7 @@ internal class UpdateCommandProcessor(
             phone = updates.phone,
             isVerified = updates.isVerified,
             status = updates.status,
-            currentTime = getCurrentLocalDateTime(timeZone)
+            currentTime = now(timeZone)
         )
 
         return when (repositoryResult) {
@@ -467,7 +466,7 @@ internal class UpdateCommandProcessor(
             } else {
                 FieldUpdate.NoChange()
             },
-            currentTime = getCurrentLocalDateTime(timeZone)
+            currentTime = now(timeZone)
         )
 
         return when (repositoryResult) {

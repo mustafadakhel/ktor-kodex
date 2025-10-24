@@ -3,21 +3,17 @@ package com.mustafadakhel.kodex.update
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.extension.UserProfileUpdateData
 import com.mustafadakhel.kodex.extension.UserUpdateData
-import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.UserRepository
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import io.kotest.core.spec.style.DescribeSpec
-import io.kotest.matchers.nulls.shouldBeNull
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.*
 
@@ -60,8 +56,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
             phoneNumber = "+1234567890",
             isVerified = false,
             status = UserStatus.ACTIVE,
-            createdAt = getCurrentLocalDateTime(timeZone),
-            updatedAt = getCurrentLocalDateTime(timeZone),
+            createdAt = now(timeZone),
+            updatedAt = now(timeZone),
             lastLoggedIn = null,
             roles = emptyList(),
             profile = null,
@@ -112,6 +108,93 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Failure.ConstraintViolation>()
                 result as UpdateResult.Failure.ConstraintViolation
                 result.field shouldBe "email"
+            }
+
+            it("should handle phone already exists") {
+                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                    UserRepository.UpdateUserResult.PhoneAlreadyExists
+
+                val command = UpdateUserFields(
+                    userId = testUserId,
+                    fields = UserFieldUpdates(phone = FieldUpdate.SetValue("+9876543210"))
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Failure.ConstraintViolation>()
+                result as UpdateResult.Failure.ConstraintViolation
+                result.field shouldBe "phone"
+            }
+
+            it("should update multiple fields at once") {
+                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                    UserRepository.UpdateUserResult.Success
+
+                val command = UpdateUserFields(
+                    userId = testUserId,
+                    fields = UserFieldUpdates(
+                        email = FieldUpdate.SetValue("new@example.com"),
+                        phone = FieldUpdate.SetValue("+9999999999"),
+                        isVerified = FieldUpdate.SetValue(true),
+                        status = FieldUpdate.SetValue(UserStatus.SUSPENDED)
+                    )
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+                verify { mockRepository.updateById(
+                    userId = testUserId,
+                    email = FieldUpdate.SetValue("new@example.com"),
+                    phone = FieldUpdate.SetValue("+9999999999"),
+                    isVerified = FieldUpdate.SetValue(true),
+                    status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
+                    currentTime = any()
+                )}
+            }
+
+            it("should handle null email (clear email)") {
+                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                    UserRepository.UpdateUserResult.Success
+
+                val command = UpdateUserFields(
+                    userId = testUserId,
+                    fields = UserFieldUpdates(email = FieldUpdate.ClearValue())
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+                verify { mockRepository.updateById(
+                    userId = testUserId,
+                    email = FieldUpdate.ClearValue(),
+                    phone = FieldUpdate.NoChange(),
+                    isVerified = FieldUpdate.NoChange(),
+                    status = FieldUpdate.NoChange(),
+                    currentTime = any()
+                )}
+            }
+
+            it("should update verification status") {
+                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                    UserRepository.UpdateUserResult.Success
+
+                val command = UpdateUserFields(
+                    userId = testUserId,
+                    fields = UserFieldUpdates(isVerified = FieldUpdate.SetValue(true))
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+                verify { mockRepository.updateById(
+                    userId = testUserId,
+                    email = FieldUpdate.NoChange(),
+                    phone = FieldUpdate.NoChange(),
+                    isVerified = FieldUpdate.SetValue(true),
+                    status = FieldUpdate.NoChange(),
+                    currentTime = any()
+                )}
             }
 
             it("should update status successfully") {
@@ -169,6 +252,39 @@ class UpdateCommandProcessorTest : DescribeSpec({
 
                 result.shouldBeInstanceOf<UpdateResult.Success>()
             }
+
+            it("should clear profile fields with null") {
+                every { mockRepository.findFullById(testUserId) } returns testUserWithProfile andThen testUserWithProfile
+                every { mockRepository.updateProfileByUserId(any(), any()) } returns
+                    UserRepository.UpdateProfileResult.Success(mockk(relaxed = true))
+
+                val command = UpdateProfileFields(
+                    userId = testUserId,
+                    fields = ProfileFieldUpdates(
+                        address = FieldUpdate.ClearValue(),
+                        profilePicture = FieldUpdate.ClearValue()
+                    )
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+            }
+
+            it("should handle user without existing profile") {
+                every { mockRepository.findFullById(testUserId) } returns testUser andThen testUser
+                every { mockRepository.updateProfileByUserId(any(), any()) } returns
+                    UserRepository.UpdateProfileResult.Success(mockk(relaxed = true))
+
+                val command = UpdateProfileFields(
+                    userId = testUserId,
+                    fields = ProfileFieldUpdates(firstName = FieldUpdate.SetValue("New"))
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+            }
         }
 
         describe("execute with UpdateAttributes") {
@@ -215,6 +331,61 @@ class UpdateCommandProcessorTest : DescribeSpec({
 
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.replaceAllCustomAttributesByUserId(testUserId, newAttrs) }
+            }
+
+            it("should remove specific attributes") {
+                val updatedUser = testUserWithAttrs.copy(customAttributes = mapOf("key2" to "value2"))
+
+                every { mockRepository.updateCustomAttributesByUserId(any(), any()) } returns
+                    UserRepository.UpdateUserResult.Success
+                every { mockRepository.findFullById(testUserId) } returns testUserWithAttrs andThen updatedUser
+
+                val command = UpdateAttributes(
+                    userId = testUserId,
+                    changes = AttributeChanges(listOf(
+                        AttributeChange.Remove("key1")
+                    ))
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+            }
+
+            it("should clear all attributes with empty map") {
+                val updatedUser = testUserWithAttrs.copy(customAttributes = emptyMap())
+
+                every { mockRepository.replaceAllCustomAttributesByUserId(any(), any()) } returns
+                    UserRepository.UpdateUserResult.Success
+                every { mockRepository.findFullById(testUserId) } returns testUserWithAttrs andThen updatedUser
+
+                val command = UpdateAttributes(
+                    userId = testUserId,
+                    changes = AttributeChanges(listOf(
+                        AttributeChange.ReplaceAll(emptyMap())
+                    ))
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
+                verify { mockRepository.replaceAllCustomAttributesByUserId(testUserId, emptyMap()) }
+            }
+
+            it("should handle user with no existing attributes") {
+                every { mockRepository.updateCustomAttributesByUserId(any(), any()) } returns
+                    UserRepository.UpdateUserResult.Success
+
+                val command = UpdateAttributes(
+                    userId = testUserId,
+                    changes = AttributeChanges(listOf(
+                        AttributeChange.Set("newKey", "newValue")
+                    ))
+                )
+
+                val result = processor.execute(command)
+
+                result.shouldBeInstanceOf<UpdateResult.Success>()
             }
         }
 

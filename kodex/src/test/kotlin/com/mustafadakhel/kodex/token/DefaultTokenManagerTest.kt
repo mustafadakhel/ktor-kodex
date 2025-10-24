@@ -1,7 +1,6 @@
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
@@ -15,14 +14,13 @@ import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.routes.auth.RealmConfigScope
-import com.mustafadakhel.kodex.service.argon2HashingService
 import com.mustafadakhel.kodex.service.saltedHashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.util.ClaimsConfig
 import com.mustafadakhel.kodex.util.Db
 import com.mustafadakhel.kodex.util.SecretsConfig
 import com.mustafadakhel.kodex.util.exposedTransaction
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import com.mustafadakhel.kodex.util.setupExposedEngine
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -34,14 +32,11 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeEmpty
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteAll
 import java.util.*
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 class DefaultTokenManagerTest : FunSpec({
 
@@ -134,7 +129,7 @@ class DefaultTokenManagerTest : FunSpec({
                 roleNames = listOf(realm.owner),
                 customAttributes = null,
                 profile = null,
-                currentTime = getCurrentLocalDateTime(TimeZone.UTC)
+                currentTime = now(TimeZone.UTC)
             )
             val userDao = (result as com.mustafadakhel.kodex.repository.UserRepository.CreateUserResult.Success).user
             testUserId = userDao.id

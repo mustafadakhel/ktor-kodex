@@ -2,7 +2,6 @@ package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
-import com.mustafadakhel.kodex.audit.AuditEvents
 import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SecurityEvent
@@ -20,7 +19,7 @@ import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import com.mustafadakhel.kodex.util.toUuidOrNull
 import com.mustafadakhel.kodex.util.tokenId
 import io.ktor.server.auth.jwt.*
@@ -88,7 +87,7 @@ internal class DefaultTokenManager(
                     tokenHash = hashingService.hash(token.token),
                     type = tokenType,
                     revoked = false,
-                    createdAt = getCurrentLocalDateTime(timeZone),
+                    createdAt = now(timeZone),
                     expiresAt = CurrentKotlinInstant
                         .plus(validityMs)
                         .toLocalDateTime(timeZone),

@@ -13,7 +13,7 @@ import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.UUID
@@ -54,7 +54,7 @@ internal class DefaultUserCommandService(
             phone = transformed.phone,
             hashedPassword = hashingService.hash(password),
             roleNames = (listOf(realm.owner) + roleNames).distinct(),
-            currentTime = getCurrentLocalDateTime(timeZone),
+            currentTime = now(timeZone),
             customAttributes = transformed.customAttributes,
             profile = transformed.profile
         )

@@ -27,14 +27,21 @@ internal class DefaultEventBus(
     private val eventQueue = Channel<KodexEvent>(Channel.UNLIMITED)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // Security: Track subscribers from registered extensions
+    private val allowedSubscribers = ConcurrentHashMap.newKeySet<EventSubscriber<*>>()
+
     init {
-        // Auto-register subscribers from extensions
-        extensionRegistry.getAllOfType(EventSubscriberProvider::class)
-            .forEach { provider ->
-                provider.getEventSubscribers().forEach { subscriber ->
-                    subscribe(subscriber)
-                }
-            }
+        // Collect all subscribers from registered extensions
+        val extensionSubscribers = extensionRegistry.getAllOfType(EventSubscriberProvider::class)
+            .flatMap { provider -> provider.getEventSubscribers() }
+
+        // Add them to allowed set
+        allowedSubscribers.addAll(extensionSubscribers)
+
+        // Register all allowed subscribers
+        extensionSubscribers.forEach { subscriber ->
+            subscribeInternal(subscriber)
+        }
 
         // Start event processing coroutine
         scope.launch {
@@ -50,9 +57,18 @@ internal class DefaultEventBus(
     }
 
     override fun <T : KodexEvent> subscribe(subscriber: EventSubscriber<T>) {
-        // TODO: Add security validation - ensure subscriber is from registered extension
-        // For now, we trust that only extensions call this method
+        // Security validation: ensure subscriber comes from a registered extension
+        if (subscriber !in allowedSubscribers) {
+            throw IllegalArgumentException(
+                "Subscriber ${subscriber::class.qualifiedName} is not from a registered extension. " +
+                "Only subscribers provided by registered extensions can subscribe to events."
+            )
+        }
 
+        subscribeInternal(subscriber)
+    }
+
+    private fun <T : KodexEvent> subscribeInternal(subscriber: EventSubscriber<T>) {
         val subscriberList = subscribers.computeIfAbsent(subscriber.eventType) {
             mutableListOf()
         }
