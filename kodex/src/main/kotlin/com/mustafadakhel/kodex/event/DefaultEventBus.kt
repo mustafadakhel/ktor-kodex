@@ -1,11 +1,13 @@
 package com.mustafadakhel.kodex.event
 
+import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 
@@ -19,11 +21,20 @@ internal class DefaultEventBus(
     private val extensionRegistry: ExtensionRegistry
 ) : EventBus {
 
+    private val logger = LoggerFactory.getLogger(DefaultEventBus::class.java)
     private val subscribers = ConcurrentHashMap<KClass<*>, MutableList<EventSubscriber<*>>>()
     private val eventQueue = Channel<KodexEvent>(Channel.UNLIMITED)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     init {
+        // Auto-register subscribers from extensions
+        extensionRegistry.getAllOfType(EventSubscriberProvider::class)
+            .forEach { provider ->
+                provider.getEventSubscribers().forEach { subscriber ->
+                    subscribe(subscriber)
+                }
+            }
+
         // Start event processing coroutine
         scope.launch {
             for (event in eventQueue) {
@@ -70,11 +81,11 @@ internal class DefaultEventBus(
                 } catch (e: Exception) {
                     // Log error but don't propagate
                     // This ensures one subscriber failure doesn't affect others
-                    System.err.println(
-                        "[EventBus] Subscriber ${subscriber::class.simpleName} " +
-                        "failed processing event ${event.eventType} (${event.eventId}): ${e.message}"
+                    logger.error(
+                        "Subscriber ${subscriber::class.simpleName} failed processing event " +
+                        "${event.eventType} (${event.eventId})",
+                        e
                     )
-                    e.printStackTrace(System.err)
                 }
             }
         }
