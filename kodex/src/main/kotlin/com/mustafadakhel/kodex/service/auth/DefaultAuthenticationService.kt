@@ -57,7 +57,7 @@ internal class DefaultAuthenticationService(
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
         val timestamp = Clock.System.now()
 
-        // Verify user exists
+        // Verify user exist
         val user = userRepository.findById(userId) ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         // Verify old password

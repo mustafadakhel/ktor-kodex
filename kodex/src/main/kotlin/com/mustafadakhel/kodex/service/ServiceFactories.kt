@@ -88,7 +88,9 @@ internal fun authenticationService(
 }
 
 internal fun tokenService(
-    tokenManager: TokenManager
+    tokenManager: TokenManager,
+    eventBus: EventBus,
+    realm: Realm
 ): TokenService {
-    return DefaultTokenService(tokenManager)
+    return DefaultTokenService(tokenManager, eventBus, realm)
 }

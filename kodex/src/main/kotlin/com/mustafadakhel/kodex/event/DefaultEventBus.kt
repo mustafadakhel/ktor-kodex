@@ -35,7 +35,7 @@ internal class DefaultEventBus(
         val extensionSubscribers = extensionRegistry.getAllOfType(EventSubscriberProvider::class)
             .flatMap { provider -> provider.getEventSubscribers() }
 
-        // Add them to allowed set
+        // Add them to the allowed set
         allowedSubscribers.addAll(extensionSubscribers)
 
         // Register all allowed subscribers
@@ -43,7 +43,7 @@ internal class DefaultEventBus(
             subscribeInternal(subscriber)
         }
 
-        // Start event processing coroutine
+        // Start event processing coroutine loop
         scope.launch {
             for (event in eventQueue) {
                 processEvent(event)
@@ -86,7 +86,7 @@ internal class DefaultEventBus(
     private suspend fun processEvent(event: KodexEvent) {
         val eventClass = event::class
 
-        // Find all subscribers for this event type and parent types
+        // Find all subscribers for this event type and parent type
         val subscribersForEvent = findSubscribersFor(eventClass)
 
         subscribersForEvent.forEach { subscriber ->

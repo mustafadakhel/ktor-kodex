@@ -49,7 +49,7 @@ class EventBusTest : FunSpec({
         override val eventId: UUID,
         override val timestamp: Instant,
         override val realmId: String,
-        val severity: String
+        override val severity: EventSeverity
     ) : KodexEvent {
         override val eventType: String = "TEST_SECURITY_EVENT"
     }
@@ -193,7 +193,7 @@ class EventBusTest : FunSpec({
                 eventId = UUID.randomUUID(),
                 timestamp = Clock.System.now(),
                 realmId = "test-realm",
-                severity = "HIGH"
+                severity = EventSeverity.CRITICAL
             )
 
             runBlocking {
@@ -439,7 +439,7 @@ class EventBusTest : FunSpec({
                 eventId = UUID.randomUUID(),
                 timestamp = Clock.System.now(),
                 realmId = "test-realm",
-                severity = "HIGH"
+                severity = EventSeverity.CRITICAL
             )
 
             runBlocking {

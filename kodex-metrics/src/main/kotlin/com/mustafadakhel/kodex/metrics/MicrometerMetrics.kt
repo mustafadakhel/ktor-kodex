@@ -1,4 +1,4 @@
-package com.mustafadakhel.kodex.observability
+package com.mustafadakhel.kodex.metrics
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry

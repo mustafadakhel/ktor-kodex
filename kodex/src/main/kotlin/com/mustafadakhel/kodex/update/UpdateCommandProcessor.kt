@@ -51,7 +51,7 @@ internal class UpdateCommandProcessor(
         // 3. Detect what will actually change after transformation
         val changeSet = changeTracker.detectChanges(currentUserEntity, transformedCommand)
 
-        // 4. If no changes after hooks, return early
+        // 4. If no change after hooks, return early
         if (changeSet.changedFields.isEmpty()) {
             return UpdateResult.Success(
                 user = currentUserEntity.toFullUser(),

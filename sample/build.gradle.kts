@@ -19,4 +19,5 @@ dependencies {
     implementation(project(":kodex-validation"))
     implementation(project(":kodex-lockout"))
     implementation(project(":kodex-audit"))
+    implementation(project(":kodex-metrics"))
 }

@@ -44,35 +44,39 @@ internal class DefaultUserCommandService(
     ): User? {
         val timestamp = Clock.System.now()
 
-        // Execute beforeUserCreate hooks (validation, transformation)
-        val transformed = hookExecutor.executeBeforeUserCreate(
-            email, phone, password, customAttributes, profile
-        )
-
-        val result = userRepository.create(
-            email = transformed.email,
-            phone = transformed.phone,
-            hashedPassword = hashingService.hash(password),
-            roleNames = (listOf(realm.owner) + roleNames).distinct(),
-            currentTime = now(timeZone),
-            customAttributes = transformed.customAttributes,
-            profile = transformed.profile
-        )
-        val user = result.userOrThrow().toUser()
-
-        // Publish event
-        eventBus.publish(
-            UserEvent.Created(
-                eventId = UUID.randomUUID(),
-                timestamp = timestamp,
-                realmId = realm.owner,
-                userId = user.id,
-                email = email,
-                phone = phone
+        return try {
+            // Execute beforeUserCreate hooks (validation, transformation)
+            val transformed = hookExecutor.executeBeforeUserCreate(
+                email, phone, password, customAttributes, profile
             )
-        )
 
-        return user
+            val result = userRepository.create(
+                email = transformed.email,
+                phone = transformed.phone,
+                hashedPassword = hashingService.hash(password),
+                roleNames = (listOf(realm.owner) + roleNames).distinct(),
+                currentTime = now(timeZone),
+                customAttributes = transformed.customAttributes,
+                profile = transformed.profile
+            )
+            val user = result.userOrThrow().toUser()
+
+            // Publish event
+            eventBus.publish(
+                UserEvent.Created(
+                    eventId = UUID.randomUUID(),
+                    timestamp = timestamp,
+                    realmId = realm.owner,
+                    userId = user.id,
+                    email = email,
+                    phone = phone
+                )
+            )
+
+            user
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {

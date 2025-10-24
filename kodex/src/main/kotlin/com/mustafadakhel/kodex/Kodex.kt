@@ -116,7 +116,7 @@ public class Kodex private constructor(
                 )
 
                 // Create the 6 specialized services
-                val tokenSvc = tokenService(tokenManager)
+                val tokenSvc = tokenService(tokenManager, eventBus, realmConfig.realm)
                 RealmServices(
                     realm = realmConfig.realm,
                     userQuery = userQueryService(userRepository),

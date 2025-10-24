@@ -24,6 +24,7 @@ private object ExposedUserRepository : UserRepository {
         UserDao.all().map { it.toEntity() }
     }
 
+    /** Gets all users with complete data using eager loading. */
     override fun getAllFull(): List<FullUserEntity> = exposedTransaction {
         val users = UserDao.all().toList()
 

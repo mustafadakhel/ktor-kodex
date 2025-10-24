@@ -6,7 +6,6 @@ import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SecurityEvent
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
-import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Claim
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
@@ -41,12 +40,12 @@ internal class DefaultTokenManager(
     private val timeZone: TimeZone,
     private val realm: Realm,
     private val tokenRotationPolicy: TokenRotationPolicy,
-    private val extensions: ExtensionRegistry,
+    extensions: ExtensionRegistry,
 ) : TokenManager {
-    private val hookExecutor = HookExecutor(extensions)
     private val eventBus: EventBus = DefaultEventBus(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
+        // Create new token family for session
         val tokenFamily = UUID.randomUUID()
         val accessToken = issueToken(
             userId = userId,
@@ -79,6 +78,7 @@ internal class DefaultTokenManager(
             tokenType = tokenType.claim,
             roles = roles
         )
+        // Store token in database if persistence is enable for this type
         if (tokenPersistence[tokenType] == true)
             tokenRepository.storeToken(
                 PersistedToken(

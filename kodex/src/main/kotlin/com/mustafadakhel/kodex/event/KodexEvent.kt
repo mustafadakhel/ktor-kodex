@@ -3,28 +3,26 @@ package com.mustafadakhel.kodex.event
 import kotlinx.datetime.Instant
 import java.util.UUID
 
-/**
- * Base interface for all events in Kodex.
- * Events are immutable and carry context about what happened.
- */
 public interface KodexEvent {
-    /**
-     * Unique identifier for this event instance.
-     */
     public val eventId: UUID
-
-    /**
-     * When this event occurred.
-     */
     public val timestamp: Instant
-
-    /**
-     * The realm this event belongs to.
-     */
     public val realmId: String
-
-    /**
-     * Type identifier for this event (e.g., "USER_CREATED").
-     */
     public val eventType: String
+    public val schemaVersion: Int get() = 1
+
+    public val requestId: UUID? get() = null
+    public val sessionId: UUID? get() = null
+    public val sourceIp: String? get() = null
+    public val userAgent: String? get() = null
+    public val correlationId: UUID? get() = null
+    public val causedByEventId: UUID? get() = null
+    public val severity: EventSeverity get() = EventSeverity.INFO
+    public val durationMs: Long? get() = null
+    public val tags: Map<String, String> get() = emptyMap()
+}
+
+public enum class EventSeverity {
+    INFO,
+    WARNING,
+    CRITICAL
 }

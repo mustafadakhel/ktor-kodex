@@ -7,15 +7,9 @@ import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.model.database.toUserProfile
 import kotlinx.datetime.Clock
 
-/**
- * Utility for detecting and tracking changes to user data.
- * Compares current state with proposed updates to generate precise ChangeSets.
- */
+/** Detects and tracks changes to user data. */
 internal class ChangeTracker {
 
-    /**
-     * Detects changes for user field updates.
-     */
     fun detectUserFieldChanges(
         current: FullUser,
         updates: UserFieldUpdates
@@ -74,9 +68,6 @@ internal class ChangeTracker {
         }
     }
 
-    /**
-     * Detects changes for profile field updates.
-     */
     fun detectProfileFieldChanges(
         currentProfile: UserProfile?,
         updates: ProfileFieldUpdates
@@ -138,9 +129,6 @@ internal class ChangeTracker {
         }
     }
 
-    /**
-     * Detects changes for custom attribute updates.
-     */
     fun detectAttributeChanges(
         currentAttributes: Map<String, String>,
         changes: AttributeChanges
@@ -183,9 +171,6 @@ internal class ChangeTracker {
         }
     }
 
-    /**
-     * Detects all changes for a batch update.
-     */
     fun detectBatchChanges(
         current: FullUser,
         batch: UpdateUserBatch
@@ -211,9 +196,6 @@ internal class ChangeTracker {
         )
     }
 
-    /**
-     * Detects changes for a single command type.
-     */
     fun detectChanges(
         current: FullUserEntity,
         command: UpdateCommand
