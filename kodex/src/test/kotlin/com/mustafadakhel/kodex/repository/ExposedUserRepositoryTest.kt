@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.UserRepository.*
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
+import com.mustafadakhel.kodex.update.FieldUpdate
 import com.mustafadakhel.kodex.util.Db
 import com.mustafadakhel.kodex.util.exposedTransaction
 import com.mustafadakhel.kodex.util.setupExposedEngine
@@ -167,19 +168,20 @@ class ExposedUserRepositoryTest : FunSpec({
         }
     }
 
-    context("Existence Checks") {
-        test("emailExists & phoneExists behave correctly") {
-            userRepository.seedRoles(listOf(Role("U", "")))
-            userRepository.create("e1@x", null, "pw", listOf("U"), null, null, now)
-            userRepository.create(null, "555", "pw", listOf("U"), null, null, now)
-
-            userRepository.emailExists("e1@x") shouldBe true
-            userRepository.emailExists("absent@x") shouldBe false
-
-            userRepository.phoneExists("555") shouldBe true
-            userRepository.phoneExists("000") shouldBe false
-        }
-    }
+    // Existence check methods removed - use findByEmail/findByPhone instead
+    // context("Existence Checks") {
+    //     test("emailExists & phoneExists behave correctly") {
+    //         userRepository.seedRoles(listOf(Role("U", "")))
+    //         userRepository.create("e1@x", null, "pw", listOf("U"), null, null, now)
+    //         userRepository.create(null, "555", "pw", listOf("U"), null, null, now)
+    //
+    //         userRepository.emailExists("e1@x") shouldBe true
+    //         userRepository.emailExists("absent@x") shouldBe false
+    //
+    //         userRepository.phoneExists("555") shouldBe true
+    //         userRepository.phoneExists("000") shouldBe false
+    //     }
+    // }
 
     context("User Retrieval") {
         test("findById, findByEmail, findByPhone and getAll") {
@@ -247,7 +249,14 @@ class ExposedUserRepositoryTest : FunSpec({
                 now
             ) as CreateUserResult.Success).user
 
-            userRepository.updateById(u.id, "new@x", "+1", now) shouldBe UpdateUserResult.Success
+            userRepository.updateById(
+                u.id,
+                FieldUpdate.SetValue("new@x"),
+                FieldUpdate.SetValue("+1"),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.Success
 
             val updated = userRepository.findById(u.id)!!
             updated.email shouldBe "new@x"
@@ -256,7 +265,14 @@ class ExposedUserRepositoryTest : FunSpec({
         }
 
         test("updateById reports NotFound if user absent") {
-            userRepository.updateById(UUID.randomUUID(), "x@x", null, now) shouldBe UpdateUserResult.NotFound
+            userRepository.updateById(
+                UUID.randomUUID(),
+                FieldUpdate.SetValue("x@x"),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.NotFound
         }
 
         test("updateById rejects duplicate email or phone") {
@@ -280,8 +296,22 @@ class ExposedUserRepositoryTest : FunSpec({
                 now
             ) as CreateUserResult.Success).user
 
-            userRepository.updateById(u2.id, u1.email, null, now) shouldBe UpdateUserResult.EmailAlreadyExists
-            userRepository.updateById(u2.id, null, u1.phoneNumber, now) shouldBe UpdateUserResult.PhoneAlreadyExists
+            userRepository.updateById(
+                u2.id,
+                u1.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.EmailAlreadyExists
+            userRepository.updateById(
+                u2.id,
+                FieldUpdate.NoChange(),
+                u1.phoneNumber?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange(),
+                now
+            ) shouldBe UpdateUserResult.PhoneAlreadyExists
         }
     }
 
@@ -352,12 +382,13 @@ class ExposedUserRepositoryTest : FunSpec({
             userRepository.findProfileByUserId(u.id)!!.lastName shouldBe "Doe"
 
             val upd = UserProfile("Janet", "Smith", "34 Ave", "new.png")
-            userRepository.updateProfileByUserId(u.id, upd) shouldBe true
+            val result = userRepository.updateProfileByUserId(u.id, upd)
+            result.shouldBeInstanceOf<UpdateProfileResult.Success>()
             userRepository.findProfileByUserId(u.id)!!.firstName shouldBe "Janet"
         }
 
-        test("updateProfileByUserId returns false if user absent") {
-            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe false
+        test("updateProfileByUserId returns NotFound if user absent") {
+            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe UpdateProfileResult.NotFound
         }
     }
 
@@ -436,6 +467,433 @@ class ExposedUserRepositoryTest : FunSpec({
 
         test("setVerified returns false if user absent") {
             userRepository.setVerified(UUID.randomUUID(), true) shouldBe false
+        }
+    }
+
+    context("getAllFull - Batch Loading") {
+        test("should batch load full user entities with roles, profiles, and attributes") {
+            userRepository.seedRoles(listOf(
+                Role("USER", "Standard user"),
+                Role("ADMIN", "Administrator")
+            ))
+
+            val user1Result = userRepository.create(
+                email = "user1@example.com",
+                phone = null,
+                hashedPassword = "hash1",
+                roleNames = listOf("USER"),
+                customAttributes = mapOf("team" to "backend", "level" to "senior"),
+                profile = UserProfile("John", "Doe", "123 Main St", "pic1.jpg"),
+                currentTime = now
+            ) as CreateUserResult.Success
+
+            val user2Result = userRepository.create(
+                email = "user2@example.com",
+                phone = "+1234567890",
+                hashedPassword = "hash2",
+                roleNames = listOf("USER", "ADMIN"),
+                customAttributes = mapOf("team" to "frontend"),
+                profile = UserProfile("Jane", "Smith", null, null),
+                currentTime = now
+            ) as CreateUserResult.Success
+
+            val user3Result = userRepository.create(
+                email = "user3@example.com",
+                phone = null,
+                hashedPassword = "hash3",
+                roleNames = listOf("ADMIN"),
+                customAttributes = null,
+                profile = null,
+                currentTime = now
+            ) as CreateUserResult.Success
+
+            val allFull = userRepository.getAllFull()
+
+            allFull.size shouldBe 3
+
+            val fullUser1 = allFull.find { it.id == user1Result.user.id }!!
+            fullUser1.email shouldBe "user1@example.com"
+            fullUser1.roles shouldContainExactly listOf(RoleEntity("USER", "Standard user"))
+            fullUser1.customAttributes shouldBe mapOf("team" to "backend", "level" to "senior")
+            fullUser1.profile!!.firstName shouldBe "John"
+            fullUser1.profile!!.lastName shouldBe "Doe"
+
+            val fullUser2 = allFull.find { it.id == user2Result.user.id }!!
+            fullUser2.email shouldBe "user2@example.com"
+            fullUser2.phoneNumber shouldBe "+1234567890"
+            fullUser2.roles shouldContainExactlyInAnyOrder listOf(
+                RoleEntity("USER", "Standard user"),
+                RoleEntity("ADMIN", "Administrator")
+            )
+            fullUser2.customAttributes shouldBe mapOf("team" to "frontend")
+            fullUser2.profile!!.firstName shouldBe "Jane"
+
+            val fullUser3 = allFull.find { it.id == user3Result.user.id }!!
+            fullUser3.roles shouldContainExactly listOf(RoleEntity("ADMIN", "Administrator"))
+            fullUser3.customAttributes shouldBe emptyMap()
+            fullUser3.profile.shouldBeNull()
+        }
+
+        test("should return empty list when no users exist") {
+            val allFull = userRepository.getAllFull()
+            allFull.shouldBeEmpty()
+        }
+    }
+
+    context("updatePassword") {
+        test("should update password successfully") {
+            userRepository.seedRoles(listOf(Role("USER", "User")))
+            val user = (userRepository.create(
+                "test@example.com",
+                null,
+                "oldHash",
+                listOf("USER"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updatePassword(user.id, "newHash")
+
+            result shouldBe true
+            userRepository.getHashedPassword(user.id) shouldBe "newHash"
+        }
+
+        test("should return false when user not found") {
+            val result = userRepository.updatePassword(UUID.randomUUID(), "newHash")
+            result shouldBe false
+        }
+    }
+
+    context("updateById - ClearValue branches") {
+        test("should clear email when ClearValue is used") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                "+1234567890",
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateById(
+                userId = user.id,
+                email = FieldUpdate.ClearValue(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findById(user.id)!!.email.shouldBeNull()
+        }
+
+        test("should clear phone when ClearValue is used") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                "+1234567890",
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateById(
+                userId = user.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.ClearValue(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findById(user.id)!!.phoneNumber.shouldBeNull()
+        }
+    }
+
+    context("updateById - isVerified and status SetValue") {
+        test("should update isVerified when SetValue is used") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                null,
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateById(
+                userId = user.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.SetValue(true),
+                status = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findById(user.id)!!.isVerified shouldBe true
+        }
+
+        test("should update status when SetValue is used") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                null,
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateById(
+                userId = user.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findById(user.id)!!.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
+        }
+    }
+
+    context("updateBatch - Comprehensive batch updates") {
+        test("should update all fields in single transaction") {
+            userRepository.seedRoles(listOf(Role("U", ""), Role("A", "")))
+            val user = (userRepository.create(
+                "old@example.com",
+                "+1111111111",
+                "hash",
+                listOf("U"),
+                mapOf("old" to "value"),
+                UserProfile("OldFirst", "OldLast", null, null),
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user.id,
+                email = FieldUpdate.SetValue("new@example.com"),
+                phone = FieldUpdate.SetValue("+2222222222"),
+                isVerified = FieldUpdate.SetValue(true),
+                status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
+                profile = FieldUpdate.SetValue(UserProfile("NewFirst", "NewLast", "New Address", "new.jpg")),
+                customAttributes = FieldUpdate.SetValue(mapOf("new" to "attr")),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            val updated = userRepository.findById(user.id)!!
+            updated.email shouldBe "new@example.com"
+            updated.phoneNumber shouldBe "+2222222222"
+            updated.isVerified shouldBe true
+            updated.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
+        }
+
+        test("should handle ClearValue for email in batch update") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                "+1234567890",
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user.id,
+                email = FieldUpdate.ClearValue(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.NoChange(),
+                customAttributes = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findById(user.id)!!.email.shouldBeNull()
+        }
+
+        test("should handle ClearValue for phone in batch update") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                "+1234567890",
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.ClearValue(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.NoChange(),
+                customAttributes = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findById(user.id)!!.phoneNumber.shouldBeNull()
+        }
+
+        test("should handle ClearValue for profile in batch update") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                null,
+                "hash",
+                listOf("U"),
+                null,
+                UserProfile("John", "Doe", null, null),
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.ClearValue(),
+                customAttributes = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findProfileByUserId(user.id).shouldBeNull()
+        }
+
+        test("should handle ClearValue for customAttributes in batch update") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user = (userRepository.create(
+                "test@example.com",
+                null,
+                "hash",
+                listOf("U"),
+                mapOf("key1" to "value1", "key2" to "value2"),
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.NoChange(),
+                customAttributes = FieldUpdate.ClearValue(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.Success
+            userRepository.findCustomAttributesByUserId(user.id) shouldBe emptyMap()
+        }
+
+        test("should return NotFound when user doesn't exist in batch update") {
+            val result = userRepository.updateBatch(
+                userId = UUID.randomUUID(),
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.NoChange(),
+                customAttributes = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.NotFound
+        }
+
+        test("should return EmailAlreadyExists in batch update") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user1 = (userRepository.create(
+                "user1@example.com",
+                null,
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val user2 = (userRepository.create(
+                "user2@example.com",
+                null,
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user2.id,
+                email = FieldUpdate.SetValue("user1@example.com"),
+                phone = FieldUpdate.NoChange(),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.NoChange(),
+                customAttributes = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.EmailAlreadyExists
+        }
+
+        test("should return PhoneAlreadyExists in batch update") {
+            userRepository.seedRoles(listOf(Role("U", "")))
+            val user1 = (userRepository.create(
+                "user1@example.com",
+                "+1111111111",
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val user2 = (userRepository.create(
+                "user2@example.com",
+                "+2222222222",
+                "hash",
+                listOf("U"),
+                null,
+                null,
+                now
+            ) as CreateUserResult.Success).user
+
+            val result = userRepository.updateBatch(
+                userId = user2.id,
+                email = FieldUpdate.NoChange(),
+                phone = FieldUpdate.SetValue("+1111111111"),
+                isVerified = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange(),
+                profile = FieldUpdate.NoChange(),
+                customAttributes = FieldUpdate.NoChange(),
+                currentTime = now
+            )
+
+            result shouldBe UpdateUserResult.PhoneAlreadyExists
         }
     }
 })

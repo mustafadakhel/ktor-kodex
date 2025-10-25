@@ -3,7 +3,6 @@ package com.mustafadakhel.kodex
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.routes.auth.authenticateFor
 import com.mustafadakhel.kodex.routes.auth.kodex
-import com.mustafadakhel.kodex.service.KodexRealmService
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
@@ -54,10 +53,10 @@ class KodexMultiRealmTest : StringSpec({
                     }
                 }
                 val kodex = plugin(Kodex)
-                val adminService = kodex.serviceOf(adminRealm) as KodexRealmService
-                val userService = kodex.serviceOf(userRealm) as KodexRealmService
-                adminService.realm shouldBe adminRealm
-                userService.realm shouldBe userRealm
+                val adminServices = kodex.servicesOf(adminRealm)
+                val userServices = kodex.servicesOf(userRealm)
+                adminServices.realm shouldBe adminRealm
+                userServices.realm shouldBe userRealm
             }
         }
     }
@@ -100,7 +99,7 @@ class KodexMultiRealmTest : StringSpec({
                     }
                 }
 
-                actualKodex.serviceOf(adminRealm).getSeededRoles() shouldContainExactlyInAnyOrder listOf(
+                actualKodex.servicesOf(adminRealm).roles.getSeededRoles() shouldContainExactlyInAnyOrder listOf(
                     "admin",
                     "user",
                     "maintain",

@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex
 
-import com.mustafadakhel.kodex.audit.auditService
+import com.mustafadakhel.kodex.event.DefaultEventBus
+import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
 import com.mustafadakhel.kodex.model.Realm
@@ -8,13 +9,11 @@ import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.routes.auth.RealmConfig
-import com.mustafadakhel.kodex.security.accountLockoutService
-import com.mustafadakhel.kodex.service.KodexRealmService
-import com.mustafadakhel.kodex.service.KodexService
-import com.mustafadakhel.kodex.service.passwordHashingService
-import com.mustafadakhel.kodex.service.saltedHashingService
+import com.mustafadakhel.kodex.service.*
 import com.mustafadakhel.kodex.token.DefaultTokenManager
 import com.mustafadakhel.kodex.token.JwtTokenIssuer
+import com.mustafadakhel.kodex.update.ChangeTracker
+import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.util.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -24,16 +23,15 @@ import io.ktor.util.*
 /**
  * Main entry point of the kodex plugin.
  *
- * After installation the plugin exposes realm specific [KodexService]
+ * After installation the plugin exposes realm specific [RealmServices]
  * instances which handle authentication and token management.
  */
 public class Kodex private constructor(
     private val realmConfigs: List<RealmConfig>,
-    private val services: Map<Realm, KodexRealmService>,
+    private val realmServices: Map<Realm, RealmServices>
 ) {
-    /** Returns the [KodexService] for the given [realm]. */
-    public fun serviceOf(realm: Realm): KodexService {
-        return services[realm] ?: throw MissingRealmServiceException(realm)
+    public fun servicesOf(realm: Realm): RealmServices {
+        return realmServices[realm] ?: throw MissingRealmServiceException(realm)
     }
 
     /**
@@ -49,7 +47,6 @@ public class Kodex private constructor(
         route.authenticate(*providerNames, build = block)
     }
 
-    /** Plugin definition used by Ktor to install [Kodex]. */
     public companion object Plugin : BaseApplicationPlugin<Application, KodexConfig, Kodex> {
         override val key: AttributeKey<Kodex> = AttributeKey("Kodex")
 
@@ -58,70 +55,103 @@ public class Kodex private constructor(
             val kodexConfig = KodexConfig().apply(configure)
             val realmConfigs = kodexConfig.realmConfigScopes.map { it.build() }
 
-            pipeline.connectDatabase(kodexConfig.getDataSource())
+            // Collect extension tables from all realms
+            val extensionTables = realmConfigs
+                .flatMap { it.extensions.getTables() }
+                .distinct()
+
+            pipeline.connectDatabase(kodexConfig.getDataSource(), extensionTables)
 
             val userRepository: UserRepository = databaseUserRepository()
             val databaseTokenRepository = databaseTokenRepository()
 
             userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
 
-            // Initialize audit service (shared across all realms)
-            val audit = kodexConfig.auditConfigScope?.build()
-                ?: AuditConfigScope().build() // Default config if not specified
-            val auditServiceInstance = auditService(audit)
-
             // Fast hasher for tokens (tokens are already high-entropy)
             val tokenHasher = saltedHashingService()
 
-            val services = realmConfigs.map { realmConfig ->
+            val realmServicesMap = realmConfigs.map { realmConfig ->
                 // Slow hasher for passwords (needs Argon2id)
                 val passwordHasher = passwordHashingService(realmConfig.passwordHashingConfig.algorithm)
-                val accountLockout = accountLockoutService(realmConfig.accountLockoutConfig.policy)
-                KodexRealmService(
+
+                // Create infrastructure components
+                val hookExecutor = HookExecutor(realmConfig.extensions)
+                val eventBus = DefaultEventBus(realmConfig.extensions)
+                val changeTracker = ChangeTracker()
+                val updateCommandProcessor = UpdateCommandProcessor(
                     userRepository = userRepository,
-                    tokenManager = DefaultTokenManager(
-                        jwtTokenIssuer = JwtTokenIssuer(
-                            claimsConfig = realmConfig.claimProvider,
-                            secretsConfig = realmConfig.secretsProvider,
-                            userRepository = userRepository,
+                    hookExecutor = hookExecutor,
+                    changeTracker = changeTracker,
+                    timeZone = realmConfig.timeZone
+                )
+
+                // Create TokenManager
+                val tokenManager = DefaultTokenManager(
+                    jwtTokenIssuer = JwtTokenIssuer(
+                        claimsConfig = realmConfig.claimProvider,
+                        secretsConfig = realmConfig.secretsProvider,
+                        userRepository = userRepository,
+                        realm = realmConfig.realm
+                    ),
+                    jwtTokenVerifier = JwtTokenVerifier(
+                        claimsValidator = JwtClaimsValidator(
+                            claimProvider = realmConfig.claimProvider,
                             realm = realmConfig.realm
                         ),
-                        jwtTokenVerifier = JwtTokenVerifier(
-                            claimsValidator = JwtClaimsValidator(
-                                claimProvider = realmConfig.claimProvider,
-                                realm = realmConfig.realm
-                            ),
-                            timeZone = realmConfig.timeZone,
-                            tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
-                            tokenRepository = databaseTokenRepository,
-                            hashingService = tokenHasher,
-                            userRepository = userRepository
-                        ),
-                        tokenRepository = databaseTokenRepository,
-                        tokenValidity = realmConfig.tokenConfig.validity(),
-                        hashingService = tokenHasher,
-                        tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                         timeZone = realmConfig.timeZone,
-                        realm = realmConfig.realm,
-                        tokenRotationPolicy = realmConfig.tokenRotationConfig.policy,
-                        auditService = auditServiceInstance
+                        tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
+                        tokenRepository = databaseTokenRepository,
+                        hashingService = tokenHasher,
+                        userRepository = userRepository
                     ),
-                    realm = realmConfig.realm,
+                    tokenRepository = databaseTokenRepository,
+                    userRepository = userRepository,
+                    tokenValidity = realmConfig.tokenConfig.validity(),
+                    hashingService = tokenHasher,
+                    tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                     timeZone = realmConfig.timeZone,
-                    hashingService = passwordHasher,
-                    accountLockoutService = accountLockout,
-                    auditService = auditServiceInstance
+                    realm = realmConfig.realm,
+                    tokenRotationPolicy = realmConfig.tokenRotationConfig.policy,
+                    extensions = realmConfig.extensions
+                )
+
+                // Create the 6 specialized services
+                val tokenSvc = tokenService(tokenManager, eventBus, realmConfig.realm)
+                RealmServices(
+                    realm = realmConfig.realm,
+                    userQuery = userQueryService(userRepository),
+                    userCommand = userCommandService(
+                        userRepository,
+                        passwordHasher,
+                        hookExecutor,
+                        eventBus,
+                        updateCommandProcessor,
+                        realmConfig.timeZone,
+                        realmConfig.realm
+                    ),
+                    roles = roleService(userRepository, eventBus, realmConfig.realm),
+                    verification = verificationService(userRepository),
+                    authentication = authenticationService(
+                        userRepository,
+                        passwordHasher,
+                        tokenSvc,
+                        hookExecutor,
+                        eventBus,
+                        realmConfig.timeZone,
+                        realmConfig.realm
+                    ),
+                    tokens = tokenSvc
                 )
             }.associateBy { it.realm }
 
             pipeline.install(Authentication) {
                 realmConfigs.forEach { realmConfig ->
                     val realm = realmConfig.realm
-                    services[realm]?.let { service ->
+                    realmServicesMap[realm]?.let { realmServices ->
                         bearer(realm.authProviderName) {
                             this.realm = realm.owner
                             authenticate { token ->
-                                service.verifyAccessToken(token.token)
+                                realmServices.tokens.verifyAccessToken(token.token)
                             }
                         }
                     }
@@ -129,14 +159,13 @@ public class Kodex private constructor(
             }
             val plugin = Kodex(
                 realmConfigs = realmConfigs,
-                services = services
+                realmServices = realmServicesMap
             )
             return plugin
         }
     }
 }
 
-/** Accessor for the installed [Kodex] plugin. */
 public val Application.kodex: Kodex
     get() =
         this.pluginOrNull(Kodex) ?: throw KodexNotConfiguredException()

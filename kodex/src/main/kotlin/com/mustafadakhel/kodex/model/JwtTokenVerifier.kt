@@ -8,7 +8,7 @@ import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.DecodedToken
 import com.mustafadakhel.kodex.token.TokenVerifier
 import com.mustafadakhel.kodex.token.VerifiedToken
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import java.time.Instant
 import java.util.*
@@ -79,7 +79,7 @@ internal class JwtTokenVerifier(
         tokenValue: String,
         userId: UUID,
     ) {
-        val now = getCurrentLocalDateTime(timeZone)
+        val now = now(timeZone)
 
         if (storedToken.userId != userId)
             throw KodexThrowable.Authorization.SuspiciousToken("Token user ID does not match expected user ID")

@@ -86,4 +86,38 @@ public sealed class KodexThrowable(
         public val roleName: String,
         override val cause: Throwable? = null,
     ) : KodexThrowable("Role not found: $roleName", cause)
+
+    public sealed class Validation(
+        message: String? = null,
+        cause: Throwable? = null
+    ) : KodexThrowable(message, cause) {
+        public data class ValidationFailed(
+            override val message: String
+        ) : Validation(message)
+
+        public data class InvalidEmail(
+            val email: String,
+            val errors: List<String>
+        ) : Validation("Invalid email '$email': ${errors.joinToString(", ")}")
+
+        public data class InvalidPhone(
+            val phone: String,
+            val errors: List<String>
+        ) : Validation("Invalid phone '$phone': ${errors.joinToString(", ")}")
+
+        public data class WeakPassword(
+            val score: Int,
+            val feedback: List<String>
+        ) : Validation("Password too weak (score: $score). ${feedback.joinToString(". ")}")
+
+        public data class InvalidCustomAttribute(
+            val key: String,
+            val errors: List<String>
+        ) : Validation("Invalid custom attribute '$key': ${errors.joinToString(", ")}")
+
+        public data class InvalidInput(
+            val field: String,
+            val errors: List<String>
+        ) : Validation("Invalid input for field '$field': ${errors.joinToString(", ")}")
+    }
 }
