@@ -8,6 +8,7 @@ version = libs.versions.kodex.get()
 plugins {
     kotlin("jvm")
     id("com.vanniktech.maven.publish")
+    jacoco
 }
 
 java {
@@ -21,7 +22,28 @@ java {
 tasks {
     test {
         useJUnitPlatform()
+        finalizedBy(jacocoTestReport)
     }
+
+    jacocoTestReport {
+        dependsOn(test)
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+            csv.required.set(false)
+        }
+    }
+
+    jacocoTestCoverageVerification {
+        violationRules {
+            rule {
+                limit {
+                    minimum = "0.80".toBigDecimal()
+                }
+            }
+        }
+    }
+
     compileKotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
@@ -40,14 +62,20 @@ tasks {
 dependencies {
     implementation(libs.h2.database)
     api(libs.hikari)
+    api(libs.kotlinx.datetime)
+    api(libs.slf4j.api)
     implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
+    implementation(libs.flyway.core)
+    compileOnly(libs.micrometer.core)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.micrometer.core)
+    testImplementation(libs.logback.classic)
 }
 
 mavenPublishing {

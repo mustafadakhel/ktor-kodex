@@ -49,6 +49,6 @@ private class DefaultSaltedHashingService(
         val digest = MessageDigest.getInstance(algorithm)
         digest.update(salt)
         val calculated = digest.digest(value.toByteArray(Charsets.UTF_8))
-        return calculated.contentEquals(storedHash)
+        return MessageDigest.isEqual(calculated, storedHash)
     }
 }

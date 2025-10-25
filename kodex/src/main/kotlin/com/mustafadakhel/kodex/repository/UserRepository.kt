@@ -2,16 +2,20 @@ package com.mustafadakhel.kodex.repository
 
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.RoleEntity
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.model.database.UserProfileEntity
+import com.mustafadakhel.kodex.update.FieldUpdate
 import kotlinx.datetime.LocalDateTime
 import java.util.*
 
 internal interface UserRepository {
 
     fun getAll(): List<UserEntity>
+
+    fun getAllFull(): List<FullUserEntity>
 
     fun findById(userId: UUID): UserEntity?
 
@@ -20,10 +24,6 @@ internal interface UserRepository {
     fun findByEmail(email: String): UserEntity?
 
     fun findFullById(userId: UUID): FullUserEntity?
-
-    fun emailExists(email: String): Boolean
-
-    fun phoneExists(phone: String): Boolean
 
     fun create(
         email: String? = null,
@@ -37,8 +37,10 @@ internal interface UserRepository {
 
     fun updateById(
         userId: UUID,
-        email: String? = null,
-        phone: String? = null,
+        email: FieldUpdate<String> = FieldUpdate.NoChange(),
+        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
+        isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
         currentTime: LocalDateTime,
     ): UpdateUserResult
 
@@ -59,7 +61,7 @@ internal interface UserRepository {
 
     fun findProfileByUserId(userId: UUID): UserProfileEntity?
 
-    fun updateProfileByUserId(userId: UUID, profile: UserProfile): Boolean
+    fun updateProfileByUserId(userId: UUID, profile: UserProfile): UpdateProfileResult
 
     fun findCustomAttributesByUserId(userId: UUID): Map<String, String>
 
@@ -68,6 +70,22 @@ internal interface UserRepository {
     fun updateCustomAttributesByUserId(userId: UUID, customAttributes: Map<String, String>): UpdateUserResult
 
     fun setVerified(userId: UUID, verified: Boolean): Boolean
+
+    fun updateLastLogin(userId: UUID, loginTime: LocalDateTime): Boolean
+
+    fun updatePassword(userId: UUID, hashedPassword: String): Boolean
+
+    /** Updates multiple user fields atomically in one transaction. */
+    fun updateBatch(
+        userId: UUID,
+        email: FieldUpdate<String> = FieldUpdate.NoChange(),
+        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
+        isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
+        profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange(),
+        customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange(),
+        currentTime: LocalDateTime
+    ): UpdateUserResult
 
     sealed interface CreateResult {
         sealed interface Duplicate : CreateResult
@@ -102,11 +120,6 @@ internal interface UserRepository {
     sealed interface UpdateRolesResult : UpdateResult {
         data object Success : UpdateRolesResult
         data class InvalidRole(val roleName: String) : UpdateRolesResult, UpdateResult.NotFound
-    }
-
-    sealed interface UpdateCustomAttributesResult : UpdateResult {
-        data class Success(val user: UserEntity) : UpdateCustomAttributesResult
-        data object NotFound : UpdateCustomAttributesResult, UpdateResult.NotFound
     }
 
     sealed interface DeleteResult {

@@ -1,183 +1,348 @@
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
-import com.mustafadakhel.kodex.model.*
+import com.mustafadakhel.kodex.extension.ExtensionRegistry
+import com.mustafadakhel.kodex.model.JwtClaimsValidator
+import com.mustafadakhel.kodex.model.JwtTokenVerifier
+import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.model.Role
+import com.mustafadakhel.kodex.model.TokenType
+import com.mustafadakhel.kodex.model.TokenValidity
+import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.TokenRepository
-import io.kotest.core.spec.style.StringSpec
+import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
+import com.mustafadakhel.kodex.repository.database.databaseUserRepository
+import com.mustafadakhel.kodex.routes.auth.RealmConfigScope
+import com.mustafadakhel.kodex.service.saltedHashingService
+import com.mustafadakhel.kodex.throwable.KodexThrowable
+import com.mustafadakhel.kodex.util.ClaimsConfig
+import com.mustafadakhel.kodex.util.Db
+import com.mustafadakhel.kodex.util.SecretsConfig
+import com.mustafadakhel.kodex.util.exposedTransaction
+import com.mustafadakhel.kodex.util.now
+import com.mustafadakhel.kodex.util.setupExposedEngine
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import io.mockk.coEvery
-import io.mockk.mockk
-import io.mockk.verify
-import kotlinx.coroutines.test.runTest
+import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldNotBeEmpty
 import kotlinx.datetime.TimeZone
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteAll
 import java.util.*
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
-class DefaultTokenManagerTest : StringSpec({
-    val tokenValidity = TokenValidity.Default
-    val timeZone = TimeZone.UTC
-    val realm = Realm("test")
+class DefaultTokenManagerTest : FunSpec({
 
-    fun createIssuer(accessId: UUID, refreshId: UUID, accessToken: String, refreshToken: String): TokenIssuer {
-        val issuer = mockk<TokenIssuer>()
-        coEvery {
-            issuer.issue(
-                any(),
-                tokenValidity.access.inWholeMilliseconds,
-                Claim.TokenType.AccessToken
-            )
-        } returns GeneratedToken(accessToken, accessId)
-        coEvery {
-            issuer.issue(
-                any(),
-                tokenValidity.refresh.inWholeMilliseconds,
-                Claim.TokenType.RefreshToken
-            )
-        } returns GeneratedToken(refreshToken, refreshId)
-        return issuer
-    }
+    lateinit var tokenManager: TokenManager
+    lateinit var userRepository: UserRepository
+    lateinit var tokenRepository: TokenRepository
+    val realm = Realm("test-realm")
+    val secret = "test-secret-key-32-bytes-long!!!"
+    lateinit var testUserId: UUID
 
-    "stores tokens when persistence flags are true" {
-        runTest {
-            val userId = UUID.randomUUID()
-            val accessId = UUID.randomUUID()
-            val refreshId = UUID.randomUUID()
-            val issuer = createIssuer(accessId, refreshId, "access", "refresh")
-            val repository = mockk<TokenRepository>(relaxed = true)
-            val manager = DefaultTokenManager(
-                jwtTokenIssuer = issuer,
-                jwtTokenVerifier = mockk(relaxed = true),
-                tokenValidity = tokenValidity,
-                tokenRepository = repository,
-                tokenPersistence = mapOf(TokenType.AccessToken to true, TokenType.RefreshToken to true),
-                hashingService = mockk(relaxed = true),
-                timeZone = timeZone,
-                realm = realm
-            )
-
-            manager.issueNewTokens(userId)
-
-            verify(exactly = 1) { repository.storeToken(match { it.id == accessId && it.type == TokenType.AccessToken }) }
-            verify(exactly = 1) { repository.storeToken(match { it.id == refreshId && it.type == TokenType.RefreshToken }) }
-        }
-    }
-
-    "skips storing tokens when persistence flags are false" {
-        runTest {
-            val userId = UUID.randomUUID()
-            val issuer = createIssuer(UUID.randomUUID(), UUID.randomUUID(), "access", "refresh")
-            val repository = mockk<TokenRepository>(relaxed = true)
-            val manager = DefaultTokenManager(
-                jwtTokenIssuer = issuer,
-                jwtTokenVerifier = mockk(relaxed = true),
-                tokenValidity = tokenValidity,
-                tokenRepository = repository,
-                tokenPersistence = mapOf(TokenType.AccessToken to false, TokenType.RefreshToken to false),
-                hashingService = mockk(relaxed = true),
-                timeZone = timeZone,
-                realm = realm
-            )
-
-            manager.issueNewTokens(userId)
-
-            verify(exactly = 0) { repository.storeToken(any()) }
-        }
-    }
-
-    "refreshTokens deletes old refresh token and returns new pair" {
-        runTest {
-            val userId = UUID.randomUUID()
-            val oldRefreshId = UUID.randomUUID()
-            val newAccessId = UUID.randomUUID()
-            val newRefreshId = UUID.randomUUID()
-            val issuer = createIssuer(newAccessId, newRefreshId, "newA", "newR")
-            val repository = mockk<TokenRepository>(relaxed = true)
-            val verifier = mockk<TokenVerifier> {
-                coEvery { verify(any(), TokenType.RefreshToken) } returns VerifiedToken(
-                    userId = userId,
-                    tokenId = oldRefreshId,
-                    type = TokenType.RefreshToken,
-                    roles = listOf(Role("role", "desc")),
-                    claims = listOf(
-                        Claim.JwtId(oldRefreshId.toString()),
-                        Claim.Subject(userId.toString()),
-                        Claim.TokenType.RefreshToken,
-                        Claim.Roles(listOf("role")),
-                        Claim.Realm(realm.owner),
-                    )
-                )
+    fun createTokenManager(rotationPolicy: TokenRotationPolicy): TokenManager {
+        val secretsConfig = SecretsConfig()
+        with(RealmConfigScope(realm)) {
+            secretsConfig.apply {
+                this@with.raw(secret)
             }
-            val manager = DefaultTokenManager(
-                jwtTokenIssuer = issuer,
-                jwtTokenVerifier = verifier,
-                tokenValidity = tokenValidity,
-                tokenRepository = repository,
-                tokenPersistence = mapOf(TokenType.AccessToken to false, TokenType.RefreshToken to false),
-                hashingService = mockk(relaxed = true),
-                timeZone = timeZone,
-                realm = realm
-            )
-
-            val refreshToken = JWT.create()
-                .withJWTId(oldRefreshId.toString())
-                .withSubject(userId.toString())
-                .withClaim(Claim.TokenType.Key, "Refresh")
-                .withArrayClaim(Claim.Roles.Key, arrayOf("role"))
-                .withClaim(Claim.Realm.Key, realm.owner)
-                .sign(Algorithm.HMAC256("secret"))
-
-            val pair = manager.refreshTokens(userId, refreshToken)
-
-            verify { repository.deleteToken(oldRefreshId) }
-            pair shouldBe TokenPair("newA", "newR")
         }
-    }
 
-    "verifyToken returns principal on valid token" {
-        val userId = UUID.randomUUID()
-        val tokenId = UUID.randomUUID()
-        val repository = mockk<TokenRepository>(relaxed = true)
-        val verifier = mockk<TokenVerifier> {
-            coEvery { verify(any(), TokenType.AccessToken) } returns VerifiedToken(
-                userId = userId,
-                tokenId = tokenId,
-                type = TokenType.AccessToken,
-                roles = listOf(Role("admin", "desc")),
-                claims = listOf(
-                    Claim.JwtId(tokenId.toString()),
-                    Claim.Subject(userId.toString()),
-                    Claim.TokenType.AccessToken,
-                    Claim.Roles(listOf("admin")),
-                    Claim.Realm(realm.owner),
-                )
-            )
+        val claimsConfig = ClaimsConfig().apply {
+            issuer("test-issuer")
+            audience("test-audience")
         }
-        val manager = DefaultTokenManager(
-            jwtTokenIssuer = mockk(relaxed = true),
-            jwtTokenVerifier = verifier,
-            tokenValidity = tokenValidity,
-            tokenRepository = repository,
-            tokenPersistence = mapOf(TokenType.AccessToken to false, TokenType.RefreshToken to false),
-            hashingService = mockk(relaxed = true),
-            timeZone = timeZone,
+
+        val jwtTokenIssuer = JwtTokenIssuer(
+            secretsConfig = secretsConfig,
+            claimsConfig = claimsConfig,
+            userRepository = userRepository,
             realm = realm
         )
 
-        val token = JWT.create()
-            .withJWTId(tokenId.toString())
-            .withSubject(userId.toString())
-            .withClaim(Claim.TokenType.Key, "Access")
-            .withArrayClaim(Claim.Roles.Key, arrayOf("admin"))
-            .withClaim(Claim.Realm.Key, realm.owner)
-            .sign(Algorithm.HMAC256("secret"))
+        val jwtTokenVerifier = JwtTokenVerifier(
+            claimsValidator = JwtClaimsValidator(
+                claimProvider = claimsConfig,
+                realm = realm
+            ),
+            timeZone = TimeZone.UTC,
+            tokenPersistence = mapOf(
+                TokenType.AccessToken to true,
+                TokenType.RefreshToken to true
+            ),
+            tokenRepository = tokenRepository,
+            hashingService = saltedHashingService(),
+            userRepository = userRepository
+        )
 
-        val decoded = JWT.decode(token)
-        val principal = manager.verifyToken(decoded, TokenType.AccessToken)
+        return DefaultTokenManager(
+            jwtTokenIssuer = jwtTokenIssuer,
+            jwtTokenVerifier = jwtTokenVerifier,
+            tokenValidity = TokenValidity(
+                access = 15.minutes,
+                refresh = 7.hours
+            ),
+            tokenRepository = tokenRepository,
+            userRepository = userRepository,
+            tokenPersistence = mapOf(
+                TokenType.AccessToken to true,
+                TokenType.RefreshToken to true
+            ),
+            hashingService = saltedHashingService(),
+            timeZone = TimeZone.UTC,
+            realm = realm,
+            tokenRotationPolicy = rotationPolicy,
+            extensions = ExtensionRegistry.empty()
+        )
+    }
 
-        verify { verifier.verify(any(), TokenType.AccessToken) }
-        principal.userId shouldBe userId
-        principal.type shouldBe TokenType.AccessToken
-        principal.realm shouldBe realm
-        principal.roles shouldBe listOf(Role("admin", "desc"))
+    beforeEach {
+        // H2 + Exposed setup
+        val config = HikariConfig().apply {
+            driverClassName = "org.h2.Driver"
+            jdbcUrl = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+            maximumPoolSize = 5
+            minimumIdle = 1
+            isAutoCommit = false
+            transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+        }
+        setupExposedEngine(HikariDataSource(config), log = false)
+
+        // Create repositories
+        userRepository = databaseUserRepository()
+        tokenRepository = databaseTokenRepository()
+
+        // Seed test role and create test user
+        exposedTransaction {
+            userRepository.seedRoles(listOf(Role(realm.owner, "Test realm")))
+            val result = userRepository.create(
+                email = "test@example.com",
+                phone = null,
+                hashedPassword = "hashed",
+                roleNames = listOf(realm.owner),
+                customAttributes = null,
+                profile = null,
+                currentTime = now(TimeZone.UTC)
+            )
+            val userDao = (result as com.mustafadakhel.kodex.repository.UserRepository.CreateUserResult.Success).user
+            testUserId = userDao.id
+        }
+
+        // Create token manager with default rotation policy
+        tokenManager = createTokenManager(TokenRotationPolicy.balanced())
+    }
+
+    afterEach {
+        exposedTransaction {
+            Tokens.deleteAll()
+            UserRoles.deleteAll()
+            UserCustomAttributes.deleteAll()
+            UserProfiles.deleteAll()
+            Users.deleteAll()
+            Roles.deleteAll()
+        }
+        Db.clearEngine()
+    }
+
+    context("Token Generation") {
+        test("should generate valid token pair") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+
+            tokenPair.access.shouldNotBeEmpty()
+            tokenPair.refresh.shouldNotBeEmpty()
+            tokenPair.access shouldNotBe tokenPair.refresh
+
+            // Verify tokens can be decoded
+            val accessDecoded = JWT.decode(tokenPair.access)
+            val refreshDecoded = JWT.decode(tokenPair.refresh)
+
+            accessDecoded.subject shouldBe testUserId.toString()
+            refreshDecoded.subject shouldBe testUserId.toString()
+        }
+
+        test("should persist tokens to database") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+
+            // Check database for persisted tokens
+            val tokens = exposedTransaction {
+                TokenDao.find { Tokens.userId eq testUserId }.toList()
+            }
+
+            tokens.size shouldBe 2
+            tokens.any { it.type == TokenType.AccessToken.name } shouldBe true
+            tokens.any { it.type == TokenType.RefreshToken.name } shouldBe true
+        }
+
+        test("should include user roles in token claims") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+
+            val decoded = JWT.decode(tokenPair.access)
+            val roles = decoded.getClaim("roles").asList(String::class.java)
+
+            roles shouldNotBe null
+            roles.contains(realm.owner) shouldBe true
+        }
+    }
+
+    context("Token Refresh Without Rotation") {
+        test("should refresh tokens without rotation policy") {
+            // Create token manager with rotation disabled
+            tokenManager = createTokenManager(TokenRotationPolicy.disabled())
+
+            val originalTokenPair = tokenManager.issueNewTokens(testUserId)
+            val newTokenPair = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+
+            newTokenPair.access.shouldNotBeEmpty()
+            newTokenPair.refresh.shouldNotBeEmpty()
+            newTokenPair.access shouldNotBe originalTokenPair.access
+            newTokenPair.refresh shouldNotBe originalTokenPair.refresh
+        }
+    }
+
+    context("Token Refresh With Rotation") {
+        test("should refresh tokens with rotation policy") {
+            val originalTokenPair = tokenManager.issueNewTokens(testUserId)
+
+            // Wait a bit to ensure different timestamps
+            Thread.sleep(100)
+
+            val newTokenPair = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+
+            newTokenPair.access.shouldNotBeEmpty()
+            newTokenPair.refresh.shouldNotBeEmpty()
+            newTokenPair.access shouldNotBe originalTokenPair.access
+            newTokenPair.refresh shouldNotBe originalTokenPair.refresh
+        }
+
+        test("should detect token replay attack") {
+            // Create token manager with strict rotation policy
+            tokenManager = createTokenManager(TokenRotationPolicy.strict())
+
+            val originalTokenPair = tokenManager.issueNewTokens(testUserId)
+
+            // Use refresh token once
+            val newTokenPair = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+            newTokenPair.shouldNotBeNull()
+
+            // Try to reuse the same refresh token (replay attack)
+            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+                tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+            }
+        }
+
+        test("should allow refresh within grace period") {
+            // Create token manager with lenient policy (10s grace period)
+            tokenManager = createTokenManager(TokenRotationPolicy.lenient())
+
+            val originalTokenPair = tokenManager.issueNewTokens(testUserId)
+
+            // Use refresh token once
+            val newTokenPair1 = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+            newTokenPair1.shouldNotBeNull()
+
+            // Reuse within grace period (should succeed)
+            val newTokenPair2 = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+            newTokenPair2.shouldNotBeNull()
+        }
+
+        test("should revoke token family on replay after grace period") {
+            // Create token manager with strict policy (0s grace period, revoke on replay)
+            tokenManager = createTokenManager(TokenRotationPolicy.strict())
+
+            val tokenPair1 = tokenManager.issueNewTokens(testUserId)
+
+            // Use refresh token to get tokenPair2
+            val tokenPair2 = tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
+
+            // Use tokenPair2 to get tokenPair3
+            val tokenPair3 = tokenManager.refreshTokens(testUserId, tokenPair2.refresh)
+
+            // Try to reuse tokenPair1 (replay attack after grace period)
+            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+                tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
+            }
+
+            // Check that entire token family is revoked
+            val tokens = exposedTransaction {
+                TokenDao.find { Tokens.userId eq testUserId }.toList()
+            }
+            tokens.all { it.revoked } shouldBe true
+        }
+    }
+
+    context("Token Verification") {
+        test("should verify valid access token") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+            val decoded = JWT.decode(tokenPair.access)
+
+            val principal = tokenManager.verifyToken(decoded, TokenType.AccessToken)
+
+            principal.shouldNotBeNull()
+            principal.userId shouldBe testUserId
+            principal.realm shouldBe realm
+        }
+
+        test("should reject revoked token") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+
+            // Revoke the token
+            tokenManager.revokeToken(tokenPair.access, delete = false)
+
+            // Try to verify revoked token
+            val decoded = JWT.decode(tokenPair.access)
+            shouldThrow<KodexThrowable.Authorization.SuspiciousToken> {
+                tokenManager.verifyToken(decoded, TokenType.AccessToken)
+            }
+        }
+    }
+
+    context("Token Revocation") {
+        test("should revoke specific token") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+
+            tokenManager.revokeToken(tokenPair.access, delete = false)
+
+            // Check token is revoked in database
+            val token = exposedTransaction {
+                TokenDao.find { (Tokens.userId eq testUserId) and (Tokens.type eq TokenType.AccessToken.name) }
+                    .firstOrNull()
+            }
+            token.shouldNotBeNull()
+            token.revoked shouldBe true
+        }
+
+        test("should revoke all user tokens") {
+            val tokenPair1 = tokenManager.issueNewTokens(testUserId)
+            val tokenPair2 = tokenManager.issueNewTokens(testUserId)
+
+            tokenManager.revokeTokensForUser(testUserId)
+
+            // Check all tokens are revoked
+            val tokens = exposedTransaction {
+                TokenDao.find { Tokens.userId eq testUserId }.toList()
+            }
+            tokens.size shouldBe 4 // 2 access + 2 refresh
+            tokens.all { it.revoked } shouldBe true
+        }
+
+        test("should delete token when delete flag is true") {
+            val tokenPair = tokenManager.issueNewTokens(testUserId)
+
+            tokenManager.revokeToken(tokenPair.access, delete = true)
+
+            // Check token is deleted from database
+            val token = exposedTransaction {
+                TokenDao.find { (Tokens.userId eq testUserId) and (Tokens.type eq TokenType.AccessToken.name) }
+                    .firstOrNull()
+            }
+            token.shouldBeNull()
+        }
     }
 })

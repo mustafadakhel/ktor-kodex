@@ -1,5 +1,9 @@
 package com.mustafadakhel.kodex.audit
 
+/**
+ * Standard audit event type constants.
+ * Extensions can use these for consistency or define their own event types.
+ */
 public object AuditEvents {
     // Authentication
     public const val LOGIN_SUCCESS: String = "auth.login.success"
