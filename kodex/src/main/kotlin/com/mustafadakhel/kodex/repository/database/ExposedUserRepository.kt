@@ -68,7 +68,7 @@ private object ExposedUserRepository : UserRepository {
             this.phoneNumber = phone
         }
 
-        val rolesResult = updateRolesForUser(newUser.id.value, roleNames)
+        val rolesResult = updateRolesForUserInternal(newUser.id.value, roleNames)
         if (rolesResult is UserRepository.UpdateRolesResult.InvalidRole) {
             return@exposedTransaction UserRepository.CreateUserResult.InvalidRole(rolesResult.roleName)
         }
@@ -82,11 +82,8 @@ private object ExposedUserRepository : UserRepository {
         UserRepository.CreateUserResult.Success(newUser.toEntity())
     }
 
-    override fun authenticate(userId: UUID, hashedPassword: String): Boolean = exposedTransaction {
-        UserDao.findById(userId)?.let {
-            it.passwordHash == hashedPassword
-            true
-        } ?: false
+    override fun getHashedPassword(userId: UUID): String? = exposedTransaction {
+        UserDao.findById(userId)?.passwordHash
     }
 
     override fun seedRoles(roles: List<Role>) = exposedTransaction {
@@ -134,20 +131,27 @@ private object ExposedUserRepository : UserRepository {
         UserCustomAttributesDao.createForUser(newUserId, customAttributes)
     }
 
-    override fun updateRolesForUser(
+    private fun updateRolesForUserInternal(
         userId: UUID,
         roleNames: List<String>
-    ): UserRepository.UpdateRolesResult = exposedTransaction {
+    ): UserRepository.UpdateRolesResult {
         UserRoles.deleteWhere { UserRoles.userId eq userId }
         roleNames.forEach { roleName ->
             RoleDao.findById(roleName)
-                ?: return@exposedTransaction UserRepository.UpdateRolesResult.InvalidRole(roleName)
+                ?: return UserRepository.UpdateRolesResult.InvalidRole(roleName)
             UserRoles.insert {
                 it[UserRoles.userId] = userId
                 it[UserRoles.roleId] = roleName
             }
         }
-        UserRepository.UpdateRolesResult.Success
+        return UserRepository.UpdateRolesResult.Success
+    }
+
+    override fun updateRolesForUser(
+        userId: UUID,
+        roleNames: List<String>
+    ): UserRepository.UpdateRolesResult = exposedTransaction {
+        updateRolesForUserInternal(userId, roleNames)
     }
 
     private fun createProfile(newUserId: UUID, profile: UserProfile) {
@@ -162,6 +166,10 @@ private object ExposedUserRepository : UserRepository {
     override fun findRoles(userId: UUID): List<RoleEntity> = exposedTransaction {
         UserDao.findById(userId)?.roles?.map { it.toEntity() }?.toList()
             ?: emptyList()
+    }
+
+    override fun getAllRoles(): List<RoleEntity> = exposedTransaction {
+        RoleDao.all().map { it.toEntity() }
     }
 
     override fun findProfileByUserId(userId: UUID): UserProfileEntity? = exposedTransaction {

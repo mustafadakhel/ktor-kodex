@@ -395,7 +395,7 @@ class ExposedUserRepositoryTest : FunSpec({
     }
 
     context("Authentication") {
-        test("authenticate returns true for existing user") {
+        test("authenticate returns pass for existing user") {
             userRepository.seedRoles(listOf(Role("U", "")))
             val u = (userRepository.create(
                 "auth@x",
@@ -406,11 +406,11 @@ class ExposedUserRepositoryTest : FunSpec({
                 null,
                 now
             ) as CreateUserResult.Success).user
-            userRepository.authenticate(u.id, "pw") shouldBe true
+            userRepository.getHashedPassword(u.id) shouldBe "pw"
         }
 
-        test("authenticate returns false for non‑existent user") {
-            userRepository.authenticate(UUID.randomUUID(), "pw") shouldBe false
+        test("getHashedPassword returns null for non‑existent user") {
+            userRepository.getHashedPassword(UUID.randomUUID()) shouldBe null
         }
     }
 

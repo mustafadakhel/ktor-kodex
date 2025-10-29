@@ -46,15 +46,16 @@ internal interface UserRepository {
 
     fun findRoles(userId: UUID): List<RoleEntity>
 
+    fun getAllRoles(): List<RoleEntity>
+
     fun updateRolesForUser(
         userId: UUID,
         roleNames: List<String>,
     ): UpdateRolesResult
 
-    fun authenticate(
+    fun getHashedPassword(
         userId: UUID,
-        hashedPassword: String,
-    ): Boolean
+    ): String?
 
     fun findProfileByUserId(userId: UUID): UserProfileEntity?
 
