@@ -8,7 +8,7 @@ import com.mustafadakhel.kodex.service.SaltedHashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.DecodedToken
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
@@ -38,7 +38,7 @@ class JwtTokenVerifierTest : FunSpec({
             userId = userId,
             tokenHash = hashingService.hash(tokenValue),
             type = TokenType.RefreshToken,
-            createdAt = getCurrentLocalDateTime(timeZone),
+            createdAt = now(timeZone),
             expiresAt = CurrentKotlinInstant.plus(3600.minutes).toLocalDateTime(timeZone),
             revoked = false
         )

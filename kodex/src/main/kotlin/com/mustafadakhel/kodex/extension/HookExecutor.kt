@@ -19,11 +19,6 @@ internal class HookExecutor(
 ) {
     private val logger = LoggerFactory.getLogger(HookExecutor::class.java)
 
-    /**
-     * Executes beforeUserCreate hooks from all UserLifecycleHooks extensions.
-     * Each extension receives the output of the previous extension (chaining).
-     * Extensions execute in priority order (lower priority first).
-     */
     suspend fun executeBeforeUserCreate(
         email: String?,
         phone: String?,
@@ -34,6 +29,7 @@ internal class HookExecutor(
         var current = UserCreateData(email, phone, customAttributes, profile)
         val failures = mutableListOf<HookFailure>()
 
+        // Execute hooks in priority order (lower values runs first)
         registry.getAllOfType(UserLifecycleHooks::class)
             .sortedBy { it.priority }
             .forEach { hook ->
@@ -57,6 +53,7 @@ internal class HookExecutor(
                                 current.profile
                             )
                         } catch (e: Throwable) {
+                            // Collect error but continue processing remaining hooks
                             failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
                         }
                     }
@@ -76,6 +73,7 @@ internal class HookExecutor(
                 }
             }
 
+        // Throw exception if any hooks fail during execution
         if (failures.isNotEmpty()) {
             throw HookExecutionException(
                 "Multiple hooks failed during beforeUserCreate execution",
@@ -86,11 +84,6 @@ internal class HookExecutor(
         return current
     }
 
-    /**
-     * Executes beforeUserUpdate hooks from all UserLifecycleHooks extensions.
-     * Each extension receives the output of the previous extension (chaining).
-     * Extensions execute in priority order (lower priority first).
-     */
     suspend fun executeBeforeUserUpdate(
         userId: UUID,
         email: String?,
@@ -133,11 +126,6 @@ internal class HookExecutor(
         return current
     }
 
-    /**
-     * Executes beforeProfileUpdate hooks from all UserLifecycleHooks extensions.
-     * Each extension receives the output of the previous extension (chaining).
-     * Extensions execute in priority order (lower priority first).
-     */
     suspend fun executeBeforeProfileUpdate(
         userId: UUID,
         firstName: String?,
@@ -200,11 +188,6 @@ internal class HookExecutor(
         return current
     }
 
-    /**
-     * Executes beforeCustomAttributesUpdate hooks from all UserLifecycleHooks extensions.
-     * Each extension receives the output of the previous extension (chaining).
-     * Extensions execute in priority order (lower priority first).
-     */
     suspend fun executeBeforeCustomAttributesUpdate(
         userId: UUID,
         customAttributes: Map<String, String>
@@ -246,11 +229,6 @@ internal class HookExecutor(
         return current
     }
 
-    /**
-     * Executes beforeLogin hooks from all UserLifecycleHooks extensions.
-     * Each extension receives the output of the previous extension (chaining).
-     * Extensions execute in priority order (lower priority first).
-     */
     suspend fun executeBeforeLogin(identifier: String): String {
         var current = identifier
         val failures = mutableListOf<HookFailure>()
@@ -289,11 +267,6 @@ internal class HookExecutor(
         return current
     }
 
-    /**
-     * Executes afterLoginFailure hooks from all UserLifecycleHooks extensions.
-     * All extensions receive the same identifier.
-     * Extensions execute in priority order (lower priority first).
-     */
     suspend fun executeAfterLoginFailure(identifier: String) {
         val failures = mutableListOf<HookFailure>()
 

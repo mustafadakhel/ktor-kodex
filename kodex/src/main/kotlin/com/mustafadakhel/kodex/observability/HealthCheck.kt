@@ -1,58 +1,25 @@
 package com.mustafadakhel.kodex.observability
 
 import com.mustafadakhel.kodex.util.exposedTransaction
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
-import javax.sql.DataSource
 
-/**
- * Health status of a component.
- */
 public enum class HealthStatus {
-    /** Component is healthy and operational */
     UP,
-
-    /** Component is degraded but still functional */
     DEGRADED,
-
-    /** Component is down and non-functional */
     DOWN
 }
 
-/**
- * Result of a health check.
- *
- * @property status Overall health status
- * @property details Additional details about the health check
- * @property error Error message if health check failed
- */
 public data class HealthCheckResult(
     val status: HealthStatus,
     val details: Map<String, Any> = emptyMap(),
     val error: String? = null
 ) {
-    /**
-     * Returns true if the component is healthy (UP or DEGRADED).
-     */
     public fun isHealthy(): Boolean = status == HealthStatus.UP || status == HealthStatus.DEGRADED
 }
 
-/**
- * Health check for Kodex services.
- *
- * Provides health status indicators for monitoring and alerting.
- * Can be integrated with Kubernetes liveness/readiness probes, load balancer health checks,
- * or monitoring systems.
- */
+/** Health check for Kodex services. */
 public object KodexHealth {
 
-    /**
-     * Checks database connectivity.
-     *
-     * Attempts a simple query to verify database is accessible and responsive.
-     *
-     * @return Health check result with database status
-     */
+    /** Checks database connectivity. */
     public fun checkDatabase(): HealthCheckResult {
         return try {
             // Simple query to check database connectivity
@@ -80,13 +47,7 @@ public object KodexHealth {
         }
     }
 
-    /**
-     * Checks overall Kodex health.
-     *
-     * Aggregates health checks from all components and returns overall status.
-     *
-     * @return Overall health check result
-     */
+    /** Checks overall system health. */
     public fun checkOverall(): HealthCheckResult {
         val databaseHealth = checkDatabase()
 
@@ -100,6 +61,7 @@ public object KodexHealth {
                     "description" to "All systems operational"
                 )
             )
+
             else -> HealthCheckResult(
                 status = HealthStatus.DOWN,
                 error = "One or more components are down",

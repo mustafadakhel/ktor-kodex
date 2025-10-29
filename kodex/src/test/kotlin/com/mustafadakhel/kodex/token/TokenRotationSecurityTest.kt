@@ -20,18 +20,16 @@ import com.mustafadakhel.kodex.util.ClaimsConfig
 import com.mustafadakhel.kodex.util.Db
 import com.mustafadakhel.kodex.util.SecretsConfig
 import com.mustafadakhel.kodex.util.exposedTransaction
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import com.mustafadakhel.kodex.util.setupExposedEngine
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
-import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.deleteAll
 import java.util.*
 import kotlin.time.Duration.Companion.hours
@@ -127,7 +125,7 @@ class TokenRotationSecurityTest : FunSpec({
                 roleNames = listOf(realm.owner),
                 customAttributes = null,
                 profile = null,
-                currentTime = getCurrentLocalDateTime(TimeZone.UTC)
+                currentTime = now(TimeZone.UTC)
             )
             val userDao = (result as com.mustafadakhel.kodex.repository.UserRepository.CreateUserResult.Success).user
             testUserId = userDao.id
@@ -449,7 +447,7 @@ class TokenRotationSecurityTest : FunSpec({
                     roleNames = listOf(realm.owner),
                     customAttributes = null,
                     profile = null,
-                    currentTime = getCurrentLocalDateTime(TimeZone.UTC)
+                    currentTime = now(TimeZone.UTC)
                 )
                 (result as com.mustafadakhel.kodex.repository.UserRepository.CreateUserResult.Success).user.id
             }

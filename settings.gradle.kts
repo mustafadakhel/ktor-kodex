@@ -6,4 +6,5 @@ include(
     "kodex-validation",
     "kodex-lockout",
     "kodex-audit",
+    "kodex-metrics",
 )

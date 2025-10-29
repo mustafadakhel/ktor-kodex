@@ -1,4 +1,4 @@
-package com.mustafadakhel.kodex.observability
+package com.mustafadakhel.kodex.metrics
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.shouldBeGreaterThan

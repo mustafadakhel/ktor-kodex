@@ -172,12 +172,166 @@ public class AuditEventSubscriber internal constructor(
                 targetId = event.tokenId,
                 targetType = "refresh_token",
                 result = EventResult.FAILURE,
+                metadata = buildMap {
+                    put("reason", "Refresh token replay attack detected")
+                    put("tokenId", event.tokenId.toString())
+                    put("tokenFamily", event.tokenFamily.toString())
+                    put("firstUsedAt", event.firstUsedAt)
+                    put("gracePeriodEnd", event.gracePeriodEnd)
+                    event.sourceIp?.let { put("sourceIp", it) }
+                    event.userAgent?.let { put("userAgent", it) }
+                },
+                realmId = event.realmId
+            )
+
+            is SecurityEvent.RateLimitExceeded -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorType = ActorType.ANONYMOUS,
+                result = EventResult.FAILURE,
+                metadata = buildMap {
+                    put("identifier", event.identifier)
+                    put("limitType", event.limitType)
+                    put("threshold", event.threshold.toString())
+                    put("currentCount", event.currentCount.toString())
+                    event.sourceIp?.let { put("sourceIp", it) }
+                },
+                realmId = event.realmId
+            )
+
+            is SecurityEvent.AccountLocked -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                targetId = event.userId,
+                actorType = ActorType.SYSTEM,
+                result = EventResult.SUCCESS,
+                metadata = buildMap {
+                    put("reason", event.reason)
+                    event.lockDurationMs?.let { put("lockDurationMs", it.toString()) }
+                },
+                realmId = event.realmId
+            )
+
+            is SecurityEvent.AccountUnlocked -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                targetId = event.userId,
+                actorType = ActorType.fromString(event.unlockedBy),
+                result = EventResult.SUCCESS,
+                metadata = emptyMap(),
+                realmId = event.realmId
+            )
+
+            is TokenEvent.Issued -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                targetId = event.tokenId,
+                targetType = "access_token",
+                result = EventResult.SUCCESS,
+                metadata = emptyMap(),
+                realmId = event.realmId
+            )
+
+            is TokenEvent.Refreshed -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                targetId = event.newTokenId,
+                targetType = "access_token",
+                result = EventResult.SUCCESS,
                 metadata = mapOf(
-                    "reason" to "Refresh token replay attack detected",
-                    "tokenId" to event.tokenId.toString(),
-                    "tokenFamily" to event.tokenFamily.toString(),
-                    "firstUsedAt" to event.firstUsedAt,
-                    "gracePeriodEnd" to event.gracePeriodEnd
+                    "oldTokenId" to event.oldTokenId.toString(),
+                    "newTokenId" to event.newTokenId.toString()
+                ),
+                realmId = event.realmId
+            )
+
+            is TokenEvent.RefreshFailed -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                result = EventResult.FAILURE,
+                metadata = mapOf("reason" to event.reason),
+                realmId = event.realmId
+            )
+
+            is TokenEvent.Revoked -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "revokedCount" to event.revokedCount.toString(),
+                    "tokenIds" to event.tokenIds.joinToString(",")
+                ),
+                realmId = event.realmId
+            )
+
+            is TokenEvent.VerifyFailed -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorType = ActorType.ANONYMOUS,
+                result = EventResult.FAILURE,
+                metadata = mapOf("reason" to event.reason),
+                realmId = event.realmId
+            )
+
+            is VerificationEvent.EmailVerificationSent -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                targetId = event.userId,
+                actorType = ActorType.SYSTEM,
+                result = EventResult.SUCCESS,
+                metadata = mapOf("email" to event.email),
+                realmId = event.realmId
+            )
+
+            is VerificationEvent.EmailVerified -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                targetId = event.userId,
+                actorType = ActorType.USER,
+                result = EventResult.SUCCESS,
+                metadata = mapOf("email" to event.email),
+                realmId = event.realmId
+            )
+
+            is VerificationEvent.PhoneVerificationSent -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                targetId = event.userId,
+                actorType = ActorType.SYSTEM,
+                result = EventResult.SUCCESS,
+                metadata = mapOf("phone" to event.phone),
+                realmId = event.realmId
+            )
+
+            is VerificationEvent.PhoneVerified -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                targetId = event.userId,
+                actorType = ActorType.USER,
+                result = EventResult.SUCCESS,
+                metadata = mapOf("phone" to event.phone),
+                realmId = event.realmId
+            )
+
+            is VerificationEvent.VerificationFailed -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                targetId = event.userId,
+                actorType = ActorType.USER,
+                result = EventResult.FAILURE,
+                metadata = mapOf(
+                    "verificationType" to event.verificationType,
+                    "reason" to event.reason
                 ),
                 realmId = event.realmId
             )

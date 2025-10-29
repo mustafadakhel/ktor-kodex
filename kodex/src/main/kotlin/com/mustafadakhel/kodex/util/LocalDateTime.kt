@@ -6,4 +6,4 @@ import kotlinx.datetime.toLocalDateTime
 
 internal val CurrentKotlinInstant get() = Clock.System.now()
 
-internal fun getCurrentLocalDateTime(timeZone: TimeZone) = CurrentKotlinInstant.toLocalDateTime(timeZone)
+internal fun now(timeZone: TimeZone) = CurrentKotlinInstant.toLocalDateTime(timeZone)

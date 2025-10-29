@@ -1,7 +1,6 @@
 package com.mustafadakhel.kodex.service
 
 import com.mustafadakhel.kodex.event.EventBus
-import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.repository.UserRepository
@@ -89,7 +88,9 @@ internal fun authenticationService(
 }
 
 internal fun tokenService(
-    tokenManager: TokenManager
+    tokenManager: TokenManager,
+    eventBus: EventBus,
+    realm: Realm
 ): TokenService {
-    return DefaultTokenService(tokenManager)
+    return DefaultTokenService(tokenManager, eventBus, realm)
 }

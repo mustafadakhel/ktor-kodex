@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.routes.auth
 
+import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.PersistentExtension
@@ -132,6 +133,10 @@ public class RealmConfigScope internal constructor(
             @Suppress("UNCHECKED_CAST")
             registerExtension(PersistentExtension::class, extension as PersistentExtension)
         }
+        if (extension is EventSubscriberProvider) {
+            @Suppress("UNCHECKED_CAST")
+            registerExtension(EventSubscriberProvider::class, extension as EventSubscriberProvider)
+        }
     }
 
     /**
@@ -160,11 +165,6 @@ public class RealmConfigScope internal constructor(
         val tokenValidity = tokenValidityConfig
         val passwordHashingConfig = passwordHashingConfigScope.build()
         val tokenRotationConfig = tokenRotationConfigScope.build()
-
-        // Register built-in default validation hook if no custom validation hooks registered
-        if (UserLifecycleHooks::class !in extensionsMap) {
-            registerExtension(UserLifecycleHooks::class, com.mustafadakhel.kodex.extension.DefaultValidationHook())
-        }
 
         val extensionRegistry = ExtensionRegistry.fromLists(extensionsMap.toMap())
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")

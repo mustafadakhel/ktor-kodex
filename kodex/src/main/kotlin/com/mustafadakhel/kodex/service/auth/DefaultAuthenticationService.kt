@@ -10,7 +10,7 @@ import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.service.token.TokenService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.TokenPair
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.UUID
@@ -57,7 +57,7 @@ internal class DefaultAuthenticationService(
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
         val timestamp = Clock.System.now()
 
-        // Verify user exists
+        // Verify user exist
         val user = userRepository.findById(userId) ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         // Verify old password
@@ -186,7 +186,7 @@ internal class DefaultAuthenticationService(
         }
 
         // Update last login time
-        userRepository.updateLastLogin(user.id, getCurrentLocalDateTime(timeZone))
+        userRepository.updateLastLogin(user.id, now(timeZone))
 
         // Publish event
         eventBus.publish(

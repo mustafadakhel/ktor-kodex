@@ -12,9 +12,6 @@ public sealed interface UserEvent : KodexEvent {
      */
     public val userId: UUID
 
-    /**
-     * User was created.
-     */
     public data class Created(
         override val eventId: UUID,
         override val timestamp: Instant,
@@ -22,42 +19,44 @@ public sealed interface UserEvent : KodexEvent {
         override val userId: UUID,
         val email: String?,
         val phone: String?,
-        val actorType: String = "SYSTEM"
+        val actorType: String = "SYSTEM",
+        override val requestId: UUID? = null,
+        override val correlationId: UUID? = requestId,
+        override val tags: Map<String, String> = emptyMap()
     ) : UserEvent {
         override val eventType: String = "USER_CREATED"
     }
 
-    /**
-     * User profile or credentials were updated.
-     */
     public data class Updated(
         override val eventId: UUID,
         override val timestamp: Instant,
         override val realmId: String,
         override val userId: UUID,
         val actorId: UUID,
-        val changes: Map<String, String>
+        val changes: Map<String, String>,
+        val fieldChanges: List<FieldChange> = emptyList(),
+        override val requestId: UUID? = null,
+        override val correlationId: UUID? = requestId,
+        override val tags: Map<String, String> = emptyMap()
     ) : UserEvent {
         override val eventType: String = "USER_UPDATED"
     }
 
-    /**
-     * User profile was updated.
-     */
     public data class ProfileUpdated(
         override val eventId: UUID,
         override val timestamp: Instant,
         override val realmId: String,
         override val userId: UUID,
         val actorId: UUID,
-        val changes: Map<String, String>
+        val changes: Map<String, String>,
+        val fieldChanges: List<FieldChange> = emptyList(),
+        override val requestId: UUID? = null,
+        override val correlationId: UUID? = requestId,
+        override val tags: Map<String, String> = emptyMap()
     ) : UserEvent {
         override val eventType: String = "USER_PROFILE_UPDATED"
     }
 
-    /**
-     * User roles were updated.
-     */
     public data class RolesUpdated(
         override val eventId: UUID,
         override val timestamp: Instant,
@@ -65,14 +64,15 @@ public sealed interface UserEvent : KodexEvent {
         override val userId: UUID,
         val previousRoles: Set<String>,
         val newRoles: Set<String>,
-        val actorType: String = "ADMIN"
+        val actorType: String = "ADMIN",
+        override val requestId: UUID? = null,
+        override val correlationId: UUID? = requestId,
+        override val severity: EventSeverity = EventSeverity.WARNING,
+        override val tags: Map<String, String> = emptyMap()
     ) : UserEvent {
         override val eventType: String = "USER_ROLES_UPDATED"
     }
 
-    /**
-     * User custom attributes were updated.
-     */
     public data class CustomAttributesUpdated(
         override val eventId: UUID,
         override val timestamp: Instant,
@@ -80,14 +80,14 @@ public sealed interface UserEvent : KodexEvent {
         override val userId: UUID,
         val actorId: UUID,
         val attributeCount: Int,
-        val keys: Set<String>
+        val keys: Set<String>,
+        override val requestId: UUID? = null,
+        override val correlationId: UUID? = requestId,
+        override val tags: Map<String, String> = emptyMap()
     ) : UserEvent {
         override val eventType: String = "CUSTOM_ATTRIBUTES_UPDATED"
     }
 
-    /**
-     * User custom attributes were replaced.
-     */
     public data class CustomAttributesReplaced(
         override val eventId: UUID,
         override val timestamp: Instant,
@@ -95,7 +95,10 @@ public sealed interface UserEvent : KodexEvent {
         override val userId: UUID,
         val actorId: UUID,
         val attributeCount: Int,
-        val keys: Set<String>
+        val keys: Set<String>,
+        override val requestId: UUID? = null,
+        override val correlationId: UUID? = requestId,
+        override val tags: Map<String, String> = emptyMap()
     ) : UserEvent {
         override val eventType: String = "CUSTOM_ATTRIBUTES_REPLACED"
     }

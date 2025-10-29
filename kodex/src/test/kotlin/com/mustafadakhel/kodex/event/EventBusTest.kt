@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.event
 
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
+import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
@@ -9,10 +10,29 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import java.util.Collections
 import java.util.UUID
 import kotlin.reflect.KClass
+import kotlin.time.Duration.Companion.seconds
 
 class EventBusTest : FunSpec({
+
+    // Helper function to create EventBus with subscribers properly registered
+    fun createEventBusWithSubscribers(vararg subscribers: EventSubscriber<*>): EventBus {
+        if (subscribers.isEmpty()) {
+            return DefaultEventBus(ExtensionRegistry.empty())
+        }
+
+        val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
+            override fun getEventSubscribers(): List<EventSubscriber<*>> = subscribers.toList()
+        }
+
+        val registry = com.mustafadakhel.kodex.extension.ExtensionRegistry.from(
+            mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
+        )
+
+        return DefaultEventBus(registry)
+    }
 
     // Test event classes
     data class TestUserEvent(
@@ -29,7 +49,7 @@ class EventBusTest : FunSpec({
         override val eventId: UUID,
         override val timestamp: Instant,
         override val realmId: String,
-        val severity: String
+        override val severity: EventSeverity
     ) : KodexEvent {
         override val eventType: String = "TEST_SECURITY_EVENT"
     }
@@ -45,8 +65,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(subscriber)
+            val eventBus = createEventBusWithSubscribers(subscriber)
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -83,9 +102,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(subscriber1)
-            eventBus.subscribe(subscriber2)
+            val eventBus = createEventBusWithSubscribers(subscriber1, subscriber2)
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -116,8 +133,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(subscriber)
+            val eventBus = createEventBusWithSubscribers(subscriber)
 
             val event1 = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -163,9 +179,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(userSubscriber)
-            eventBus.subscribe(securitySubscriber)
+            val eventBus = createEventBusWithSubscribers(userSubscriber, securitySubscriber)
 
             val userEvent = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -179,7 +193,7 @@ class EventBusTest : FunSpec({
                 eventId = UUID.randomUUID(),
                 timestamp = Clock.System.now(),
                 realmId = "test-realm",
-                severity = "HIGH"
+                severity = EventSeverity.CRITICAL
             )
 
             runBlocking {
@@ -197,7 +211,7 @@ class EventBusTest : FunSpec({
 
     context("Subscriber Priority") {
         test("should execute subscribers in priority order") {
-            val executionOrder = mutableListOf<String>()
+            val executionOrder = Collections.synchronizedList(mutableListOf<String>())
 
             val lowPrioritySubscriber = object : EventSubscriber<TestUserEvent> {
                 override val eventType: KClass<out TestUserEvent> = TestUserEvent::class
@@ -226,10 +240,11 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(lowPrioritySubscriber)
-            eventBus.subscribe(highPrioritySubscriber)
-            eventBus.subscribe(mediumPrioritySubscriber)
+            val eventBus = createEventBusWithSubscribers(
+                lowPrioritySubscriber,
+                highPrioritySubscriber,
+                mediumPrioritySubscriber
+            )
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -241,13 +256,56 @@ class EventBusTest : FunSpec({
 
             runBlocking {
                 eventBus.publish(event)
-                delay(1000)  // Increased to 1s for reliability on slower systems
+
+                // Use eventually to wait for all subscribers with retries
+                eventually(15.seconds) {
+                    executionOrder.size shouldBe 3
+                }
             }
 
-            executionOrder.size shouldBe 3
             executionOrder shouldContain "high"
             executionOrder shouldContain "medium"
             executionOrder shouldContain "low"
+        }
+    }
+
+    context("EventSubscriberProvider Auto-registration") {
+        test("should auto-register subscribers from EventSubscriberProvider extensions") {
+            val receivedEvents = Collections.synchronizedList(mutableListOf<TestUserEvent>())
+
+            val subscriber = object : EventSubscriber<TestUserEvent> {
+                override val eventType: KClass<out TestUserEvent> = TestUserEvent::class
+                override suspend fun onEvent(event: TestUserEvent) {
+                    receivedEvents.add(event)
+                }
+            }
+
+            val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
+                override fun getEventSubscribers(): List<EventSubscriber<*>> = listOf(subscriber)
+            }
+
+            val registry = com.mustafadakhel.kodex.extension.ExtensionRegistry.from(
+                mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
+            )
+
+            val eventBus = DefaultEventBus(registry)
+
+            val event = TestUserEvent(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = "test-realm",
+                userId = UUID.randomUUID(),
+                action = "CREATE"
+            )
+
+            runBlocking {
+                eventBus.publish(event)
+                eventually(5.seconds) {
+                    receivedEvents.size shouldBe 1
+                }
+            }
+
+            receivedEvents[0] shouldBe event
         }
     }
 
@@ -262,8 +320,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(subscriber)
+            val eventBus = createEventBusWithSubscribers(subscriber)
 
             val event1 = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -297,6 +354,18 @@ class EventBusTest : FunSpec({
 
             receivedEvents.size shouldBe 1
         }
+
+        test("should handle unsubscribe of non-existent subscriber gracefully") {
+            val subscriber = object : EventSubscriber<TestUserEvent> {
+                override val eventType: KClass<out TestUserEvent> = TestUserEvent::class
+                override suspend fun onEvent(event: TestUserEvent) {}
+            }
+
+            val eventBus = createEventBusWithSubscribers()
+
+            // Unsubscribe without ever subscribing - should not throw
+            eventBus.unsubscribe(subscriber)
+        }
     }
 
     context("Subscriber Isolation") {
@@ -325,10 +394,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(subscriber1)
-            eventBus.subscribe(subscriber2)
-            eventBus.subscribe(subscriber3)
+            val eventBus = createEventBusWithSubscribers(subscriber1, subscriber2, subscriber3)
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -359,8 +425,7 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
-            eventBus.subscribe(wildcardSubscriber)
+            val eventBus = createEventBusWithSubscribers(wildcardSubscriber)
 
             val userEvent = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -374,7 +439,7 @@ class EventBusTest : FunSpec({
                 eventId = UUID.randomUUID(),
                 timestamp = Clock.System.now(),
                 realmId = "test-realm",
-                severity = "HIGH"
+                severity = EventSeverity.CRITICAL
             )
 
             runBlocking {
@@ -385,6 +450,90 @@ class EventBusTest : FunSpec({
 
             allEvents.size shouldBe 2
             allEvents shouldContainExactlyInAnyOrder listOf(userEvent, securityEvent)
+        }
+
+        test("should handle publishing KodexEvent base class directly") {
+            val allEvents = mutableListOf<KodexEvent>()
+
+            val wildcardSubscriber = object : EventSubscriber<KodexEvent> {
+                override val eventType: KClass<out KodexEvent> = KodexEvent::class
+                override suspend fun onEvent(event: KodexEvent) {
+                    allEvents.add(event)
+                }
+            }
+
+            val eventBus = createEventBusWithSubscribers(wildcardSubscriber)
+
+            val baseEvent = object : KodexEvent {
+                override val eventId = UUID.randomUUID()
+                override val timestamp = Clock.System.now()
+                override val realmId = "test-realm"
+                override val eventType = "BASE_EVENT"
+            }
+
+            runBlocking {
+                eventBus.publish(baseEvent)
+                delay(300)
+            }
+
+            allEvents.size shouldBe 1
+            allEvents[0] shouldBe baseEvent
+        }
+    }
+
+    context("Shutdown") {
+        test("should shutdown event bus gracefully") {
+            val subscriber = object : EventSubscriber<TestUserEvent> {
+                override val eventType: KClass<out TestUserEvent> = TestUserEvent::class
+                override suspend fun onEvent(event: TestUserEvent) {}
+            }
+
+            val eventBus = createEventBusWithSubscribers(subscriber)
+            eventBus.shutdown()
+        }
+    }
+
+    context("Security Validation") {
+        test("should reject subscribers not from registered extensions") {
+            val rogueSubscriber = object : EventSubscriber<TestUserEvent> {
+                override val eventType: KClass<out TestUserEvent> = TestUserEvent::class
+                override suspend fun onEvent(event: TestUserEvent) {}
+            }
+
+            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
+
+            val exception = io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                eventBus.subscribe(rogueSubscriber)
+            }
+
+            exception.message shouldBe "Subscriber ${rogueSubscriber::class.qualifiedName} is not from a registered extension. " +
+                "Only subscribers provided by registered extensions can subscribe to events."
+        }
+
+        test("should accept subscribers from registered extensions") {
+            val receivedEvents = mutableListOf<TestUserEvent>()
+
+            val subscriber = object : EventSubscriber<TestUserEvent> {
+                override val eventType: KClass<out TestUserEvent> = TestUserEvent::class
+                override suspend fun onEvent(event: TestUserEvent) {
+                    receivedEvents.add(event)
+                }
+            }
+
+            val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
+                override fun getEventSubscribers(): List<EventSubscriber<*>> = listOf(subscriber)
+            }
+
+            val registry = com.mustafadakhel.kodex.extension.ExtensionRegistry.from(
+                mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
+            )
+
+            val eventBus = DefaultEventBus(registry)
+
+            // Should not throw - subscriber is from registered extension
+            io.kotest.assertions.throwables.shouldNotThrow<IllegalArgumentException> {
+                eventBus.subscribe(subscriber)
+            }
         }
     }
 })

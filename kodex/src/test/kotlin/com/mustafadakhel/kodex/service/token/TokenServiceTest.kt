@@ -2,6 +2,8 @@ package com.mustafadakhel.kodex.service.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.token.TokenManager
@@ -19,11 +21,16 @@ import java.util.UUID
 
 class TokenServiceTest : FunSpec({
     lateinit var tokenManager: TokenManager
+    lateinit var eventBus: EventBus
+    lateinit var realm: Realm
     lateinit var tokenService: TokenService
 
     beforeEach {
         tokenManager = mockk()
-        tokenService = DefaultTokenService(tokenManager)
+        eventBus = mockk(relaxed = true)
+        realm = mockk()
+        every { realm.owner } returns "test-realm"
+        tokenService = DefaultTokenService(tokenManager, eventBus, realm)
     }
 
     test("issueTokens should delegate to TokenManager.issueNewTokens") {

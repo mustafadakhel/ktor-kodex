@@ -15,12 +15,6 @@ internal interface UserRepository {
 
     fun getAll(): List<UserEntity>
 
-    /**
-     * Retrieves all users with their complete data (roles, profiles, custom attributes)
-     * using eager loading to avoid N+1 query problem.
-     *
-     * Performance: Uses joins to fetch all related data in ≤5 queries regardless of user count.
-     */
     fun getAllFull(): List<FullUserEntity>
 
     fun findById(userId: UUID): UserEntity?
@@ -81,12 +75,7 @@ internal interface UserRepository {
 
     fun updatePassword(userId: UUID, hashedPassword: String): Boolean
 
-    /**
-     * Atomically updates multiple user entities in a single transaction.
-     * All updates succeed or all fail together.
-     *
-     * @return UpdateUserResult indicating success or specific failure
-     */
+    /** Updates multiple user fields atomically in one transaction. */
     fun updateBatch(
         userId: UUID,
         email: FieldUpdate<String> = FieldUpdate.NoChange(),

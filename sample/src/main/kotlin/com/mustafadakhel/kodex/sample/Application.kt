@@ -6,6 +6,7 @@ import com.mustafadakhel.kodex.audit.DatabaseAuditProvider
 import com.mustafadakhel.kodex.kodex
 import com.mustafadakhel.kodex.lockout.accountLockout
 import com.mustafadakhel.kodex.lockout.AccountLockoutPolicy
+import com.mustafadakhel.kodex.metrics.metrics
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.validation.validation
@@ -88,6 +89,9 @@ private fun Application.setupAuthentication() {
                 // Configure audit logging extension
                 audit {
                     provider = DatabaseAuditProvider()
+                }
+                metrics {
+                    registry
                 }
             }
         }

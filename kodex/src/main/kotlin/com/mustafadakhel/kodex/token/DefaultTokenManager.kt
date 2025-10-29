@@ -2,24 +2,23 @@ package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
-import com.mustafadakhel.kodex.audit.AuditEvents
 import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SecurityEvent
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
-import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Claim
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.model.TokenValidity
 import com.mustafadakhel.kodex.model.database.PersistedToken
 import com.mustafadakhel.kodex.repository.TokenRepository
+import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.routes.auth.DefaultKodexPrincipal
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import com.mustafadakhel.kodex.util.toUuidOrNull
 import com.mustafadakhel.kodex.util.tokenId
 import io.ktor.server.auth.jwt.*
@@ -35,18 +34,18 @@ internal class DefaultTokenManager(
     private val jwtTokenVerifier: TokenVerifier,
     private val tokenValidity: TokenValidity,
     private val tokenRepository: TokenRepository,
-    private val userRepository: com.mustafadakhel.kodex.repository.UserRepository,
+    private val userRepository: UserRepository,
     private val tokenPersistence: Map<TokenType, Boolean>,
     private val hashingService: HashingService,
     private val timeZone: TimeZone,
     private val realm: Realm,
     private val tokenRotationPolicy: TokenRotationPolicy,
-    private val extensions: ExtensionRegistry,
+    extensions: ExtensionRegistry,
 ) : TokenManager {
-    private val hookExecutor = HookExecutor(extensions)
     private val eventBus: EventBus = DefaultEventBus(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
+        // Create new token family for session
         val tokenFamily = UUID.randomUUID()
         val accessToken = issueToken(
             userId = userId,
@@ -79,6 +78,7 @@ internal class DefaultTokenManager(
             tokenType = tokenType.claim,
             roles = roles
         )
+        // Store token in database if persistence is enable for this type
         if (tokenPersistence[tokenType] == true)
             tokenRepository.storeToken(
                 PersistedToken(
@@ -87,7 +87,7 @@ internal class DefaultTokenManager(
                     tokenHash = hashingService.hash(token.token),
                     type = tokenType,
                     revoked = false,
-                    createdAt = getCurrentLocalDateTime(timeZone),
+                    createdAt = now(timeZone),
                     expiresAt = CurrentKotlinInstant
                         .plus(validityMs)
                         .toLocalDateTime(timeZone),

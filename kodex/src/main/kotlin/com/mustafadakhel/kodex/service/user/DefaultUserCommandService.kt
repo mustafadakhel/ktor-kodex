@@ -6,13 +6,14 @@ import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.User
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
-import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.UUID
@@ -41,37 +42,41 @@ internal class DefaultUserCommandService(
         customAttributes: Map<String, String>?,
         profile: UserProfile?
     ): User? {
-        // Execute beforeUserCreate hooks (validation, transformation)
-        val transformed = hookExecutor.executeBeforeUserCreate(
-            email, phone, password, customAttributes, profile
-        )
+        val timestamp = Clock.System.now()
 
-        val result = userRepository.create(
-            email = transformed.email,
-            phone = transformed.phone,
-            hashedPassword = hashingService.hash(password),
-            roleNames = (listOf(realm.owner) + roleNames).distinct(),
-            currentTime = getCurrentLocalDateTime(timeZone),
-            customAttributes = transformed.customAttributes,
-            profile = transformed.profile
-        )
-        val user = result.userOrThrow().toUser()
+        return try {
+            // Execute beforeUserCreate hooks (validation, transformation)
+            val transformed = hookExecutor.executeBeforeUserCreate(
+                email, phone, password, customAttributes, profile
+            )
 
-        // Publish event
-        kotlinx.coroutines.runBlocking {
+            val result = userRepository.create(
+                email = transformed.email,
+                phone = transformed.phone,
+                hashedPassword = hashingService.hash(password),
+                roleNames = (listOf(realm.owner) + roleNames).distinct(),
+                currentTime = now(timeZone),
+                customAttributes = transformed.customAttributes,
+                profile = transformed.profile
+            )
+            val user = result.userOrThrow().toUser()
+
+            // Publish event
             eventBus.publish(
                 UserEvent.Created(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = timestamp,
                     realmId = realm.owner,
                     userId = user.id,
                     email = email,
                     phone = phone
                 )
             )
-        }
 
-        return user
+            user
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {
@@ -88,18 +93,16 @@ internal class DefaultUserCommandService(
                         }
                     }
 
-                    runCatching {
-                        eventBus.publish(
-                            UserEvent.Updated(
-                                eventId = UUID.randomUUID(),
-                                timestamp = result.changes.timestamp,
-                                realmId = realm.owner,
-                                userId = command.userId,
-                                actorId = command.userId,
-                                changes = changeMetadata
-                            )
+                    eventBus.publish(
+                        UserEvent.Updated(
+                            eventId = UUID.randomUUID(),
+                            timestamp = result.changes.timestamp,
+                            realmId = realm.owner,
+                            userId = command.userId,
+                            actorId = command.userId,
+                            changes = changeMetadata
                         )
-                    }
+                    )
                 }
             }
             is UpdateResult.Failure -> {
@@ -120,7 +123,7 @@ internal class DefaultUserCommandService(
             throw KodexThrowable.PhoneAlreadyExists()
     }
 
-    private fun com.mustafadakhel.kodex.model.database.UserEntity.toUser() = User(
+    private fun UserEntity.toUser() = User(
         id = id,
         createdAt = createdAt,
         updatedAt = updatedAt,

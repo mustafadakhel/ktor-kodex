@@ -5,34 +5,13 @@ import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import java.util.*
 
-/**
- * Structured logging utility for Kodex.
- *
- * Provides contextual logging with MDC (Mapped Diagnostic Context) support.
- * Automatically adds context like realm, user, operation type to log entries.
- *
- * Usage:
- * ```kotlin
- * withLoggingContext(realmId = "default", userId = userId) {
- *     logger.info("User authenticated successfully")
- * }
- * ```
- */
+/** Structured logging with MDC context support. */
 public object KodexLogger {
-    /**
-     * Gets a logger for the specified class.
-     */
     public inline fun <reified T> logger(): Logger = LoggerFactory.getLogger(T::class.java)
-
-    /**
-     * Gets a logger with the specified name.
-     */
     public fun logger(name: String): Logger = LoggerFactory.getLogger(name)
 }
 
-/**
- * MDC keys for structured logging.
- */
+/** MDC keys for structured logging. */
 public object LogContext {
     public const val REALM_ID: String = "realm_id"
     public const val USER_ID: String = "user_id"
@@ -41,18 +20,7 @@ public object LogContext {
     public const val CORRELATION_ID: String = "correlation_id"
 }
 
-/**
- * Executes a block with logging context (MDC).
- *
- * Automatically cleans up context after block execution.
- *
- * @param realmId Realm identifier
- * @param userId User identifier
- * @param sessionId Session identifier
- * @param operation Operation being performed
- * @param correlationId Request correlation ID
- * @param block Code to execute with logging context
- */
+/** Executes block with MDC logging context. Cleans up after execution. */
 public inline fun <T> withLoggingContext(
     realmId: String? = null,
     userId: UUID? = null,
@@ -106,31 +74,18 @@ public inline fun <T> withLoggingContext(
     }
 }
 
-/**
- * Logger extensions for common logging patterns.
- */
-
-/**
- * Logs authentication success.
- */
 public fun Logger.logAuthSuccess(email: String?, phone: String?, userId: UUID, realmId: String) {
     withLoggingContext(realmId = realmId, userId = userId, operation = "authenticate") {
         info("Authentication successful - identifier: ${email ?: phone}")
     }
 }
 
-/**
- * Logs authentication failure.
- */
 public fun Logger.logAuthFailure(email: String?, phone: String?, reason: String, realmId: String) {
     withLoggingContext(realmId = realmId, operation = "authenticate") {
         warn("Authentication failed - identifier: ${email ?: phone}, reason: $reason")
     }
 }
 
-/**
- * Logs token operation.
- */
 public fun Logger.logTokenOperation(operation: String, tokenType: String, success: Boolean, realmId: String) {
     withLoggingContext(realmId = realmId, operation = "token_$operation") {
         if (success) {
@@ -141,18 +96,12 @@ public fun Logger.logTokenOperation(operation: String, tokenType: String, succes
     }
 }
 
-/**
- * Logs account lockout.
- */
 public fun Logger.logAccountLockout(userId: UUID, locked: Boolean, realmId: String) {
     withLoggingContext(realmId = realmId, userId = userId, operation = if (locked) "lock_account" else "unlock_account") {
         warn("Account ${if (locked) "locked" else "unlocked"} - userId: $userId")
     }
 }
 
-/**
- * Logs validation failure.
- */
 public fun Logger.logValidationFailure(field: String, reason: String, realmId: String) {
     withLoggingContext(realmId = realmId, operation = "validate_input") {
         warn("Validation failed - field: $field, reason: $reason")
