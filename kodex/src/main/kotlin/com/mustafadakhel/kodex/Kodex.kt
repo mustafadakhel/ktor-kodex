@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex
 
+import com.mustafadakhel.kodex.audit.auditService
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
 import com.mustafadakhel.kodex.model.Realm
@@ -64,6 +65,11 @@ public class Kodex private constructor(
 
             userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
 
+            // Initialize audit service (shared across all realms)
+            val audit = kodexConfig.auditConfigScope?.build()
+                ?: AuditConfigScope().build() // Default config if not specified
+            val auditServiceInstance = auditService(audit)
+
             // Fast hasher for tokens (tokens are already high-entropy)
             val tokenHasher = saltedHashingService()
 
@@ -96,12 +102,15 @@ public class Kodex private constructor(
                         hashingService = tokenHasher,
                         tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                         timeZone = realmConfig.timeZone,
-                        realm = realmConfig.realm
+                        realm = realmConfig.realm,
+                        tokenRotationPolicy = realmConfig.tokenRotationConfig.policy,
+                        auditService = auditServiceInstance
                     ),
                     realm = realmConfig.realm,
                     timeZone = realmConfig.timeZone,
                     hashingService = passwordHasher,
-                    accountLockoutService = accountLockout
+                    accountLockoutService = accountLockout,
+                    auditService = auditServiceInstance
                 )
             }.associateBy { it.realm }
 

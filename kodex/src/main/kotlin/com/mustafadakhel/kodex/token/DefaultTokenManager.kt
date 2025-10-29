@@ -17,7 +17,9 @@ import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
 import com.mustafadakhel.kodex.util.toUuidOrNull
 import com.mustafadakhel.kodex.util.tokenId
 import io.ktor.server.auth.jwt.*
+import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import java.util.*
 import kotlin.time.Duration
@@ -31,6 +33,8 @@ internal class DefaultTokenManager(
     private val hashingService: HashingService,
     private val timeZone: TimeZone,
     private val realm: Realm,
+    private val tokenRotationPolicy: TokenRotationPolicy,
+    private val auditService: com.mustafadakhel.kodex.audit.AuditService,
 ) : TokenManager {
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val accessToken = issueToken(
@@ -49,7 +53,9 @@ internal class DefaultTokenManager(
     private suspend fun issueToken(
         userId: UUID,
         validityMs: Duration,
-        tokenType: TokenType
+        tokenType: TokenType,
+        tokenFamily: UUID? = null,
+        parentTokenId: UUID? = null
     ): GeneratedToken {
         val token = jwtTokenIssuer.issue(
             userId = userId,
@@ -67,13 +73,24 @@ internal class DefaultTokenManager(
                     createdAt = getCurrentLocalDateTime(timeZone),
                     expiresAt = CurrentKotlinInstant
                         .plus(validityMs)
-                        .toLocalDateTime(timeZone)
+                        .toLocalDateTime(timeZone),
+                    tokenFamily = tokenFamily,
+                    parentTokenId = parentTokenId,
+                    usedAt = null
                 )
             )
         return token
     }
 
     override suspend fun refreshTokens(userId: UUID, refreshToken: String): TokenPair {
+        return if (tokenRotationPolicy.enabled) {
+            refreshWithRotation(userId, refreshToken)
+        } else {
+            refreshWithoutRotation(userId, refreshToken)
+        }
+    }
+
+    private suspend fun refreshWithoutRotation(userId: UUID, refreshToken: String): TokenPair {
         val decodedJWT = JWT.decode(refreshToken)
         verifyToken(decodedJWT, TokenType.RefreshToken)
         val credential = JWTCredential(decodedJWT)
@@ -81,6 +98,62 @@ internal class DefaultTokenManager(
             ?: throw KodexThrowable.Authorization.SuspiciousToken("Refresh token does not contain a valid token ID")
         tokenRepository.deleteToken(tokenId)
         return issueNewTokens(userId)
+    }
+
+    private suspend fun refreshWithRotation(userId: UUID, refreshToken: String): TokenPair {
+        val clockNow = Clock.System.now()
+        val now = clockNow.toLocalDateTime(timeZone)
+
+        val decodedJWT = JWT.decode(refreshToken)
+        verifyToken(decodedJWT, TokenType.RefreshToken)
+
+        val credential = JWTCredential(decodedJWT)
+        val tokenId = credential.tokenId
+            ?: throw KodexThrowable.Authorization.SuspiciousToken("Refresh token does not contain a valid token ID")
+        val tokenHash = hashingService.hash(refreshToken)
+
+        val persistedToken = tokenRepository.findTokenByHash(tokenHash)
+            ?: throw KodexThrowable.Authorization.InvalidToken("Token not found")
+
+        if (persistedToken.usedAt != null) {
+            val gracePeriodEnd = persistedToken.usedAt!!.toInstant(timeZone) + tokenRotationPolicy.gracePeriod
+            val withinGracePeriod = clockNow < gracePeriodEnd
+
+            if (!withinGracePeriod && tokenRotationPolicy.detectReplayAttacks) {
+                val tokenFamily = persistedToken.tokenFamily ?: persistedToken.id
+
+                if (tokenRotationPolicy.revokeOnReplay) {
+                    tokenRepository.revokeTokenFamily(tokenFamily)
+                }
+
+                auditService.audit(realm.owner) {
+                    event(com.mustafadakhel.kodex.audit.AuditEvents.SECURITY_VIOLATION)
+                    actor(userId)
+                    failure("Refresh token replay attack detected")
+                    context {
+                        "tokenId" to tokenId.toString()
+                        "tokenFamily" to tokenFamily.toString()
+                        "originalUsedAt" to persistedToken.usedAt.toString()
+                    }
+                }
+
+                throw KodexThrowable.Authorization.TokenReplayDetected(
+                    tokenFamily = tokenFamily,
+                    originalTokenId = tokenId
+                )
+            }
+        }
+
+        tokenRepository.markTokenAsUsed(tokenId, now)
+
+        val tokenFamily = persistedToken.tokenFamily ?: persistedToken.id
+        val newAccessToken = issueToken(userId, tokenValidity.access, TokenType.AccessToken, null, null)
+        val newRefreshToken = issueToken(userId, tokenValidity.refresh, TokenType.RefreshToken, tokenFamily, tokenId)
+
+        return TokenPair(
+            access = newAccessToken.token,
+            refresh = newRefreshToken.token
+        )
     }
 
     override fun revokeToken(token: String, delete: Boolean) {

@@ -51,7 +51,8 @@ internal class ExposedDbEngine(
                 UserProfiles,
                 UserCustomAttributes,
                 FailedLoginAttempts,
-                AccountLockouts
+                AccountLockouts,
+                AuditLogs
             )
             if (log) {
                 addLogger(StdOutSqlLogger)
@@ -71,7 +72,8 @@ internal class ExposedDbEngine(
                 UserProfiles,
                 UserCustomAttributes,
                 FailedLoginAttempts,
-                AccountLockouts
+                AccountLockouts,
+                AuditLogs
             )
         }
         dataSource.takeIf { it.isClosed.not() }?.close()

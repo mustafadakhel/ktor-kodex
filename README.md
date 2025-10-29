@@ -1,6 +1,6 @@
 # ktor-kodex
 
-`ktor-kodex` is a production-ready Ktor plugin that provides enterprise-grade user management and JWT authentication. It features secure password hashing with Argon2id, automatic brute force protection, multi-realm support, and flexible role-based access control. Built for performance and security, it allows you to configure independent authentication realms and seamlessly integrate authentication into your Ktor application.
+`ktor-kodex` is a production-ready Ktor plugin that provides enterprise-grade user management and JWT authentication. It features secure password hashing with Argon2id, automatic brute force protection, comprehensive audit logging, multi-realm support, and flexible role-based access control. Built for performance and security, it allows you to configure independent authentication realms and seamlessly integrate authentication into your Ktor application.
 
 ## Features
 
@@ -8,6 +8,8 @@
 - **JWT token generation and verification** – access and refresh tokens signed using HS256
 - **Secure password hashing** – Argon2id with configurable parameters and industry presets
 - **Account lockout protection** – automatic brute force protection with configurable policies
+- **Token rotation** – automatic refresh token rotation with replay attack detection
+- **Audit logging** – comprehensive event tracking with query and export capabilities for compliance
 - **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
 - **Role management** – roles are stored per realm and attached to issued tokens
 - **Ktor routing helpers** – easily protect routes and retrieve the appropriate `KodexService`
@@ -128,6 +130,9 @@ realm("admin") {
     accountLockout {
         policy = AccountLockoutPolicy.moderate()  // 5 attempts, 15min window, 30min lockout
     }
+    tokenRotation {
+        policy = TokenRotationPolicy.balanced()   // Automatic rotation with 5s grace period
+    }
 }
 ```
 
@@ -198,6 +203,137 @@ accountLockout {
 - Lockout expires after the configured duration
 - Successful login clears all failed attempts
 - Prevents username enumeration by tracking non-existent users
+
+### Token rotation
+
+Automatic refresh token rotation protects against token theft and replay attacks:
+
+```kotlin
+tokenRotation {
+    policy = TokenRotationPolicy.balanced()  // 5s grace period (default)
+    // or
+    policy = TokenRotationPolicy.strict()    // No grace period
+    // or
+    policy = TokenRotationPolicy.lenient()   // 10s grace period, no replay detection
+    // or
+    policy = TokenRotationPolicy.disabled()  // Legacy behavior (not recommended)
+}
+```
+
+Custom policy:
+
+```kotlin
+tokenRotation {
+    policy = TokenRotationPolicy(
+        enabled = true,
+        detectReplayAttacks = true,
+        revokeOnReplay = true,
+        gracePeriod = 5.seconds
+    )
+}
+```
+
+**How it works:**
+- Each refresh creates a new access + refresh token pair
+- Old refresh token is marked as used and cannot be reused
+- All rotated tokens share a token family ID for lineage tracking
+- **Replay detection:** If a used token is presented again after the grace period, it triggers a security violation
+- **Automatic revocation:** When replay is detected, the entire token family is revoked
+- **Audit logging:** Replay attacks are automatically logged as security violations
+- **Grace period:** Prevents false positives from network retries (configurable, default 5 seconds)
+
+The rotation is transparent to your application code - simply call `refresh()` as usual:
+
+```kotlin
+val tokenPair = kodexService.refresh(userId, refreshToken)
+// Returns new access and refresh tokens
+// Old refresh token is now single-use and cannot be replayed
+```
+
+### Audit logging
+
+Comprehensive audit logging for compliance and security monitoring. All authentication events are automatically tracked, and you can log custom events using a flexible DSL.
+
+**Configuration:**
+
+```kotlin
+install(Kodex) {
+    audit {
+        enabled = true
+        queueCapacity = 10000
+        batchSize = 100
+        flushInterval = 5.seconds
+        retentionPeriod = 90.days
+    }
+}
+```
+
+**Automatic audit events:**
+- Login success and failure (with IP address and reason)
+- User creation
+- Account lockout events
+
+**Query and export:**
+
+```kotlin
+val auditService = application.kodex.auditService
+
+// Query events with filters
+val events = auditService.query(AuditFilter(
+    eventTypes = listOf(AuditEvents.LOGIN_SUCCESS, AuditEvents.LOGIN_FAILED),
+    startDate = yesterday,
+    endDate = now,
+    actorId = userId,
+    limit = 100
+))
+
+// Export to JSON or CSV
+val jsonExport = auditService.export(filter, ExportFormat.JSON)
+val csvExport = auditService.export(filter, ExportFormat.CSV)
+
+// Count events
+val failedLogins = auditService.count(AuditFilter(
+    eventTypes = listOf(AuditEvents.LOGIN_FAILED),
+    startDate = today
+))
+```
+
+**Custom events using the DSL:**
+
+```kotlin
+// Flexible DSL for custom events
+auditService.audit(realmId = "admin") {
+    event(AuditEvents.PERMISSION_CHANGED)
+    actor(adminUserId, ipAddress = "192.168.1.1", userAgent = "Mozilla/5.0")
+    target(targetUserId, "user")
+    success()
+    context {
+        "oldRoles" to listOf("user")
+        "newRoles" to listOf("user", "admin")
+        "reason" to "Promotion"
+    }
+}
+
+// Extension functions for common patterns
+auditService.auditLoginSuccess(
+    realmId = "admin",
+    userId = userId,
+    ipAddress = call.request.origin.remoteHost,
+    userAgent = call.request.userAgent(),
+    method = "email"
+)
+```
+
+**Available event types:**
+
+The `AuditEvents` object provides 50+ predefined event type constants including:
+- Authentication: `LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGOUT`, `TOKEN_REFRESHED`
+- User management: `USER_CREATED`, `USER_UPDATED`, `USER_DELETED`, `EMAIL_VERIFIED`
+- Authorization: `PERMISSION_GRANTED`, `PERMISSION_DENIED`, `ROLE_ASSIGNED`
+- Security: `PASSWORD_CHANGED`, `ACCOUNT_LOCKED`, `ACCOUNT_UNLOCKED`, `MFA_ENABLED`
+- Data access: `DATA_ACCESSED`, `DATA_MODIFIED`, `DATA_DELETED`, `DATA_EXPORTED`
+
+You can also use custom event type strings for application-specific events.
 
 ### Routing helpers
 

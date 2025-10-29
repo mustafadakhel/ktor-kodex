@@ -20,6 +20,9 @@ private object ExposedTokenRepository : TokenRepository {
             it[Tokens.revoked] = token.revoked
             it[Tokens.tokenHash] = token.tokenHash
             it[Tokens.expiresAt] = token.expiresAt
+            it[Tokens.tokenFamily] = token.tokenFamily
+            it[Tokens.parentTokenId] = token.parentTokenId
+            it[Tokens.usedAt] = token.usedAt
         }
     }.value
 
@@ -45,6 +48,28 @@ private object ExposedTokenRepository : TokenRepository {
         TokenDao.find { Tokens.userId eq userId }.forEach { it.revoked = true }
     }
 
+    override fun markTokenAsUsed(tokenId: UUID, usedAt: kotlinx.datetime.LocalDateTime) = exposedTransaction {
+        TokenDao.findById(tokenId)?.apply {
+            this.usedAt = usedAt
+        }
+    }
+
+    override fun findTokenByHash(tokenHash: String): PersistedToken? = exposedTransaction {
+        TokenDao.find { Tokens.tokenHash eq tokenHash }
+            .singleOrNull()
+            ?.toEntity()
+    }
+
+    override fun revokeTokenFamily(tokenFamily: UUID) = exposedTransaction {
+        TokenDao.find { Tokens.tokenFamily eq tokenFamily }
+            .forEach { it.revoked = true }
+    }
+
+    override fun findTokensByFamily(tokenFamily: UUID): List<PersistedToken> = exposedTransaction {
+        TokenDao.find { Tokens.tokenFamily eq tokenFamily }
+            .map { it.toEntity() }
+    }
+
     private fun TokenDao.toEntity() = PersistedToken(
         id = id.value,
         userId = userId.value,
@@ -53,5 +78,8 @@ private object ExposedTokenRepository : TokenRepository {
         revoked = revoked,
         createdAt = createdAt,
         expiresAt = expiresAt,
+        tokenFamily = tokenFamily,
+        parentTokenId = parentTokenId,
+        usedAt = usedAt,
     )
 }

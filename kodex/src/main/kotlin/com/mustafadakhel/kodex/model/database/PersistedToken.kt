@@ -12,4 +12,7 @@ internal data class PersistedToken(
     val revoked: Boolean,
     val createdAt: LocalDateTime,
     val expiresAt: LocalDateTime,
+    val tokenFamily: UUID? = null,
+    val parentTokenId: UUID? = null,
+    val usedAt: LocalDateTime? = null,
 )
