@@ -9,10 +9,93 @@
 - **Secure password hashing** – Argon2id with configurable parameters and industry presets
 - **Account lockout protection** – automatic brute force protection with configurable policies
 - **Token rotation** – automatic refresh token rotation with replay attack detection
+- **Input validation & sanitization** – optional RFC 5322 email, E.164 phone, password strength scoring, XSS protection
 - **Audit logging** – comprehensive event tracking with query and export capabilities for compliance
 - **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
 - **Role management** – roles are stored per realm and attached to issued tokens
 - **Ktor routing helpers** – easily protect routes and retrieve the appropriate `KodexService`
+- **Extension system** – modular architecture for adding custom functionality via lifecycle hooks
+
+## Extension system
+
+Kodex features a flexible extension system that allows you to customize and extend authentication behavior without modifying core code. Extensions hook into user lifecycle events like login attempts, user creation, and data updates.
+
+**Built-in extensions:**
+- **Account Lockout** (`kodex-lockout`) – Brute force protection via failed attempt tracking
+- **Input Validation** (`kodex-validation`) – Email, phone, password validation and XSS protection
+- **Audit Logging** (`kodex-audit`) – Comprehensive event tracking for compliance
+
+**How extensions work:**
+
+Extensions implement lifecycle hooks that execute at specific points in the authentication flow:
+
+- `beforeLogin()` – Validate/modify login identifier before authentication
+- `afterLoginFailure()` – React to failed login attempts (e.g., record failed attempt)
+- `beforeUserCreate()` – Validate/transform user data before creation
+- `beforeUserUpdate()` – Validate/transform update data before persistence
+- `beforeCustomAttributesUpdate()` – Validate/sanitize custom attributes
+
+**Creating a custom extension:**
+
+```kotlin
+class RateLimitExtension internal constructor(
+    private val requestsPerMinute: Int
+) : UserLifecycleHooks {
+
+    private val attempts = ConcurrentHashMap<String, AtomicInteger>()
+
+    override suspend fun beforeLogin(identifier: String): String {
+        val count = attempts.computeIfAbsent(identifier) { AtomicInteger(0) }
+        if (count.incrementAndGet() > requestsPerMinute) {
+            throw KodexThrowable.Authorization.RateLimitExceeded
+        }
+        return identifier
+    }
+
+    override suspend fun afterLoginFailure(identifier: String) {
+        // Extension point for tracking failures
+    }
+}
+```
+
+**Registering extensions:**
+
+Extensions are configured per realm during plugin installation:
+
+```kotlin
+realm("admin") {
+    // Built-in extensions are enabled via DSL
+    accountLockout {
+        policy = AccountLockoutPolicy.moderate()
+    }
+
+    validation {
+        email { allowDisposable = false }
+        password { minScore = 3 }
+    }
+
+    // Custom extensions can be added programmatically
+    // extension(RateLimitExtension(requestsPerMinute = 60))
+}
+```
+
+**Extension capabilities:**
+
+- **Database access:** Extensions can manage their own tables using `kodexTransaction()` for safe database operations
+- **Hook chaining:** Multiple extensions execute in registration order
+- **Type safety:** Strongly-typed hook interfaces prevent runtime errors
+- **Validation hooks:** Return transformed data or throw exceptions to reject operations
+- **Async support:** All hooks are suspendable for non-blocking operations
+
+**Example: Account lockout flow**
+
+```
+1. User attempts login → beforeLogin() checks if account is locked
+2. If locked → throw AccountLocked exception
+3. Authentication fails → afterLoginFailure() records failed attempt
+4. If threshold exceeded → Account automatically locked for duration
+5. Next login attempt → beforeLogin() detects lockout, blocks access
+```
 
 ## Getting started
 
@@ -32,6 +115,16 @@ In your `dependencies` block:
 ```kotlin
 implementation("com.mustafadakhel.kodex:kodex:latest-version")
 ```
+
+**Optional: Input validation module**
+
+For input validation and sanitization features, add the validation module:
+
+```kotlin
+implementation("com.mustafadakhel.kodex:kodex-validation:latest-version")
+```
+
+The validation module is completely optional. Without it, you are responsible for validating and sanitizing user input yourself.
 
 ### Database driver
 
@@ -248,6 +341,98 @@ The rotation is transparent to your application code - simply call `refresh()` a
 val tokenPair = kodexService.refresh(userId, refreshToken)
 // Returns new access and refresh tokens
 // Old refresh token is now single-use and cannot be replayed
+```
+
+### Input validation
+
+**Input validation is optional and requires the `kodex-validation` module.**
+
+First, add the dependency to your project:
+
+```kotlin
+implementation("com.mustafadakhel.kodex:kodex-validation:latest-version")
+```
+
+Without the validation module, you are responsible for validating and sanitizing user input yourself.
+
+With the validation module, you can enable comprehensive input validation and sanitization that protects against XSS attacks, prevents data corruption, and enforces security policies:
+
+```kotlin
+realm("admin") {
+    validation {
+        email {
+            allowDisposable = false  // Block temporary email services (default: false)
+        }
+
+        phone {
+            defaultRegion = "ZZ"     // Unknown region = require international format
+            requireE164 = true       // Must start with + and country code (default: true)
+        }
+
+        password {
+            minLength = 12           // Minimum password length (default: 8)
+            minScore = 3             // 0=very weak, 4=very strong (default: 2)
+            commonPasswords = customSet  // Optional: override default dictionary
+        }
+
+        customAttributes {
+            maxKeyLength = 128       // Prevent DoS (default: 128)
+            maxValueLength = 4096    // Prevent DoS (default: 4096)
+            maxAttributes = 50       // Limit per user (default: 50)
+            allowedKeys = setOf("department", "employee_id")  // Optional allowlist
+        }
+    }
+}
+```
+
+> **⚠️ Security Warning:** If you don't configure the `validation {}` block, validation is **disabled**. You must handle:
+> - Input sanitization to prevent XSS attacks
+> - Email and phone format validation
+> - Password strength enforcement
+> - Custom attribute sanitization and length limits
+
+**What's validated when enabled:**
+
+- **Email**: RFC 5322 format, length limits (320 chars), local part (64 chars), domain (255 chars), disposable domain detection (including subdomains)
+- **Phone**: E.164 international format using Google's libphonenumber library
+- **Password strength**: zxcvbn-inspired entropy scoring, common password dictionary (~120 passwords), pattern detection (sequential/repeated/keyboard), locale-safe comparison
+- **Custom attributes**: Key format (alphanumeric + `_`, `-`, `.`), reserved key protection, null byte detection, XSS protection via HTML entity escaping, all control characters removed
+
+**Validation is automatically enforced** on all user operations (when configured):
+
+```kotlin
+// Validation happens automatically
+val user = kodexService.createUser(
+    email = "user@example.com",    // Validated against RFC 5322
+    phone = "+14155552671",         // Validated as E.164
+    password = "MyStr0ngP@ssw0rd!",  // Strength scored 0-4
+    customAttributes = mapOf(       // Sanitized for XSS
+        "department" to "Engineering"
+    )
+)
+
+// Throws KodexThrowable.Validation.* exceptions on invalid input:
+// - InvalidEmail(email, errors)
+// - InvalidPhone(phone, errors)
+// - WeakPassword(score, feedback)
+// - InvalidInput(field, errors)
+```
+
+**Password strength analysis:**
+
+```kotlin
+val strength = kodexService.analyzePasswordStrength("password123")
+// PasswordStrength(
+//     score = 0,              // 0-4 (very weak to very strong)
+//     entropy = 28.2,         // Bits of entropy
+//     crackTime = 0.001s,     // Estimated crack time
+//     feedback = [
+//         "This password is commonly used and easily guessed",
+//         "Use at least 12 characters for better security",
+//         "Add special characters (!@#$%)"
+//     ],
+//     isAcceptable = false
+// )
 ```
 
 ### Audit logging

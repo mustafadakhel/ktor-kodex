@@ -40,14 +40,20 @@ tasks {
 dependencies {
     implementation(libs.h2.database)
     api(libs.hikari)
+    api(libs.kotlinx.datetime)
+    api(libs.slf4j.api)
     implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
+    implementation(libs.flyway.core)
+    compileOnly(libs.micrometer.core)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.micrometer.core)
+    testImplementation(libs.logback.classic)
 }
 
 mavenPublishing {

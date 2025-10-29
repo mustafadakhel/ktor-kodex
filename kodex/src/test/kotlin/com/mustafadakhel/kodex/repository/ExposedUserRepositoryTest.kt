@@ -167,19 +167,20 @@ class ExposedUserRepositoryTest : FunSpec({
         }
     }
 
-    context("Existence Checks") {
-        test("emailExists & phoneExists behave correctly") {
-            userRepository.seedRoles(listOf(Role("U", "")))
-            userRepository.create("e1@x", null, "pw", listOf("U"), null, null, now)
-            userRepository.create(null, "555", "pw", listOf("U"), null, null, now)
-
-            userRepository.emailExists("e1@x") shouldBe true
-            userRepository.emailExists("absent@x") shouldBe false
-
-            userRepository.phoneExists("555") shouldBe true
-            userRepository.phoneExists("000") shouldBe false
-        }
-    }
+    // Existence check methods removed - use findByEmail/findByPhone instead
+    // context("Existence Checks") {
+    //     test("emailExists & phoneExists behave correctly") {
+    //         userRepository.seedRoles(listOf(Role("U", "")))
+    //         userRepository.create("e1@x", null, "pw", listOf("U"), null, null, now)
+    //         userRepository.create(null, "555", "pw", listOf("U"), null, null, now)
+    //
+    //         userRepository.emailExists("e1@x") shouldBe true
+    //         userRepository.emailExists("absent@x") shouldBe false
+    //
+    //         userRepository.phoneExists("555") shouldBe true
+    //         userRepository.phoneExists("000") shouldBe false
+    //     }
+    // }
 
     context("User Retrieval") {
         test("findById, findByEmail, findByPhone and getAll") {
@@ -247,7 +248,7 @@ class ExposedUserRepositoryTest : FunSpec({
                 now
             ) as CreateUserResult.Success).user
 
-            userRepository.updateById(u.id, "new@x", "+1", now) shouldBe UpdateUserResult.Success
+            userRepository.updateById(u.id, "new@x", "+1", null, null, now) shouldBe UpdateUserResult.Success
 
             val updated = userRepository.findById(u.id)!!
             updated.email shouldBe "new@x"
@@ -256,7 +257,7 @@ class ExposedUserRepositoryTest : FunSpec({
         }
 
         test("updateById reports NotFound if user absent") {
-            userRepository.updateById(UUID.randomUUID(), "x@x", null, now) shouldBe UpdateUserResult.NotFound
+            userRepository.updateById(UUID.randomUUID(), "x@x", null, null, null, now) shouldBe UpdateUserResult.NotFound
         }
 
         test("updateById rejects duplicate email or phone") {
@@ -280,8 +281,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 now
             ) as CreateUserResult.Success).user
 
-            userRepository.updateById(u2.id, u1.email, null, now) shouldBe UpdateUserResult.EmailAlreadyExists
-            userRepository.updateById(u2.id, null, u1.phoneNumber, now) shouldBe UpdateUserResult.PhoneAlreadyExists
+            userRepository.updateById(u2.id, u1.email, null, null, null, now) shouldBe UpdateUserResult.EmailAlreadyExists
+            userRepository.updateById(u2.id, null, u1.phoneNumber, null, null, now) shouldBe UpdateUserResult.PhoneAlreadyExists
         }
     }
 
@@ -352,12 +353,13 @@ class ExposedUserRepositoryTest : FunSpec({
             userRepository.findProfileByUserId(u.id)!!.lastName shouldBe "Doe"
 
             val upd = UserProfile("Janet", "Smith", "34 Ave", "new.png")
-            userRepository.updateProfileByUserId(u.id, upd) shouldBe true
+            val result = userRepository.updateProfileByUserId(u.id, upd)
+            result.shouldBeInstanceOf<UpdateProfileResult.Success>()
             userRepository.findProfileByUserId(u.id)!!.firstName shouldBe "Janet"
         }
 
-        test("updateProfileByUserId returns false if user absent") {
-            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe false
+        test("updateProfileByUserId returns NotFound if user absent") {
+            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe UpdateProfileResult.NotFound
         }
     }
 

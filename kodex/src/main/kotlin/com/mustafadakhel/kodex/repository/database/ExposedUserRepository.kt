@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.repository.database
 
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.util.exposedTransaction
@@ -10,6 +11,8 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import java.util.*
 
 internal fun databaseUserRepository(): UserRepository = ExposedUserRepository
@@ -18,6 +21,57 @@ private object ExposedUserRepository : UserRepository {
 
     override fun getAll(): List<UserEntity> = exposedTransaction {
         UserDao.all().map { it.toEntity() }
+    }
+
+    override fun getAllFull(): List<FullUserEntity> = exposedTransaction {
+        val users = UserDao.all().toList()
+
+        if (users.isEmpty()) return@exposedTransaction emptyList()
+
+        val userIds = users.map { it.id.value }
+
+        // Batch load all user roles in a single query
+        val userRolesMap = mutableMapOf<UUID, MutableList<RoleEntity>>()
+        UserRoles
+            .innerJoin(Roles)
+            .select(UserRoles.userId, Roles.id, Roles.description)
+            .where { UserRoles.userId inList userIds }
+            .forEach { row ->
+                val userId = row[UserRoles.userId].value
+                val role = RoleEntity(
+                    name = row[Roles.id].value,
+                    description = row[Roles.description]
+                )
+                userRolesMap.getOrPut(userId) { mutableListOf() }.add(role)
+            }
+
+        // Batch load all profiles in a single query
+        val userProfilesMap = UserProfileDao
+            .find { UserProfiles.id inList userIds }
+            .associate { it.id.value to it.toEntity() }
+
+        // Batch load all custom attributes in a single query
+        val userAttributesMap = UserCustomAttributesDao
+            .find { UserCustomAttributes.userId inList userIds }
+            .groupBy({ it.userId.value }) { it.key to it.value }
+            .mapValues { (_, pairs) -> pairs.toMap() }
+
+        // Construct FullUserEntity objects with preloaded data
+        users.map { user ->
+            FullUserEntity(
+                id = user.id.value,
+                createdAt = user.createdAt,
+                updatedAt = user.updatedAt,
+                isVerified = user.isVerified,
+                phoneNumber = user.phoneNumber,
+                email = user.email,
+                lastLoggedIn = user.lastLoginAt,
+                status = user.status,
+                roles = userRolesMap[user.id.value] ?: emptyList(),
+                profile = userProfilesMap[user.id.value],
+                customAttributes = userAttributesMap[user.id.value] ?: emptyMap()
+            )
+        }
     }
 
     override fun findById(userId: UUID): UserEntity? = exposedTransaction {
@@ -34,14 +88,6 @@ private object ExposedUserRepository : UserRepository {
 
     override fun findFullById(userId: UUID): FullUserEntity? = exposedTransaction {
         UserDao.findById(userId)?.toFullEntity()
-    }
-
-    override fun emailExists(email: String): Boolean = exposedTransaction {
-        UserDao.find { Users.email eq email }.any()
-    }
-
-    override fun phoneExists(phone: String): Boolean = exposedTransaction {
-        UserDao.find { Users.phoneNumber eq phone }.any()
     }
 
     override fun create(
@@ -102,6 +148,8 @@ private object ExposedUserRepository : UserRepository {
         userId: UUID,
         email: String?,
         phone: String?,
+        isVerified: Boolean?,
+        status: UserStatus?,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
         val user = UserDao.findById(userId) ?: run {
@@ -109,17 +157,31 @@ private object ExposedUserRepository : UserRepository {
         }
 
         email?.let {
-            if (UserDao.find { Users.email eq it }.any()) {
-                return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+            // Only check for duplicates if changing to a different email
+            if (user.email != it) {
+                if (UserDao.find { Users.email eq it }.any()) {
+                    return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+                }
+                user.email = it
             }
-            user.email = it
         }
 
         phone?.let {
-            if (UserDao.find { Users.phoneNumber eq it }.any()) {
-                return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+            // Only check for duplicates if changing to a different phone
+            if (user.phoneNumber != it) {
+                if (UserDao.find { Users.phoneNumber eq it }.any()) {
+                    return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+                }
+                user.phoneNumber = it
             }
-            user.phoneNumber = it
+        }
+
+        isVerified?.let {
+            user.isVerified = it
+        }
+
+        status?.let {
+            user.status = it
         }
 
         user.updatedAt = currentTime
@@ -176,13 +238,24 @@ private object ExposedUserRepository : UserRepository {
         UserProfileDao.findById(userId)?.toEntity()
     }
 
-    override fun updateProfileByUserId(userId: UUID, profile: UserProfile): Boolean = exposedTransaction {
-        UserProfileDao.findByIdAndUpdate(userId) {
+    override fun updateProfileByUserId(userId: UUID, profile: UserProfile) = exposedTransaction {
+        val profileDao = UserProfileDao.findByIdAndUpdate(userId) {
             it.firstName = profile.firstName
             it.lastName = profile.lastName
             it.address = profile.address
             it.profilePicture = profile.profilePicture
-        } != null
+        }
+
+        if (profileDao != null) {
+            val userDao = UserDao.findById(userId)
+            if (userDao != null) {
+                UserRepository.UpdateProfileResult.Success(userDao.toEntity())
+            } else {
+                UserRepository.UpdateProfileResult.NotFound
+            }
+        } else {
+            UserRepository.UpdateProfileResult.NotFound
+        }
     }
 
     override fun findCustomAttributesByUserId(userId: UUID): Map<String, String> = exposedTransaction {
@@ -192,7 +265,7 @@ private object ExposedUserRepository : UserRepository {
     override fun replaceAllCustomAttributesByUserId(
         userId: UUID, customAttributes: Map<String, String>
     ) = exposedTransaction {
-        findById(userId) ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
+        UserDao.findById(userId) ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
 
         UserCustomAttributesDao.replaceAllForUser(userId, customAttributes)
         UserRepository.UpdateUserResult.Success
@@ -202,7 +275,7 @@ private object ExposedUserRepository : UserRepository {
         userId: UUID,
         customAttributes: Map<String, String>
     ) = exposedTransaction {
-        findById(userId) ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
+        UserDao.findById(userId) ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
 
         UserCustomAttributesDao.updateForUser(userId, customAttributes)
         UserRepository.UpdateUserResult.Success
@@ -213,6 +286,76 @@ private object ExposedUserRepository : UserRepository {
             it.isVerified = verified
             true
         } ?: false
+    }
+
+    override fun updateLastLogin(userId: UUID, loginTime: LocalDateTime) = exposedTransaction {
+        UserDao.findById(userId)?.let {
+            it.lastLoginAt = loginTime
+            true
+        } ?: false
+    }
+
+    override fun updatePassword(userId: UUID, hashedPassword: String) = exposedTransaction {
+        UserDao.findById(userId)?.let {
+            it.passwordHash = hashedPassword
+            true
+        } ?: false
+    }
+
+    override fun updateBatch(
+        userId: UUID,
+        email: String?,
+        phone: String?,
+        isVerified: Boolean?,
+        status: UserStatus?,
+        profile: UserProfile?,
+        customAttributes: Map<String, String>?,
+        currentTime: LocalDateTime
+    ): UserRepository.UpdateUserResult = exposedTransaction {
+        // All operations in single transaction - all succeed or all fail
+        val user = UserDao.findById(userId) ?: run {
+            return@exposedTransaction UserRepository.UpdateUserResult.NotFound
+        }
+
+        // Update user fields
+        email?.let {
+            if (user.email != it) {
+                if (UserDao.find { Users.email eq it }.any()) {
+                    return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+                }
+                user.email = it
+            }
+        }
+
+        phone?.let {
+            if (user.phoneNumber != it) {
+                if (UserDao.find { Users.phoneNumber eq it }.any()) {
+                    return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+                }
+                user.phoneNumber = it
+            }
+        }
+
+        isVerified?.let { user.isVerified = it }
+        status?.let { user.status = it }
+        user.updatedAt = currentTime
+
+        // Update profile if provided
+        profile?.let {
+            UserProfileDao.findByIdAndUpdate(userId) { profileDao ->
+                profileDao.firstName = it.firstName
+                profileDao.lastName = it.lastName
+                profileDao.address = it.address
+                profileDao.profilePicture = it.profilePicture
+            }
+        }
+
+        // Update custom attributes if provided
+        customAttributes?.let {
+            UserCustomAttributesDao.updateForUser(userId, it)
+        }
+
+        UserRepository.UpdateUserResult.Success
     }
 
     private fun RoleDao.toEntity() = RoleEntity(

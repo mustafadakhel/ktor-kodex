@@ -1,8 +1,8 @@
 package com.mustafadakhel.kodex.model.database
 
 import com.mustafadakhel.kodex.audit.ActorType
-import com.mustafadakhel.kodex.audit.AuditEntry
 import com.mustafadakhel.kodex.audit.EventResult
+import com.mustafadakhel.kodex.audit.MetadataSanitizer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.dao.UUIDEntity
@@ -69,28 +69,19 @@ internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var sessionId by AuditLogs.sessionId
 
     /**
-     * Metadata stored as JSON string.
+     * Metadata stored as JSON string with automatic sanitization.
+     *
+     * Sanitization happens on WRITE to prevent malicious data storage.
+     * Data is stored already-sanitized in the database.
+     *
+     * All metadata values are:
+     * - HTML-escaped to prevent XSS attacks
+     * - Redacted if they contain sensitive field names (password, token, etc.)
      */
     var metadata: Map<String, Any>
         get() = if (metadataJson.isBlank()) emptyMap() else json.decodeFromString(metadataJson)
         set(value) {
-            metadataJson = json.encodeToString(value)
+            val sanitized = MetadataSanitizer.sanitize(value)
+            metadataJson = json.encodeToString(sanitized)
         }
-
-    /**
-     * Convert DAO entity to immutable AuditEntry for API responses.
-     */
-    fun toAuditEntry() = AuditEntry(
-        id = id.value,
-        eventType = eventType,
-        timestamp = timestamp,
-        actorId = actorId,
-        actorType = actorType,
-        targetId = targetId,
-        targetType = targetType,
-        result = result,
-        metadata = metadata,
-        realmId = realmId,
-        sessionId = sessionId
-    )
 }

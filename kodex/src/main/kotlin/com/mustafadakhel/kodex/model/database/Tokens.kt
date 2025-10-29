@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 import java.util.*
 
 internal object Tokens : UUIDTable() {
-    val userId = reference("user_id", Users)
+    val userId = reference("user_id", Users).index()
     val tokenHash = text("token_hash").index()
     val type = varchar("type", 16)
     val revoked = bool("revoked").default(false)
@@ -17,7 +17,8 @@ internal object Tokens : UUIDTable() {
     val expiresAt = datetime("expires_at")
     val tokenFamily = uuid("token_family").nullable().index()
     val parentTokenId = uuid("parent_token_id").nullable()
-    val usedAt = datetime("used_at").nullable()
+    val firstUsedAt = datetime("first_used_at").nullable()
+    val lastUsedAt = datetime("last_used_at").nullable()
 }
 
 internal class TokenDao(id: EntityID<UUID>) : UUIDEntity(id) {
@@ -31,5 +32,6 @@ internal class TokenDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var expiresAt by Tokens.expiresAt
     var tokenFamily by Tokens.tokenFamily
     var parentTokenId by Tokens.parentTokenId
-    var usedAt by Tokens.usedAt
+    var firstUsedAt by Tokens.firstUsedAt
+    var lastUsedAt by Tokens.lastUsedAt
 }

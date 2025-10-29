@@ -23,14 +23,16 @@ internal class JwtTokenIssuer internal constructor(
         userId: UUID,
         validityMs: Long,
         tokenType: Claim.TokenType,
-    ) = generateToken(userId, validityMs, tokenType)
+        roles: List<String>?
+    ) = generateToken(userId, validityMs, tokenType, roles)
 
     private fun generateToken(
         userId: UUID,
         validityMs: Long,
-        tokenType: Claim.TokenType
+        tokenType: Claim.TokenType,
+        rolesParam: List<String>?
     ): GeneratedToken {
-        val roles = userRepository.findRoles(userId).map { it.name }
+        val roles = rolesParam ?: userRepository.findRoles(userId).map { it.name }
         val (secret, kid) = secretsConfig.randomWithKid()
         val algorithm = Algorithm.HMAC512(secret)
         val validity = CurrentKotlinInstant.plus(validityMs, DateTimeUnit.MILLISECOND)

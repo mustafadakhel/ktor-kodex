@@ -1,22 +1,26 @@
 package com.mustafadakhel.kodex.service
 
 import com.auth0.jwt.JWT
-import com.mustafadakhel.kodex.audit.AuditService
-import com.mustafadakhel.kodex.audit.auditLoginFailed
-import com.mustafadakhel.kodex.audit.auditLoginSuccess
-import com.mustafadakhel.kodex.audit.auditUserCreated
+import com.mustafadakhel.kodex.audit.*
+import com.mustafadakhel.kodex.extension.ExtensionRegistry
+import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.*
 import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.model.database.UserProfileEntity
+import com.mustafadakhel.kodex.model.database.toFullUser
+import com.mustafadakhel.kodex.model.database.toUserProfile
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
-import com.mustafadakhel.kodex.security.AccountLockoutService
-import com.mustafadakhel.kodex.security.LockoutResult
 import com.mustafadakhel.kodex.throwable.KodexThrowable.*
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
+import com.mustafadakhel.kodex.update.ChangeTracker
+import com.mustafadakhel.kodex.update.UpdateCommand
+import com.mustafadakhel.kodex.update.UpdateCommandProcessor
+import com.mustafadakhel.kodex.update.UpdateResult
 import com.mustafadakhel.kodex.util.getCurrentLocalDateTime
+import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import java.util.*
 
@@ -26,13 +30,31 @@ internal class KodexRealmService(
     private val hashingService: HashingService,
     private val timeZone: TimeZone,
     internal val realm: Realm,
-    private val accountLockoutService: AccountLockoutService,
-    private val auditService: AuditService,
+    private val extensions: ExtensionRegistry,
 ) : KodexService {
+
+    private val hookExecutor = HookExecutor(extensions)
+    private val changeTracker = ChangeTracker()
+    private val updateCommandProcessor = UpdateCommandProcessor(
+        userRepository = userRepository,
+        hookExecutor = hookExecutor,
+        changeTracker = changeTracker,
+        timeZone = timeZone
+    )
+
+    // Dummy hash for constant-time verification when user doesn't exist
+    // Prevents timing attacks that reveal whether a user exists
+    private val dummyHash = hashingService.hash("dummy-password-for-timing-attack-prevention")
 
     override fun getAllUsers(): List<User> {
         return userRepository.getAll().map { userEntity ->
             userEntity.toUser()
+        }
+    }
+
+    override fun getAllFullUsers(): List<FullUser> {
+        return userRepository.getAllFull().map { fullUserEntity ->
+            fullUserEntity.toFullUser()
         }
     }
 
@@ -61,38 +83,171 @@ internal class KodexRealmService(
             ?: throw UserNotFound("User with phone number $phone not found")
     }
 
-    override fun updateUserById(
+    @Deprecated("Use updateUser() with UpdateUserFields", level = DeprecationLevel.WARNING)
+    override suspend fun updateUserById(
         userId: UUID,
         email: String?,
         phone: String?
     ) {
+        val timestamp = Clock.System.now()
+
+        // Execute beforeUserUpdate hooks (validation, transformation)
+        val transformed = hookExecutor.executeBeforeUserUpdate(userId, email, phone)
+
         val result = userRepository.updateById(
             userId = userId,
-            email = email,
-            phone = phone,
+            email = transformed.email,
+            phone = transformed.phone,
+            isVerified = null,
+            status = null,
             currentTime = getCurrentLocalDateTime(timeZone)
         )
 
         result.successOrThrow()
+
+        // Audit user update
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "USER_UPDATED",
+                timestamp = timestamp,
+                actorId = userId,
+                actorType = ActorType.USER,
+                targetId = userId,
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "email" to (transformed.email ?: ""),
+                    "phone" to (transformed.phone ?: "")
+                ),
+                realmId = realm.owner
+            )
+        )
     }
 
-    override fun updateUserProfileById(
+    @Deprecated("Use updateUser() with UpdateProfileFields", level = DeprecationLevel.WARNING)
+    override suspend fun updateUserProfileById(
         userId: UUID,
         firstName: String?,
         lastName: String?,
         address: String?,
         profilePicture: String?
     ) {
-        val success = userRepository.updateProfileByUserId(
+        val timestamp = Clock.System.now()
+
+        // Execute beforeProfileUpdate hooks (validation, transformation)
+        val transformed = hookExecutor.executeBeforeProfileUpdate(
+            userId = userId,
+            firstName = firstName,
+            lastName = lastName,
+            address = address,
+            profilePicture = profilePicture
+        )
+
+        val result = userRepository.updateProfileByUserId(
             userId = userId,
             profile = UserProfile(
-                firstName = firstName,
-                lastName = lastName,
-                address = address,
-                profilePicture = profilePicture,
+                firstName = transformed.firstName,
+                lastName = transformed.lastName,
+                address = transformed.address,
+                profilePicture = transformed.profilePicture,
             )
         )
-        if (success.not()) throw UserUpdateFailed(userId)
+
+        result.successOrThrow()
+
+        // Audit profile update
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "USER_PROFILE_UPDATED",
+                timestamp = timestamp,
+                actorId = userId,
+                actorType = ActorType.USER,
+                targetId = userId,
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "firstName" to (transformed.firstName ?: ""),
+                    "lastName" to (transformed.lastName ?: ""),
+                    "address" to (transformed.address ?: ""),
+                    "profilePicture" to (transformed.profilePicture ?: "")
+                ),
+                realmId = realm.owner
+            )
+        )
+    }
+
+    override suspend fun updateUser(command: UpdateCommand): UpdateResult {
+        val result = updateCommandProcessor.execute(command)
+
+        // Audit the update attempt
+        when (result) {
+            is UpdateResult.Success -> {
+                if (result.hasChanges()) {
+                    // Build detailed change metadata
+                    val changeMetadata = buildMap<String, String> {
+                        put("changeCount", result.changes.changedFields.size.toString())
+
+                        // Add each field change with old → new values
+                        result.changes.changedFields.forEach { (fieldName, change) ->
+                            put("$fieldName.old", change.oldValue?.toString() ?: "null")
+                            put("$fieldName.new", change.newValue?.toString() ?: "null")
+                        }
+                    }
+
+                    runCatching {
+                        hookExecutor.executeAuditEvent(
+                            AuditEvent(
+                                eventType = "USER_UPDATED",
+                                timestamp = result.changes.timestamp,
+                                actorId = command.userId,
+                                actorType = ActorType.USER,
+                                targetId = command.userId,
+                                result = EventResult.SUCCESS,
+                                metadata = changeMetadata,
+                                realmId = realm.owner
+                            )
+                        )
+                    }
+                }
+            }
+            is UpdateResult.Failure -> {
+                // Audit failed update attempts
+                val failureMetadata = when (result) {
+                    is UpdateResult.Failure.NotFound -> mapOf(
+                        "reason" to "User not found",
+                        "userId" to result.userId.toString()
+                    )
+                    is UpdateResult.Failure.ValidationFailed -> mapOf(
+                        "reason" to "Validation failed",
+                        "errors" to result.errors.joinToString("; ") { "${it.field}: ${it.message}" }
+                    )
+                    is UpdateResult.Failure.ConstraintViolation -> mapOf(
+                        "reason" to "Constraint violation",
+                        "field" to result.field,
+                        "details" to result.reason
+                    )
+                    is UpdateResult.Failure.Unknown -> mapOf(
+                        "reason" to "Unknown error",
+                        "message" to result.message
+                    )
+                }
+
+                runCatching {
+                    hookExecutor.executeAuditEvent(
+                        AuditEvent(
+                            eventType = "USER_UPDATE_FAILED",
+                            timestamp = Clock.System.now(),
+                            actorId = command.userId,
+                            actorType = ActorType.USER,
+                            targetId = command.userId,
+                            result = EventResult.FAILURE,
+                            metadata = failureMetadata,
+                            realmId = realm.owner
+                        )
+                    )
+                }
+            }
+        }
+
+        return result
     }
 
     override fun getUserProfileOrNull(userId: UUID): UserProfile? {
@@ -104,129 +259,159 @@ internal class KodexRealmService(
         return userRepository.getAllRoles().map { it.name }
     }
 
-    override suspend fun tokenByEmail(email: String, password: String): TokenPair {
-        checkLockout(email)
+    override suspend fun updateUserRoles(userId: UUID, roleNames: List<String>) {
+        val timestamp = Clock.System.now()
 
-        val user = userRepository.findByEmail(email)
-        if (user == null) {
-            accountLockoutService.recordFailedAttempt(
-                identifier = email,
-                ipAddress = "unknown",
-                userAgent = null,
-                reason = "User not found"
-            )
-            // Audit failed login
-            auditService.auditLoginFailed(
-                realmId = realm.owner,
-                identifier = email,
-                reason = "User not found",
-                ipAddress = "unknown"
-            )
-            throw Authorization.InvalidCredentials
+        // Verify user exists
+        userRepository.findById(userId) ?: throw UserNotFound("User with id $userId not found")
+
+        // Get current roles for audit
+        val currentRoles = userRepository.findRoles(userId).map { it.name }
+
+        // Update roles
+        val result = userRepository.updateRolesForUser(userId, roleNames)
+
+        when (result) {
+            is UserRepository.UpdateRolesResult.Success -> {
+                // Audit role update
+                hookExecutor.executeAuditEvent(
+                    AuditEvent(
+                        eventType = "USER_ROLES_UPDATED",
+                        timestamp = timestamp,
+                        actorType = ActorType.ADMIN,
+                        targetId = userId,
+                        result = EventResult.SUCCESS,
+                        metadata = mapOf(
+                            "previousRoles" to currentRoles.joinToString(","),
+                            "newRoles" to roleNames.joinToString(","),
+                            "addedRoles" to (roleNames - currentRoles.toSet()).joinToString(","),
+                            "removedRoles" to (currentRoles - roleNames.toSet()).joinToString(",")
+                        ),
+                        realmId = realm.owner
+                    )
+                )
+            }
+            is UserRepository.UpdateRolesResult.InvalidRole -> {
+                // Audit failed role update
+                hookExecutor.executeAuditEvent(
+                    AuditEvent(
+                        eventType = "USER_ROLES_UPDATE_FAILED",
+                        timestamp = timestamp,
+                        actorType = ActorType.ADMIN,
+                        targetId = userId,
+                        result = EventResult.FAILURE,
+                        metadata = mapOf(
+                            "reason" to "Invalid role",
+                            "roleName" to result.roleName
+                        ),
+                        realmId = realm.owner
+                    )
+                )
+                throw RoleNotFound(result.roleName)
+            }
         }
-
-        if (!authenticateInternal(password, user.id)) {
-            accountLockoutService.recordFailedAttempt(
-                identifier = email,
-                ipAddress = "unknown",
-                userAgent = null,
-                reason = "Invalid password"
-            )
-            // Audit failed login
-            auditService.auditLoginFailed(
-                realmId = realm.owner,
-                identifier = email,
-                reason = "Invalid password",
-                ipAddress = "unknown"
-            )
-            throw Authorization.InvalidCredentials
-        }
-
-        if (!user.isVerified) {
-            throw Authorization.UnverifiedAccount
-        }
-
-        accountLockoutService.clearFailedAttempts(email)
-
-        // Audit successful login
-        auditService.auditLoginSuccess(
-            realmId = realm.owner,
-            userId = user.id,
-            ipAddress = "unknown",
-            userAgent = null,
-            method = "email"
-        )
-
-        return generateTokenInternal(user.id)
     }
 
-    override suspend fun tokenByPhone(
-        phone: String,
-        password: String
+    override suspend fun tokenByEmail(email: String, password: String): TokenPair =
+        authenticateAndGenerateToken(
+            identifier = email,
+            password = password,
+            identifierType = "email",
+            userFetcher = { userRepository.findByEmail(it) }
+        )
+
+    override suspend fun tokenByPhone(phone: String, password: String): TokenPair =
+        authenticateAndGenerateToken(
+            identifier = phone,
+            password = password,
+            identifierType = "phone",
+            userFetcher = { userRepository.findByPhone(it) }
+        )
+
+    /**
+     * Common authentication logic for both email and phone-based login.
+     * Prevents information leakage by using identical error paths for security.
+     */
+    private suspend fun authenticateAndGenerateToken(
+        identifier: String,
+        password: String,
+        identifierType: String,
+        userFetcher: suspend (String) -> UserEntity?
     ): TokenPair {
-        checkLockout(phone)
+        // Capture timestamp once for consistency across all audit events
+        val timestamp = Clock.System.now()
 
-        val user = userRepository.findByPhone(phone)
-        if (user == null) {
-            accountLockoutService.recordFailedAttempt(
-                identifier = phone,
-                ipAddress = "unknown",
-                userAgent = null,
-                reason = "User not found"
+        // Execute beforeLogin hooks (e.g., lockout check)
+        hookExecutor.executeBeforeLogin(identifier)
+
+        val user = userFetcher(identifier)
+
+        // Security: ALWAYS verify password to prevent timing attacks
+        // When user doesn't exist, verify against dummy hash to maintain constant timing
+        val authSuccess = if (user != null) {
+            authenticateInternal(password, user.id)
+        } else {
+            // Perform dummy verification to prevent timing-based user enumeration
+            hashingService.verify(password, dummyHash)
+            false
+        }
+
+        if (!authSuccess) {
+            // Execute afterLoginFailure hooks
+            hookExecutor.executeAfterLoginFailure(identifier)
+
+            // Audit failed login (detailed reason only in server logs)
+            val actualReason = when {
+                user == null -> "User not found"
+                else -> "Invalid password"
+            }
+
+            hookExecutor.executeAuditEvent(
+                AuditEvent(
+                    eventType = "LOGIN_FAILED",
+                    timestamp = timestamp,
+                    actorType = if (user == null) ActorType.ANONYMOUS else ActorType.USER,
+                    targetId = user?.id,
+                    result = EventResult.FAILURE,
+                    metadata = mapOf(
+                        "identifier" to identifier,
+                        "reason" to actualReason, // Detailed reason only in audit logs
+                        "method" to identifierType
+                    ),
+                    realmId = realm.owner
+                )
             )
-            // Audit failed login
-            auditService.auditLoginFailed(
-                realmId = realm.owner,
-                identifier = phone,
-                reason = "User not found",
-                ipAddress = "unknown"
-            )
+
+            // Always throw same exception regardless of reason
             throw Authorization.InvalidCredentials
         }
 
-        if (!authenticateInternal(password, user.id)) {
-            accountLockoutService.recordFailedAttempt(
-                identifier = phone,
-                ipAddress = "unknown",
-                userAgent = null,
-                reason = "Invalid password"
-            )
-            // Audit failed login
-            auditService.auditLoginFailed(
-                realmId = realm.owner,
-                identifier = phone,
-                reason = "Invalid password",
-                ipAddress = "unknown"
-            )
-            throw Authorization.InvalidCredentials
-        }
-
-        if (!user.isVerified) {
+        // Check verification status
+        if (!user!!.isVerified) {
             throw Authorization.UnverifiedAccount
         }
 
-        accountLockoutService.clearFailedAttempts(phone)
+        // Update last login time
+        userRepository.updateLastLogin(user.id, getCurrentLocalDateTime(timeZone))
 
         // Audit successful login
-        auditService.auditLoginSuccess(
-            realmId = realm.owner,
-            userId = user.id,
-            ipAddress = "unknown",
-            userAgent = null,
-            method = "phone"
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "LOGIN_SUCCESS",
+                timestamp = timestamp,
+                actorId = user.id,
+                actorType = ActorType.USER,
+                targetId = user.id,
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "identifier" to identifier,
+                    "method" to identifierType
+                ),
+                realmId = realm.owner
+            )
         )
 
         return generateTokenInternal(user.id)
-    }
-
-    private fun checkLockout(identifier: String) {
-        val lockoutResult = accountLockoutService.checkLockout(identifier, timeZone)
-        if (lockoutResult is LockoutResult.Locked) {
-            throw Authorization.AccountLocked(
-                lockedUntil = lockoutResult.lockedUntil,
-                reason = lockoutResult.reason
-            )
-        }
     }
 
     private fun authenticateInternal(password: String, userId: UUID): Boolean {
@@ -251,6 +436,83 @@ internal class KodexRealmService(
         userRepository.setVerified(userId, verified)
     }
 
+    override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
+        val timestamp = Clock.System.now()
+
+        // Verify user exists
+        val user = userRepository.findById(userId) ?: throw UserNotFound("User with id $userId not found")
+
+        // Verify old password
+        if (!authenticateInternal(oldPassword, userId)) {
+            // Audit failed password change
+            hookExecutor.executeAuditEvent(
+                AuditEvent(
+                    eventType = "PASSWORD_CHANGE_FAILED",
+                    timestamp = timestamp,
+                    actorId = userId,
+                    actorType = ActorType.USER,
+                    targetId = userId,
+                    result = EventResult.FAILURE,
+                    metadata = mapOf("reason" to "Invalid old password"),
+                    realmId = realm.owner
+                )
+            )
+            throw Authorization.InvalidCredentials
+        }
+
+        // Hash new password
+        val hashedPassword = hashingService.hash(newPassword)
+
+        // Update password
+        val success = userRepository.updatePassword(userId, hashedPassword)
+        if (!success) {
+            throw UserNotFound("User with id $userId not found")
+        }
+
+        // Audit successful password change
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "PASSWORD_CHANGED",
+                timestamp = timestamp,
+                actorId = userId,
+                actorType = ActorType.USER,
+                targetId = userId,
+                result = EventResult.SUCCESS,
+                metadata = emptyMap(),
+                realmId = realm.owner
+            )
+        )
+    }
+
+    override suspend fun resetPassword(userId: UUID, newPassword: String) {
+        val timestamp = Clock.System.now()
+
+        // Verify user exists
+        val user = userRepository.findById(userId) ?: throw UserNotFound("User with id $userId not found")
+
+        // Hash new password
+        val hashedPassword = hashingService.hash(newPassword)
+
+        // Update password
+        val success = userRepository.updatePassword(userId, hashedPassword)
+        if (!success) {
+            throw UserNotFound("User with id $userId not found")
+        }
+
+        // Audit password reset
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "PASSWORD_RESET",
+                timestamp = timestamp,
+                actorType = ActorType.ADMIN,
+                targetId = userId,
+                result = EventResult.SUCCESS,
+                metadata = emptyMap(),
+                realmId = realm.owner
+            )
+        )
+    }
+
     override suspend fun refresh(
         userId: UUID,
         refreshToken: String
@@ -258,7 +520,7 @@ internal class KodexRealmService(
         return tokenManager.refreshTokens(userId, refreshToken)
     }
 
-    override fun createUser(
+    override suspend fun createUser(
         email: String?,
         phone: String?,
         password: String,
@@ -266,25 +528,37 @@ internal class KodexRealmService(
         customAttributes: Map<String, String>?,
         profile: UserProfile?,
     ): User? {
+        // Execute beforeUserCreate hooks (validation, transformation)
+        val transformed = hookExecutor.executeBeforeUserCreate(
+            email, phone, password, customAttributes, profile
+        )
+
         val result = userRepository.create(
-            email = email,
-            phone = phone,
+            email = transformed.email,
+            phone = transformed.phone,
             hashedPassword = hashingService.hash(password),
             roleNames = (listOf(realm.owner) + roleNames).distinct(),
             currentTime = getCurrentLocalDateTime(timeZone),
-            customAttributes = customAttributes,
-            profile = profile,
+            customAttributes = transformed.customAttributes,
+            profile = transformed.profile,
         )
         val user = result.userOrThrow().toUser()
 
         // Audit user creation
         kotlinx.coroutines.runBlocking {
-            auditService.auditUserCreated(
-                realmId = realm.owner,
-                userId = user.id,
-                createdBy = null, // System-created
-                email = email,
-                phone = phone
+            hookExecutor.executeAuditEvent(
+                AuditEvent(
+                    eventType = "USER_CREATED",
+                    timestamp = Clock.System.now(),
+                    actorType = ActorType.SYSTEM,
+                    targetId = user.id,
+                    result = EventResult.SUCCESS,
+                    metadata = mapOf(
+                        "email" to (email ?: ""),
+                        "phone" to (phone ?: "")
+                    ),
+                    realmId = realm.owner
+                )
             )
         }
 
@@ -305,18 +579,66 @@ internal class KodexRealmService(
         return userRepository.findCustomAttributesByUserId(userId)
     }
 
-    override fun replaceAllCustomAttributes(userId: UUID, customAttributes: Map<String, String>) {
-        userRepository.replaceAllCustomAttributesByUserId(
+    @Deprecated("Use updateUser() with UpdateAttributes", level = DeprecationLevel.WARNING)
+    override suspend fun replaceAllCustomAttributes(userId: UUID, customAttributes: Map<String, String>) {
+        val timestamp = Clock.System.now()
+
+        // Execute beforeCustomAttributesUpdate hooks (validation, sanitization)
+        val sanitized = hookExecutor.executeBeforeCustomAttributesUpdate(userId, customAttributes)
+
+        val result = userRepository.replaceAllCustomAttributesByUserId(
             userId = userId,
-            customAttributes = customAttributes
+            customAttributes = sanitized
+        )
+
+        result.successOrThrow()
+
+        // Audit custom attributes replacement
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "CUSTOM_ATTRIBUTES_REPLACED",
+                timestamp = timestamp,
+                actorId = userId,
+                actorType = ActorType.USER,
+                targetId = userId,
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "attributeCount" to sanitized.size.toString(),
+                    "keys" to sanitized.keys.joinToString(",")
+                ),
+                realmId = realm.owner
+            )
         )
     }
 
-    override fun updateCustomAttributes(userId: UUID, customAttributes: Map<String, String>) {
-        return userRepository.updateCustomAttributesByUserId(
+    @Deprecated("Use updateUser() with UpdateAttributes", level = DeprecationLevel.WARNING)
+    override suspend fun updateCustomAttributes(userId: UUID, customAttributes: Map<String, String>) {
+        val timestamp = Clock.System.now()
+
+        // Execute beforeCustomAttributesUpdate hooks (validation, sanitization)
+        val sanitized = hookExecutor.executeBeforeCustomAttributesUpdate(userId, customAttributes)
+
+        userRepository.updateCustomAttributesByUserId(
             userId = userId,
-            customAttributes = customAttributes
+            customAttributes = sanitized
         ).successOrThrow()
+
+        // Audit custom attributes update
+        hookExecutor.executeAuditEvent(
+            AuditEvent(
+                eventType = "CUSTOM_ATTRIBUTES_UPDATED",
+                timestamp = timestamp,
+                actorId = userId,
+                actorType = ActorType.USER,
+                targetId = userId,
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "attributeCount" to sanitized.size.toString(),
+                    "keys" to sanitized.keys.joinToString(",")
+                ),
+                realmId = realm.owner
+            )
+        )
     }
 
     override fun verifyAccessToken(token: String): KodexPrincipal? {
@@ -335,27 +657,6 @@ internal class KodexRealmService(
         phoneNumber = phoneNumber,
         lastLoggedIn = lastLoggedIn,
         status = status
-    )
-
-    private fun UserProfileEntity.toUserProfile() = UserProfile(
-        firstName = firstName,
-        lastName = lastName,
-        address = address,
-        profilePicture = profilePicture,
-    )
-
-    private fun FullUserEntity.toFullUser() = FullUser(
-        id = id,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-        isVerified = isVerified,
-        email = email,
-        phoneNumber = phoneNumber,
-        lastLoggedIn = lastLoggedIn,
-        status = status,
-        roles = roles.map { Role(it.name, it.description) },
-        profile = profile?.toUserProfile(),
-        customAttributes = customAttributes.orEmpty()
     )
 }
 
@@ -383,4 +684,11 @@ private fun UserRepository.UpdateUserResult.successOrThrow() = when (this) {
         throw PhoneAlreadyExists()
 
     UserRepository.UpdateUserResult.Success -> Unit
+}
+
+private fun UserRepository.UpdateProfileResult.successOrThrow() = when (this) {
+    UserRepository.UpdateProfileResult.NotFound ->
+        throw UserNotFound()
+
+    is UserRepository.UpdateProfileResult.Success -> Unit
 }

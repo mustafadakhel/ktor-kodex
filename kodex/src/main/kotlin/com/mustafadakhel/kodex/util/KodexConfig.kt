@@ -16,7 +16,6 @@ import io.ktor.utils.io.*
 public class KodexConfig internal constructor() {
 
     internal val realmConfigScopes: MutableList<RealmConfigScope> = mutableListOf()
-    internal var auditConfigScope: AuditConfigScope? = null
     private var dataSource: HikariDataSource? = null
 
     /**
@@ -62,22 +61,4 @@ public class KodexConfig internal constructor() {
         realmConfigScopes += config
     }
 
-    /**
-     * Configure audit logging for compliance and security monitoring.
-     *
-     * Example:
-     * ```kotlin
-     * install(Kodex) {
-     *     audit {
-     *         enabled = true
-     *         queueCapacity = 10000
-     *         batchSize = 100
-     *         retentionPeriod = 90.days
-     *     }
-     * }
-     * ```
-     */
-    public fun audit(block: AuditConfigScope.() -> Unit) {
-        auditConfigScope = AuditConfigScope().apply(block)
-    }
 }

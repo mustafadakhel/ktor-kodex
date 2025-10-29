@@ -1,9 +1,14 @@
 package com.mustafadakhel.kodex.sample
 
 import com.mustafadakhel.kodex.Kodex
+import com.mustafadakhel.kodex.audit.audit
+import com.mustafadakhel.kodex.audit.ConsoleAuditProvider
 import com.mustafadakhel.kodex.kodex
+import com.mustafadakhel.kodex.lockout.accountLockout
+import com.mustafadakhel.kodex.lockout.AccountLockoutPolicy
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.throwable.KodexThrowable
+import com.mustafadakhel.kodex.validation.validation
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -11,6 +16,8 @@ import io.ktor.server.netty.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 object DefaultRealms {
     val AdminRealm = Realm("admin")
@@ -47,6 +54,40 @@ private fun Application.setupAuthentication() {
                 }
                 secrets {
                     raw("secret", "secret2", "secret3")
+                }
+
+                // Configure validation extension
+                validation {
+                    email {
+                        allowDisposable = false
+                    }
+                    phone {
+                        defaultRegion = "US"
+                        requireE164 = true
+                    }
+                    password {
+                        minLength = 12
+                        minScore = 3
+                    }
+                    customAttributes {
+                        maxKeyLength = 128
+                        maxValueLength = 4096
+                        maxAttributes = 50
+                    }
+                }
+
+                // Configure account lockout extension
+                accountLockout {
+                    policy = AccountLockoutPolicy(
+                        maxFailedAttempts = 5,
+                        attemptWindow = 15.minutes,
+                        lockoutDuration = 30.minutes
+                    )
+                }
+
+                // Configure audit logging extension
+                audit {
+                    provider = ConsoleAuditProvider()
                 }
             }
         }

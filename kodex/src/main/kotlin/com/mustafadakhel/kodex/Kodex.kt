@@ -1,6 +1,5 @@
 package com.mustafadakhel.kodex
 
-import com.mustafadakhel.kodex.audit.auditService
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
 import com.mustafadakhel.kodex.model.Realm
@@ -8,7 +7,6 @@ import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.routes.auth.RealmConfig
-import com.mustafadakhel.kodex.security.accountLockoutService
 import com.mustafadakhel.kodex.service.KodexRealmService
 import com.mustafadakhel.kodex.service.KodexService
 import com.mustafadakhel.kodex.service.passwordHashingService
@@ -58,17 +56,17 @@ public class Kodex private constructor(
             val kodexConfig = KodexConfig().apply(configure)
             val realmConfigs = kodexConfig.realmConfigScopes.map { it.build() }
 
-            pipeline.connectDatabase(kodexConfig.getDataSource())
+            // Collect extension tables from all realms
+            val extensionTables = realmConfigs
+                .flatMap { it.extensions.getTables() }
+                .distinct()
+
+            pipeline.connectDatabase(kodexConfig.getDataSource(), extensionTables)
 
             val userRepository: UserRepository = databaseUserRepository()
             val databaseTokenRepository = databaseTokenRepository()
 
             userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
-
-            // Initialize audit service (shared across all realms)
-            val audit = kodexConfig.auditConfigScope?.build()
-                ?: AuditConfigScope().build() // Default config if not specified
-            val auditServiceInstance = auditService(audit)
 
             // Fast hasher for tokens (tokens are already high-entropy)
             val tokenHasher = saltedHashingService()
@@ -76,7 +74,6 @@ public class Kodex private constructor(
             val services = realmConfigs.map { realmConfig ->
                 // Slow hasher for passwords (needs Argon2id)
                 val passwordHasher = passwordHashingService(realmConfig.passwordHashingConfig.algorithm)
-                val accountLockout = accountLockoutService(realmConfig.accountLockoutConfig.policy)
                 KodexRealmService(
                     userRepository = userRepository,
                     tokenManager = DefaultTokenManager(
@@ -98,19 +95,19 @@ public class Kodex private constructor(
                             userRepository = userRepository
                         ),
                         tokenRepository = databaseTokenRepository,
+                        userRepository = userRepository,
                         tokenValidity = realmConfig.tokenConfig.validity(),
                         hashingService = tokenHasher,
                         tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                         timeZone = realmConfig.timeZone,
                         realm = realmConfig.realm,
                         tokenRotationPolicy = realmConfig.tokenRotationConfig.policy,
-                        auditService = auditServiceInstance
+                        extensions = realmConfig.extensions
                     ),
                     realm = realmConfig.realm,
                     timeZone = realmConfig.timeZone,
                     hashingService = passwordHasher,
-                    accountLockoutService = accountLockout,
-                    auditService = auditServiceInstance
+                    extensions = realmConfig.extensions
                 )
             }.associateBy { it.realm }
 

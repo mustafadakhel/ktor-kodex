@@ -14,5 +14,6 @@ internal data class PersistedToken(
     val expiresAt: LocalDateTime,
     val tokenFamily: UUID? = null,
     val parentTokenId: UUID? = null,
-    val usedAt: LocalDateTime? = null,
+    val firstUsedAt: LocalDateTime? = null,
+    val lastUsedAt: LocalDateTime? = null,
 )

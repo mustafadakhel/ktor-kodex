@@ -14,35 +14,44 @@ internal interface DbEngine<Scope> {
 
 internal fun setupExposedEngine(
     dataSource: HikariDataSource,
+    extensionTables: List<Table> = emptyList(),
     log: Boolean = false
 ): ExposedDbEngine {
     val existing = Db.getEngineOrNull<Transaction>() as? ExposedDbEngine?
     if (existing != null) {
-        if (existing.dataSource != dataSource)
-            existing.dataSource.close()
-        if (existing.dataSource.isClosed.not()) {
+        // If datasources are different, we need a new engine
+        if (existing.dataSource != dataSource) {
+            // Clean up the old engine only if datasource is still open
+            if (existing.dataSource.isClosed.not()) {
+                existing.clear()
+            }
+            // Fall through to create new engine below
+        } else if (existing.dataSource.isClosed.not()) {
+            // Same datasource and it's still open - reuse existing engine
             return existing
         }
-        existing.clear()
+        // If datasource is closed, fall through to create new engine
     }
-    return ExposedDbEngine(dataSource, log).apply { Db.setEngine(this) }
+    return ExposedDbEngine(dataSource, extensionTables, log).apply { Db.setEngine(this) }
 }
 
 internal class ExposedDbEngine(
     val dataSource: HikariDataSource,
+    extensionTables: List<Table> = emptyList(),
     log: Boolean = false
 ) : DbEngine<Transaction> {
     override var runner: EngineRunner<Transaction>? = null
 
     init {
-        setup(dataSource, log)
+        setup(dataSource, extensionTables, log)
     }
 
-    private fun setup(dataSource: HikariDataSource, log: Boolean = false) {
+    private fun setup(dataSource: HikariDataSource, extensionTables: List<Table>, log: Boolean = false) {
         val db = Database.connect(dataSource)
         runner = exposedRunner(db)
 
         transaction(db) {
+            // Create core tables
             SchemaUtils.create(
                 Users,
                 Tokens,
@@ -50,10 +59,14 @@ internal class ExposedDbEngine(
                 UserRoles,
                 UserProfiles,
                 UserCustomAttributes,
-                FailedLoginAttempts,
-                AccountLockouts,
                 AuditLogs
             )
+
+            // Create extension tables
+            if (extensionTables.isNotEmpty()) {
+                SchemaUtils.create(*extensionTables.toTypedArray())
+            }
+
             if (log) {
                 addLogger(StdOutSqlLogger)
             }
@@ -71,8 +84,6 @@ internal class ExposedDbEngine(
                 UserRoles,
                 UserProfiles,
                 UserCustomAttributes,
-                FailedLoginAttempts,
-                AccountLockouts,
                 AuditLogs
             )
         }

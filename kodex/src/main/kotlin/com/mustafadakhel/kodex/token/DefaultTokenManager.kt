@@ -2,6 +2,12 @@ package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
+import com.mustafadakhel.kodex.audit.ActorType
+import com.mustafadakhel.kodex.audit.AuditEvent
+import com.mustafadakhel.kodex.audit.AuditEvents
+import com.mustafadakhel.kodex.audit.EventResult
+import com.mustafadakhel.kodex.extension.ExtensionRegistry
+import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Claim
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
@@ -29,23 +35,28 @@ internal class DefaultTokenManager(
     private val jwtTokenVerifier: TokenVerifier,
     private val tokenValidity: TokenValidity,
     private val tokenRepository: TokenRepository,
+    private val userRepository: com.mustafadakhel.kodex.repository.UserRepository,
     private val tokenPersistence: Map<TokenType, Boolean>,
     private val hashingService: HashingService,
     private val timeZone: TimeZone,
     private val realm: Realm,
     private val tokenRotationPolicy: TokenRotationPolicy,
-    private val auditService: com.mustafadakhel.kodex.audit.AuditService,
+    private val extensions: ExtensionRegistry,
 ) : TokenManager {
+    private val hookExecutor = HookExecutor(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
+        val roles = userRepository.findRoles(userId).map { it.name }
         val accessToken = issueToken(
             userId = userId,
             validityMs = tokenValidity.access,
-            tokenType = TokenType.AccessToken
+            tokenType = TokenType.AccessToken,
+            roles = roles
         )
         val refreshToken = issueToken(
             userId = userId,
             validityMs = tokenValidity.refresh,
-            tokenType = TokenType.RefreshToken
+            tokenType = TokenType.RefreshToken,
+            roles = roles
         )
         return TokenPair(accessToken.token, refreshToken.token)
     }
@@ -55,12 +66,14 @@ internal class DefaultTokenManager(
         validityMs: Duration,
         tokenType: TokenType,
         tokenFamily: UUID? = null,
-        parentTokenId: UUID? = null
+        parentTokenId: UUID? = null,
+        roles: List<String>? = null
     ): GeneratedToken {
         val token = jwtTokenIssuer.issue(
             userId = userId,
             validityMs = validityMs.inWholeMilliseconds,
-            tokenType = tokenType.claim
+            tokenType = tokenType.claim,
+            roles = roles
         )
         if (tokenPersistence[tokenType] == true)
             tokenRepository.storeToken(
@@ -76,7 +89,8 @@ internal class DefaultTokenManager(
                         .toLocalDateTime(timeZone),
                     tokenFamily = tokenFamily,
                     parentTokenId = parentTokenId,
-                    usedAt = null
+                    firstUsedAt = null,
+                    lastUsedAt = null
                 )
             )
         return token
@@ -115,8 +129,10 @@ internal class DefaultTokenManager(
         val persistedToken = tokenRepository.findTokenByHash(tokenHash)
             ?: throw KodexThrowable.Authorization.InvalidToken("Token not found")
 
-        if (persistedToken.usedAt != null) {
-            val gracePeriodEnd = persistedToken.usedAt!!.toInstant(timeZone) + tokenRotationPolicy.gracePeriod
+        val wasMarked = tokenRepository.markTokenAsUsedIfUnused(tokenId, now)
+
+        if (!wasMarked) {
+            val gracePeriodEnd = persistedToken.firstUsedAt!!.toInstant(timeZone) + tokenRotationPolicy.gracePeriod
             val withinGracePeriod = clockNow < gracePeriodEnd
 
             if (!withinGracePeriod && tokenRotationPolicy.detectReplayAttacks) {
@@ -126,16 +142,25 @@ internal class DefaultTokenManager(
                     tokenRepository.revokeTokenFamily(tokenFamily)
                 }
 
-                auditService.audit(realm.owner) {
-                    event(com.mustafadakhel.kodex.audit.AuditEvents.SECURITY_VIOLATION)
-                    actor(userId)
-                    failure("Refresh token replay attack detected")
-                    context {
-                        "tokenId" to tokenId.toString()
-                        "tokenFamily" to tokenFamily.toString()
-                        "originalUsedAt" to persistedToken.usedAt.toString()
-                    }
-                }
+                hookExecutor.executeAuditEvent(
+                    AuditEvent(
+                        eventType = AuditEvents.SECURITY_VIOLATION,
+                        timestamp = clockNow,
+                        actorId = userId,
+                        actorType = ActorType.USER,
+                        targetId = tokenId,
+                        targetType = "refresh_token",
+                        result = EventResult.FAILURE,
+                        metadata = mapOf(
+                            "reason" to "Refresh token replay attack detected",
+                            "tokenId" to tokenId.toString(),
+                            "tokenFamily" to tokenFamily.toString(),
+                            "firstUsedAt" to persistedToken.firstUsedAt.toString(),
+                            "gracePeriodEnd" to gracePeriodEnd.toString()
+                        ),
+                        realmId = realm.owner
+                    )
+                )
 
                 throw KodexThrowable.Authorization.TokenReplayDetected(
                     tokenFamily = tokenFamily,
@@ -143,8 +168,6 @@ internal class DefaultTokenManager(
                 )
             }
         }
-
-        tokenRepository.markTokenAsUsed(tokenId, now)
 
         val tokenFamily = persistedToken.tokenFamily ?: persistedToken.id
         val newAccessToken = issueToken(userId, tokenValidity.access, TokenType.AccessToken, null, null)

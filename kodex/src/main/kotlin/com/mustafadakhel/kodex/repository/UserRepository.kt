@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.repository
 
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.RoleEntity
 import com.mustafadakhel.kodex.model.database.UserEntity
@@ -13,6 +14,14 @@ internal interface UserRepository {
 
     fun getAll(): List<UserEntity>
 
+    /**
+     * Retrieves all users with their complete data (roles, profiles, custom attributes)
+     * using eager loading to avoid N+1 query problem.
+     *
+     * Performance: Uses joins to fetch all related data in ≤5 queries regardless of user count.
+     */
+    fun getAllFull(): List<FullUserEntity>
+
     fun findById(userId: UUID): UserEntity?
 
     fun findByPhone(phone: String): UserEntity?
@@ -20,10 +29,6 @@ internal interface UserRepository {
     fun findByEmail(email: String): UserEntity?
 
     fun findFullById(userId: UUID): FullUserEntity?
-
-    fun emailExists(email: String): Boolean
-
-    fun phoneExists(phone: String): Boolean
 
     fun create(
         email: String? = null,
@@ -39,6 +44,8 @@ internal interface UserRepository {
         userId: UUID,
         email: String? = null,
         phone: String? = null,
+        isVerified: Boolean? = null,
+        status: UserStatus? = null,
         currentTime: LocalDateTime,
     ): UpdateUserResult
 
@@ -59,7 +66,7 @@ internal interface UserRepository {
 
     fun findProfileByUserId(userId: UUID): UserProfileEntity?
 
-    fun updateProfileByUserId(userId: UUID, profile: UserProfile): Boolean
+    fun updateProfileByUserId(userId: UUID, profile: UserProfile): UpdateProfileResult
 
     fun findCustomAttributesByUserId(userId: UUID): Map<String, String>
 
@@ -68,6 +75,27 @@ internal interface UserRepository {
     fun updateCustomAttributesByUserId(userId: UUID, customAttributes: Map<String, String>): UpdateUserResult
 
     fun setVerified(userId: UUID, verified: Boolean): Boolean
+
+    fun updateLastLogin(userId: UUID, loginTime: LocalDateTime): Boolean
+
+    fun updatePassword(userId: UUID, hashedPassword: String): Boolean
+
+    /**
+     * Atomically updates multiple user entities in a single transaction.
+     * All updates succeed or all fail together.
+     *
+     * @return UpdateUserResult indicating success or specific failure
+     */
+    fun updateBatch(
+        userId: UUID,
+        email: String? = null,
+        phone: String? = null,
+        isVerified: Boolean? = null,
+        status: UserStatus? = null,
+        profile: UserProfile? = null,
+        customAttributes: Map<String, String>? = null,
+        currentTime: LocalDateTime
+    ): UpdateUserResult
 
     sealed interface CreateResult {
         sealed interface Duplicate : CreateResult
@@ -102,11 +130,6 @@ internal interface UserRepository {
     sealed interface UpdateRolesResult : UpdateResult {
         data object Success : UpdateRolesResult
         data class InvalidRole(val roleName: String) : UpdateRolesResult, UpdateResult.NotFound
-    }
-
-    sealed interface UpdateCustomAttributesResult : UpdateResult {
-        data class Success(val user: UserEntity) : UpdateCustomAttributesResult
-        data object NotFound : UpdateCustomAttributesResult, UpdateResult.NotFound
     }
 
     sealed interface DeleteResult {
