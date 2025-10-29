@@ -27,7 +27,17 @@ public enum class ActorType {
     USER,
     ADMIN,
     SYSTEM,
-    ANONYMOUS
+    ANONYMOUS;
+
+    public companion object {
+        public fun fromString(value: String): ActorType = when (value.uppercase()) {
+            "USER" -> USER
+            "ADMIN" -> ADMIN
+            "SYSTEM" -> SYSTEM
+            "ANONYMOUS" -> ANONYMOUS
+            else -> USER
+        }
+    }
 }
 
 /**
@@ -36,5 +46,14 @@ public enum class ActorType {
 public enum class EventResult {
     SUCCESS,
     FAILURE,
-    PARTIAL_SUCCESS
+    PARTIAL_SUCCESS;
+
+    public companion object {
+        public fun fromString(value: String): EventResult = when (value.uppercase()) {
+            "SUCCESS" -> SUCCESS
+            "FAILURE" -> FAILURE
+            "PARTIAL_SUCCESS", "PARTIAL" -> PARTIAL_SUCCESS
+            else -> SUCCESS
+        }
+    }
 }

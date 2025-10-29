@@ -8,6 +8,7 @@ import com.mustafadakhel.kodex.repository.TokenRepository
 import com.mustafadakhel.kodex.util.exposedTransaction
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
@@ -31,9 +32,11 @@ private object ExposedTokenRepository : TokenRepository {
         }
     }.value
 
-    override fun revokeToken(tokenHash: String) {
-        TokenDao.find { Tokens.tokenHash eq tokenHash }
-            .forEach { it.revoked = true }
+    override fun revokeToken(tokenHash: String): Unit = exposedTransaction {
+        Tokens.update({ Tokens.tokenHash eq tokenHash }) {
+            it[Tokens.revoked] = true
+        }
+        Unit
     }
 
     override fun findToken(tokenId: UUID): PersistedToken? = exposedTransaction {
@@ -44,13 +47,16 @@ private object ExposedTokenRepository : TokenRepository {
         TokenDao.findById(tokenId)?.delete() ?: throw NoSuchElementException("Token with id $tokenId not found")
     }
 
-    override fun deleteToken(tokenHash: String) = exposedTransaction {
-        TokenDao.find { Tokens.tokenHash eq tokenHash }
-            .forEach { it.delete() }
+    override fun deleteToken(tokenHash: String): Unit = exposedTransaction {
+        Tokens.deleteWhere { Tokens.tokenHash eq tokenHash }
+        Unit
     }
 
-    override fun revokeTokens(userId: UUID) = exposedTransaction {
-        TokenDao.find { Tokens.userId eq userId }.forEach { it.revoked = true }
+    override fun revokeTokens(userId: UUID): Unit = exposedTransaction {
+        Tokens.update({ Tokens.userId eq userId }) {
+            it[Tokens.revoked] = true
+        }
+        Unit
     }
 
     override fun markTokenAsUsedIfUnused(tokenId: UUID, now: kotlinx.datetime.LocalDateTime): Boolean = exposedTransaction {
@@ -69,9 +75,11 @@ private object ExposedTokenRepository : TokenRepository {
             ?.toEntity()
     }
 
-    override fun revokeTokenFamily(tokenFamily: UUID) = exposedTransaction {
-        TokenDao.find { Tokens.tokenFamily eq tokenFamily }
-            .forEach { it.revoked = true }
+    override fun revokeTokenFamily(tokenFamily: UUID): Unit = exposedTransaction {
+        Tokens.update({ Tokens.tokenFamily eq tokenFamily }) {
+            it[Tokens.revoked] = true
+        }
+        Unit
     }
 
     override fun findTokensByFamily(tokenFamily: UUID): List<PersistedToken> = exposedTransaction {

@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.update.FieldUpdate
 import com.mustafadakhel.kodex.util.exposedTransaction
 import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -146,42 +147,66 @@ private object ExposedUserRepository : UserRepository {
 
     override fun updateById(
         userId: UUID,
-        email: String?,
-        phone: String?,
-        isVerified: Boolean?,
-        status: UserStatus?,
+        email: FieldUpdate<String>,
+        phone: FieldUpdate<String>,
+        isVerified: FieldUpdate<Boolean>,
+        status: FieldUpdate<UserStatus>,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
         val user = UserDao.findById(userId) ?: run {
             return@exposedTransaction UserRepository.UpdateUserResult.NotFound
         }
 
-        email?.let {
-            // Only check for duplicates if changing to a different email
-            if (user.email != it) {
-                if (UserDao.find { Users.email eq it }.any()) {
-                    return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+        when (email) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                if (user.email != email.value) {
+                    if (UserDao.find { Users.email eq email.value }.any()) {
+                        return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+                    }
+                    user.email = email.value
                 }
-                user.email = it
+            }
+            is FieldUpdate.ClearValue -> {
+                user.email = null
             }
         }
 
-        phone?.let {
-            // Only check for duplicates if changing to a different phone
-            if (user.phoneNumber != it) {
-                if (UserDao.find { Users.phoneNumber eq it }.any()) {
-                    return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+        when (phone) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                if (user.phoneNumber != phone.value) {
+                    if (UserDao.find { Users.phoneNumber eq phone.value }.any()) {
+                        return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+                    }
+                    user.phoneNumber = phone.value
                 }
-                user.phoneNumber = it
+            }
+            is FieldUpdate.ClearValue -> {
+                user.phoneNumber = null
             }
         }
 
-        isVerified?.let {
-            user.isVerified = it
+        when (isVerified) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                user.isVerified = isVerified.value
+            }
+            is FieldUpdate.ClearValue -> {
+                // isVerified is non-nullable, so ClearValue doesn't make sense
+                // but we handle it for completeness
+            }
         }
 
-        status?.let {
-            user.status = it
+        when (status) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                user.status = status.value
+            }
+            is FieldUpdate.ClearValue -> {
+                // status is non-nullable, so ClearValue doesn't make sense
+                // but we handle it for completeness
+            }
         }
 
         user.updatedAt = currentTime
@@ -304,12 +329,12 @@ private object ExposedUserRepository : UserRepository {
 
     override fun updateBatch(
         userId: UUID,
-        email: String?,
-        phone: String?,
-        isVerified: Boolean?,
-        status: UserStatus?,
-        profile: UserProfile?,
-        customAttributes: Map<String, String>?,
+        email: FieldUpdate<String>,
+        phone: FieldUpdate<String>,
+        isVerified: FieldUpdate<Boolean>,
+        status: FieldUpdate<UserStatus>,
+        profile: FieldUpdate<UserProfile>,
+        customAttributes: FieldUpdate<Map<String, String>>,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
         // All operations in single transaction - all succeed or all fail
@@ -318,41 +343,81 @@ private object ExposedUserRepository : UserRepository {
         }
 
         // Update user fields
-        email?.let {
-            if (user.email != it) {
-                if (UserDao.find { Users.email eq it }.any()) {
-                    return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+        when (email) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                if (user.email != email.value) {
+                    if (UserDao.find { Users.email eq email.value }.any()) {
+                        return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
+                    }
+                    user.email = email.value
                 }
-                user.email = it
+            }
+            is FieldUpdate.ClearValue -> {
+                user.email = null
             }
         }
 
-        phone?.let {
-            if (user.phoneNumber != it) {
-                if (UserDao.find { Users.phoneNumber eq it }.any()) {
-                    return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+        when (phone) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                if (user.phoneNumber != phone.value) {
+                    if (UserDao.find { Users.phoneNumber eq phone.value }.any()) {
+                        return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
+                    }
+                    user.phoneNumber = phone.value
                 }
-                user.phoneNumber = it
+            }
+            is FieldUpdate.ClearValue -> {
+                user.phoneNumber = null
             }
         }
 
-        isVerified?.let { user.isVerified = it }
-        status?.let { user.status = it }
+        when (isVerified) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                user.isVerified = isVerified.value
+            }
+            is FieldUpdate.ClearValue -> { /* isVerified is non-nullable */ }
+        }
+
+        when (status) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                user.status = status.value
+            }
+            is FieldUpdate.ClearValue -> { /* status is non-nullable */ }
+        }
+
         user.updatedAt = currentTime
 
         // Update profile if provided
-        profile?.let {
-            UserProfileDao.findByIdAndUpdate(userId) { profileDao ->
-                profileDao.firstName = it.firstName
-                profileDao.lastName = it.lastName
-                profileDao.address = it.address
-                profileDao.profilePicture = it.profilePicture
+        when (profile) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                UserProfileDao.findByIdAndUpdate(userId) { profileDao ->
+                    profileDao.firstName = profile.value.firstName
+                    profileDao.lastName = profile.value.lastName
+                    profileDao.address = profile.value.address
+                    profileDao.profilePicture = profile.value.profilePicture
+                }
+            }
+            is FieldUpdate.ClearValue -> {
+                // Profile clearing would require deleting the profile row
+                UserProfileDao.findById(userId)?.delete()
             }
         }
 
         // Update custom attributes if provided
-        customAttributes?.let {
-            UserCustomAttributesDao.updateForUser(userId, it)
+        when (customAttributes) {
+            is FieldUpdate.NoChange -> { /* no change */ }
+            is FieldUpdate.SetValue -> {
+                UserCustomAttributesDao.updateForUser(userId, customAttributes.value)
+            }
+            is FieldUpdate.ClearValue -> {
+                // Clear all custom attributes
+                UserCustomAttributesDao.replaceAllForUser(userId, emptyMap())
+            }
         }
 
         UserRepository.UpdateUserResult.Success

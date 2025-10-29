@@ -2,10 +2,10 @@ package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
-import com.mustafadakhel.kodex.audit.ActorType
-import com.mustafadakhel.kodex.audit.AuditEvent
 import com.mustafadakhel.kodex.audit.AuditEvents
-import com.mustafadakhel.kodex.audit.EventResult
+import com.mustafadakhel.kodex.event.DefaultEventBus
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.SecurityEvent
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Claim
@@ -30,6 +30,7 @@ import kotlinx.datetime.toLocalDateTime
 import java.util.*
 import kotlin.time.Duration
 
+@Suppress("DEPRECATION") // Old audit hooks kept for backward compatibility during migration
 internal class DefaultTokenManager(
     private val jwtTokenIssuer: TokenIssuer,
     private val jwtTokenVerifier: TokenVerifier,
@@ -44,6 +45,7 @@ internal class DefaultTokenManager(
     private val extensions: ExtensionRegistry,
 ) : TokenManager {
     private val hookExecutor = HookExecutor(extensions)
+    private val eventBus: EventBus = DefaultEventBus(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
         val accessToken = issueToken(
@@ -142,23 +144,17 @@ internal class DefaultTokenManager(
                     tokenRepository.revokeTokenFamily(tokenFamily)
                 }
 
-                hookExecutor.executeAuditEvent(
-                    AuditEvent(
-                        eventType = AuditEvents.SECURITY_VIOLATION,
+                // Publish security event (new event bus system)
+                eventBus.publish(
+                    SecurityEvent.TokenReplayDetected(
+                        eventId = UUID.randomUUID(),
                         timestamp = clockNow,
-                        actorId = userId,
-                        actorType = ActorType.USER,
-                        targetId = tokenId,
-                        targetType = "refresh_token",
-                        result = EventResult.FAILURE,
-                        metadata = mapOf(
-                            "reason" to "Refresh token replay attack detected",
-                            "tokenId" to tokenId.toString(),
-                            "tokenFamily" to tokenFamily.toString(),
-                            "firstUsedAt" to persistedToken.firstUsedAt.toString(),
-                            "gracePeriodEnd" to gracePeriodEnd.toString()
-                        ),
-                        realmId = realm.owner
+                        realmId = realm.owner,
+                        userId = userId,
+                        tokenId = tokenId,
+                        tokenFamily = tokenFamily,
+                        firstUsedAt = persistedToken.firstUsedAt.toString(),
+                        gracePeriodEnd = gracePeriodEnd.toString()
                     )
                 )
 

@@ -58,8 +58,7 @@ internal class ExposedDbEngine(
                 Roles,
                 UserRoles,
                 UserProfiles,
-                UserCustomAttributes,
-                AuditLogs
+                UserCustomAttributes
             )
 
             // Create extension tables
@@ -83,8 +82,7 @@ internal class ExposedDbEngine(
                 Roles,
                 UserRoles,
                 UserProfiles,
-                UserCustomAttributes,
-                AuditLogs
+                UserCustomAttributes
             )
         }
         dataSource.takeIf { it.isClosed.not() }?.close()

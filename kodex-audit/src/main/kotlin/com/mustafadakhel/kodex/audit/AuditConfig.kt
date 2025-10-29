@@ -27,6 +27,7 @@ public class AuditConfig : ExtensionConfig() {
      * Default: ConsoleAuditProvider()
      *
      * Built-in providers:
+     * - DatabaseAuditProvider() - Persists to AuditLogs table (production)
      * - ConsoleAuditProvider() - Logs to console (development)
      * - NoOpAuditProvider() - Disables audit logging
      *

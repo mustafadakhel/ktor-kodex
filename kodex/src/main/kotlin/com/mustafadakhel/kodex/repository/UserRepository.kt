@@ -7,6 +7,7 @@ import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.RoleEntity
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.model.database.UserProfileEntity
+import com.mustafadakhel.kodex.update.FieldUpdate
 import kotlinx.datetime.LocalDateTime
 import java.util.*
 
@@ -42,10 +43,10 @@ internal interface UserRepository {
 
     fun updateById(
         userId: UUID,
-        email: String? = null,
-        phone: String? = null,
-        isVerified: Boolean? = null,
-        status: UserStatus? = null,
+        email: FieldUpdate<String> = FieldUpdate.NoChange(),
+        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
+        isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
         currentTime: LocalDateTime,
     ): UpdateUserResult
 
@@ -88,12 +89,12 @@ internal interface UserRepository {
      */
     fun updateBatch(
         userId: UUID,
-        email: String? = null,
-        phone: String? = null,
-        isVerified: Boolean? = null,
-        status: UserStatus? = null,
-        profile: UserProfile? = null,
-        customAttributes: Map<String, String>? = null,
+        email: FieldUpdate<String> = FieldUpdate.NoChange(),
+        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
+        isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
+        profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange(),
+        customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange(),
         currentTime: LocalDateTime
     ): UpdateUserResult
 

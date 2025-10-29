@@ -41,7 +41,16 @@ dependencies {
     // Ktor dependencies (for KtorDsl annotation)
     implementation(libs.bundles.ktor.server)
 
+    // Exposed dependencies for database access
+    implementation(libs.bundles.exposed)
+    implementation(libs.hikari)
+
+    // kotlinx.datetime for timestamp handling
+    implementation(libs.kotlinx.datetime)
+
     // Test dependencies
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
+    testImplementation(libs.h2.database)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
