@@ -66,6 +66,11 @@ public sealed class KodexThrowable(
         public data object UnverifiedAccount : Authorization("Account not verified") {
             private fun readResolve(): Any = UnverifiedAccount
         }
+
+        public data class AccountLocked(
+            val lockedUntil: kotlinx.datetime.LocalDateTime,
+            val reason: String
+        ) : Authorization("Account is locked until $lockedUntil. Reason: $reason")
     }
 
     public data class RoleNotFound(

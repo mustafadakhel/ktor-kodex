@@ -13,6 +13,7 @@ internal data class RealmConfig(
     internal val tokenConfig: TokenConfig,
     internal val rolesConfig: RolesConfig,
     internal val passwordHashingConfig: PasswordHashingConfig,
+    internal val accountLockoutConfig: AccountLockoutConfig,
     val timeZone: TimeZone
 )
 
@@ -38,6 +39,7 @@ public class RealmConfigScope internal constructor(
     private var tokenValidityConfig: TokenConfig = TokenConfig()
     private var rolesConfig: RolesConfig = RolesConfig(realm)
     private var passwordHashingConfigScope: PasswordHashingConfigScope = PasswordHashingConfigScope()
+    private var accountLockoutConfigScope: AccountLockoutConfigScope = AccountLockoutConfigScope()
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
 
     /** Configure the secrets used to sign and verify tokens. */
@@ -65,6 +67,11 @@ public class RealmConfigScope internal constructor(
         passwordHashingConfigScope.apply(block)
     }
 
+    /** Configure account lockout policy for failed login attempts. */
+    public fun accountLockout(block: AccountLockoutConfigScope.() -> Unit) {
+        accountLockoutConfigScope.apply(block)
+    }
+
     /**
      * Finalises this scope returning an immutable [RealmConfig].
      * Called by the plugin during installation.
@@ -74,6 +81,7 @@ public class RealmConfigScope internal constructor(
         val claimConfig = claimsConfigScope
         val tokenValidity = tokenValidityConfig
         val passwordHashingConfig = passwordHashingConfigScope.build()
+        val accountLockoutConfig = accountLockoutConfigScope.build()
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")
         if (claimConfig.issuer.isNullOrBlank()) throw IllegalArgumentException("Issuer must be provided")
         if (claimConfig.audience.isNullOrBlank()) throw IllegalArgumentException("Audience must be provided")
@@ -84,6 +92,7 @@ public class RealmConfigScope internal constructor(
             tokenConfig = tokenValidity,
             rolesConfig = rolesConfig,
             passwordHashingConfig = passwordHashingConfig,
+            accountLockoutConfig = accountLockoutConfig,
             timeZone = timeZone,
         )
     }

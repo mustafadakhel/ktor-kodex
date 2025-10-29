@@ -7,6 +7,8 @@ import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.model.database.UserProfileEntity
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
+import com.mustafadakhel.kodex.security.AccountLockoutService
+import com.mustafadakhel.kodex.security.LockoutResult
 import com.mustafadakhel.kodex.throwable.KodexThrowable.*
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
@@ -20,6 +22,7 @@ internal class KodexRealmService(
     private val hashingService: HashingService,
     private val timeZone: TimeZone,
     internal val realm: Realm,
+    private val accountLockoutService: AccountLockoutService,
 ) : KodexService {
 
     override fun getAllUsers(): List<User> {
@@ -97,10 +100,34 @@ internal class KodexRealmService(
     }
 
     override suspend fun tokenByEmail(email: String, password: String): TokenPair {
+        checkLockout(email)
+
         val user = userRepository.findByEmail(email)
-            ?: throw Authorization.InvalidCredentials
-        authenticateInternal(password, user.id)
-        if (!user.isVerified) throw Authorization.UnverifiedAccount
+        if (user == null) {
+            accountLockoutService.recordFailedAttempt(
+                identifier = email,
+                ipAddress = "unknown",
+                userAgent = null,
+                reason = "User not found"
+            )
+            throw Authorization.InvalidCredentials
+        }
+
+        if (!authenticateInternal(password, user.id)) {
+            accountLockoutService.recordFailedAttempt(
+                identifier = email,
+                ipAddress = "unknown",
+                userAgent = null,
+                reason = "Invalid password"
+            )
+            throw Authorization.InvalidCredentials
+        }
+
+        if (!user.isVerified) {
+            throw Authorization.UnverifiedAccount
+        }
+
+        accountLockoutService.clearFailedAttempts(email)
         return generateTokenInternal(user.id)
     }
 
@@ -108,18 +135,50 @@ internal class KodexRealmService(
         phone: String,
         password: String
     ): TokenPair {
+        checkLockout(phone)
+
         val user = userRepository.findByPhone(phone)
-            ?: throw Authorization.InvalidCredentials
-        authenticateInternal(password, user.id)
-        if (!user.isVerified) throw Authorization.UnverifiedAccount
+        if (user == null) {
+            accountLockoutService.recordFailedAttempt(
+                identifier = phone,
+                ipAddress = "unknown",
+                userAgent = null,
+                reason = "User not found"
+            )
+            throw Authorization.InvalidCredentials
+        }
+
+        if (!authenticateInternal(password, user.id)) {
+            accountLockoutService.recordFailedAttempt(
+                identifier = phone,
+                ipAddress = "unknown",
+                userAgent = null,
+                reason = "Invalid password"
+            )
+            throw Authorization.InvalidCredentials
+        }
+
+        if (!user.isVerified) {
+            throw Authorization.UnverifiedAccount
+        }
+
+        accountLockoutService.clearFailedAttempts(phone)
         return generateTokenInternal(user.id)
     }
 
-    private fun authenticateInternal(password: String, userId: UUID) {
-        val storedPassword = userRepository.getHashedPassword(userId)
-            ?: throw Authorization.InvalidCredentials
-        val success = hashingService.verify(password, storedPassword)
-        if (!success) throw Authorization.InvalidCredentials
+    private fun checkLockout(identifier: String) {
+        val lockoutResult = accountLockoutService.checkLockout(identifier, timeZone)
+        if (lockoutResult is LockoutResult.Locked) {
+            throw Authorization.AccountLocked(
+                lockedUntil = lockoutResult.lockedUntil,
+                reason = lockoutResult.reason
+            )
+        }
+    }
+
+    private fun authenticateInternal(password: String, userId: UUID): Boolean {
+        val storedPassword = userRepository.getHashedPassword(userId) ?: return false
+        return hashingService.verify(password, storedPassword)
     }
 
     private suspend fun generateTokenInternal(userId: UUID): TokenPair {

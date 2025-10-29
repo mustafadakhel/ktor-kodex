@@ -1,14 +1,13 @@
 # ktor-kodex
 
-`ktor-kodex` is a Ktor plugin that provides user management and JWT based authentication. It allows you to configure
-multiple realms, issue access and refresh tokens and integrate kodex aware routes in your Ktor application. A minimal
-sample application is included in this repository.
+`ktor-kodex` is a production-ready Ktor plugin that provides enterprise-grade user management and JWT authentication. It features secure password hashing with Argon2id, automatic brute force protection, multi-realm support, and flexible role-based access control. Built for performance and security, it allows you to configure independent authentication realms and seamlessly integrate authentication into your Ktor application.
 
 ## Features
 
 - **Multi realm support** – create independent authentication realms with their own secrets and claims
 - **JWT token generation and verification** – access and refresh tokens signed using HS256
 - **Secure password hashing** – Argon2id with configurable parameters and industry presets
+- **Account lockout protection** – automatic brute force protection with configurable policies
 - **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
 - **Role management** – roles are stored per realm and attached to issued tokens
 - **Ktor routing helpers** – easily protect routes and retrieve the appropriate `KodexService`
@@ -126,11 +125,79 @@ realm("admin") {
     passwordHashing {
         algorithm = Argon2id.balanced()
     }
+    accountLockout {
+        policy = AccountLockoutPolicy.moderate()  // 5 attempts, 15min window, 30min lockout
+    }
 }
 ```
 
 Database connectivity is configured in the `database` block where a `HikariConfig` is available. After installation you
 can obtain services using `application.kodex.serviceOf(realm)`.
+
+### Password hashing
+
+Kodex uses Argon2id for secure password hashing with industry-standard presets:
+
+```kotlin
+passwordHashing {
+    algorithm = Argon2id.springSecurity()  // Spring Security defaults
+    // or
+    algorithm = Argon2id.keycloak()        // Keycloak defaults
+    // or
+    algorithm = Argon2id.owaspMinimum()    // OWASP minimum recommendations
+    // or
+    algorithm = Argon2id.balanced()        // Balanced security/performance (default)
+}
+```
+
+You can also customize parameters:
+
+```kotlin
+passwordHashing {
+    algorithm = Argon2id(
+        saltLength = 16,
+        hashLength = 32,
+        parallelism = 1,
+        memory = 65536,      // 64 MB
+        iterations = 3
+    )
+}
+```
+
+### Account lockout
+
+Protect against brute force attacks with automatic account lockout:
+
+```kotlin
+accountLockout {
+    policy = AccountLockoutPolicy.strict()    // 3 attempts, 15min window, 1hr lockout
+    // or
+    policy = AccountLockoutPolicy.moderate()  // 5 attempts, 15min window, 30min lockout (default)
+    // or
+    policy = AccountLockoutPolicy.lenient()   // 10 attempts, 30min window, 15min lockout
+    // or
+    policy = AccountLockoutPolicy.disabled()  // No lockout
+}
+```
+
+Custom policy:
+
+```kotlin
+accountLockout {
+    policy = AccountLockoutPolicy(
+        maxFailedAttempts = 5,
+        attemptWindow = 15.minutes,      // Track attempts within this window
+        lockoutDuration = 30.minutes     // Lock for this duration
+    )
+}
+```
+
+**How it works:**
+- Failed login attempts are tracked per identifier (email/phone)
+- After N failures within the attempt window, the account locks automatically
+- Lockout expires after the configured duration
+- Successful login clears all failed attempts
+- Prevents username enumeration by tracking non-existent users
 
 ### Routing helpers
 
