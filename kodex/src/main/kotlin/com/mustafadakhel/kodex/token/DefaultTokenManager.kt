@@ -30,7 +30,6 @@ import kotlinx.datetime.toLocalDateTime
 import java.util.*
 import kotlin.time.Duration
 
-@Suppress("DEPRECATION") // Old audit hooks kept for backward compatibility during migration
 internal class DefaultTokenManager(
     private val jwtTokenIssuer: TokenIssuer,
     private val jwtTokenVerifier: TokenVerifier,
@@ -48,16 +47,19 @@ internal class DefaultTokenManager(
     private val eventBus: EventBus = DefaultEventBus(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
+        val tokenFamily = UUID.randomUUID()
         val accessToken = issueToken(
             userId = userId,
             validityMs = tokenValidity.access,
             tokenType = TokenType.AccessToken,
+            tokenFamily = tokenFamily,
             roles = roles
         )
         val refreshToken = issueToken(
             userId = userId,
             validityMs = tokenValidity.refresh,
             tokenType = TokenType.RefreshToken,
+            tokenFamily = tokenFamily,
             roles = roles
         )
         return TokenPair(accessToken.token, refreshToken.token)
@@ -112,6 +114,14 @@ internal class DefaultTokenManager(
         val credential = JWTCredential(decodedJWT)
         val tokenId = credential.tokenId
             ?: throw KodexThrowable.Authorization.SuspiciousToken("Refresh token does not contain a valid token ID")
+
+        val persistedToken = tokenRepository.findToken(tokenId)
+            ?: throw KodexThrowable.Authorization.InvalidToken("Token not found")
+
+        if (persistedToken.userId != userId) {
+            throw KodexThrowable.Authorization.SuspiciousToken("Token does not belong to the specified user")
+        }
+
         tokenRepository.deleteToken(tokenId)
         return issueNewTokens(userId)
     }
@@ -126,10 +136,13 @@ internal class DefaultTokenManager(
         val credential = JWTCredential(decodedJWT)
         val tokenId = credential.tokenId
             ?: throw KodexThrowable.Authorization.SuspiciousToken("Refresh token does not contain a valid token ID")
-        val tokenHash = hashingService.hash(refreshToken)
 
-        val persistedToken = tokenRepository.findTokenByHash(tokenHash)
+        val persistedToken = tokenRepository.findToken(tokenId)
             ?: throw KodexThrowable.Authorization.InvalidToken("Token not found")
+
+        if (persistedToken.userId != userId) {
+            throw KodexThrowable.Authorization.SuspiciousToken("Token does not belong to the specified user")
+        }
 
         val wasMarked = tokenRepository.markTokenAsUsedIfUnused(tokenId, now)
 
@@ -166,7 +179,7 @@ internal class DefaultTokenManager(
         }
 
         val tokenFamily = persistedToken.tokenFamily ?: persistedToken.id
-        val newAccessToken = issueToken(userId, tokenValidity.access, TokenType.AccessToken, null, null)
+        val newAccessToken = issueToken(userId, tokenValidity.access, TokenType.AccessToken, tokenFamily, null)
         val newRefreshToken = issueToken(userId, tokenValidity.refresh, TokenType.RefreshToken, tokenFamily, tokenId)
 
         return TokenPair(
@@ -176,10 +189,12 @@ internal class DefaultTokenManager(
     }
 
     override fun revokeToken(token: String, delete: Boolean) {
-        val hash = hashingService.hash(token)
-        tokenRepository.revokeToken(hash)
+        val decodedJWT = JWT.decode(token)
+        val tokenId = decodedJWT.id?.toUuidOrNull()
+            ?: throw KodexThrowable.Authorization.SuspiciousToken("Token does not contain a valid token ID")
+        tokenRepository.revokeToken(tokenId)
         if (delete) {
-            tokenRepository.deleteToken(hash)
+            tokenRepository.deleteToken(tokenId)
         }
     }
 

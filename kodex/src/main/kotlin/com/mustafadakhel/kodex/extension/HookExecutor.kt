@@ -1,17 +1,28 @@
 package com.mustafadakhel.kodex.extension
 
 import com.mustafadakhel.kodex.model.UserProfile
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 /**
  * Executes hooks from registered extensions in a chained manner.
- * Supports multiple extensions of the same type, executing them in registration order.
+ * Supports multiple extensions of the same type, executing them in priority order.
+ *
+ * Lower priority extensions run first (e.g., priority 10 runs before priority 100).
+ *
+ * @param registry Extension registry containing all registered extensions
+ * @param failureStrategy Strategy for handling hook execution failures
  */
-internal class HookExecutor(private val registry: ExtensionRegistry) {
+internal class HookExecutor(
+    private val registry: ExtensionRegistry,
+    private val failureStrategy: HookFailureStrategy = HookFailureStrategy.FAIL_FAST
+) {
+    private val logger = LoggerFactory.getLogger(HookExecutor::class.java)
 
     /**
      * Executes beforeUserCreate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeUserCreate(
         email: String?,
@@ -21,14 +32,54 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
         profile: UserProfile?
     ): UserCreateData {
         var current = UserCreateData(email, phone, customAttributes, profile)
+        val failures = mutableListOf<HookFailure>()
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeUserCreate(
-                current.email,
-                current.phone,
-                password,
-                current.customAttributes,
-                current.profile
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        current = hook.beforeUserCreate(
+                            current.email,
+                            current.phone,
+                            password,
+                            current.customAttributes,
+                            current.profile
+                        )
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            current = hook.beforeUserCreate(
+                                current.email,
+                                current.phone,
+                                password,
+                                current.customAttributes,
+                                current.profile
+                            )
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            current = hook.beforeUserCreate(
+                                current.email,
+                                current.phone,
+                                password,
+                                current.customAttributes,
+                                current.profile
+                            )
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in beforeUserCreate", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during beforeUserCreate execution",
+                failures
             )
         }
 
@@ -38,6 +89,7 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeUserUpdate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeUserUpdate(
         userId: UUID,
@@ -45,9 +97,37 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
         phone: String?
     ): UserUpdateData {
         var current = UserUpdateData(email, phone)
+        val failures = mutableListOf<HookFailure>()
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeUserUpdate(userId, current.email, current.phone)
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        current = hook.beforeUserUpdate(userId, current.email, current.phone)
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            current = hook.beforeUserUpdate(userId, current.email, current.phone)
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            current = hook.beforeUserUpdate(userId, current.email, current.phone)
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in beforeUserUpdate", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during beforeUserUpdate execution",
+                failures
+            )
         }
 
         return current
@@ -56,6 +136,7 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeProfileUpdate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeProfileUpdate(
         userId: UUID,
@@ -65,14 +146,54 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
         profilePicture: String?
     ): UserProfileUpdateData {
         var current = UserProfileUpdateData(firstName, lastName, address, profilePicture)
+        val failures = mutableListOf<HookFailure>()
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeProfileUpdate(
-                userId,
-                current.firstName,
-                current.lastName,
-                current.address,
-                current.profilePicture
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        current = hook.beforeProfileUpdate(
+                            userId,
+                            current.firstName,
+                            current.lastName,
+                            current.address,
+                            current.profilePicture
+                        )
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            current = hook.beforeProfileUpdate(
+                                userId,
+                                current.firstName,
+                                current.lastName,
+                                current.address,
+                                current.profilePicture
+                            )
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            current = hook.beforeProfileUpdate(
+                                userId,
+                                current.firstName,
+                                current.lastName,
+                                current.address,
+                                current.profilePicture
+                            )
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in beforeProfileUpdate", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during beforeProfileUpdate execution",
+                failures
             )
         }
 
@@ -82,15 +203,44 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeCustomAttributesUpdate hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeCustomAttributesUpdate(
         userId: UUID,
         customAttributes: Map<String, String>
     ): Map<String, String> {
         var current = customAttributes
+        val failures = mutableListOf<HookFailure>()
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeCustomAttributesUpdate(userId, current)
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        current = hook.beforeCustomAttributesUpdate(userId, current)
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            current = hook.beforeCustomAttributesUpdate(userId, current)
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            current = hook.beforeCustomAttributesUpdate(userId, current)
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in beforeCustomAttributesUpdate", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during beforeCustomAttributesUpdate execution",
+                failures
+            )
         }
 
         return current
@@ -99,12 +249,41 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes beforeLogin hooks from all UserLifecycleHooks extensions.
      * Each extension receives the output of the previous extension (chaining).
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeBeforeLogin(identifier: String): String {
         var current = identifier
+        val failures = mutableListOf<HookFailure>()
 
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            current = hook.beforeLogin(current)
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        current = hook.beforeLogin(current)
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            current = hook.beforeLogin(current)
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            current = hook.beforeLogin(current)
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in beforeLogin", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during beforeLogin execution",
+                failures
+            )
         }
 
         return current
@@ -113,49 +292,39 @@ internal class HookExecutor(private val registry: ExtensionRegistry) {
     /**
      * Executes afterLoginFailure hooks from all UserLifecycleHooks extensions.
      * All extensions receive the same identifier.
+     * Extensions execute in priority order (lower priority first).
      */
     suspend fun executeAfterLoginFailure(identifier: String) {
-        registry.getAllOfType(UserLifecycleHooks::class).forEach { hook ->
-            hook.afterLoginFailure(identifier)
-        }
-    }
+        val failures = mutableListOf<HookFailure>()
 
-    /**
-     * Logs an audit event by calling all registered AuditHooks extensions.
-     * All extensions receive the same parameters.
-     *
-     * @deprecated Use EventBus.publish() with typed events instead.
-     * This method will be removed when AuditHooks interface is removed.
-     */
-    @Deprecated(
-        message = "Use EventBus.publish() with typed events (e.g., UserEvent.Created) instead",
-        level = DeprecationLevel.WARNING
-    )
-    @Suppress("DEPRECATION")
-    suspend fun logAuditEvent(
-        eventType: String,
-        timestamp: kotlinx.datetime.Instant,
-        realmId: String,
-        actorId: java.util.UUID? = null,
-        actorType: String = "USER",
-        targetId: java.util.UUID? = null,
-        targetType: String? = null,
-        result: String = "SUCCESS",
-        metadata: Map<String, String> = emptyMap(),
-        sessionId: java.util.UUID? = null
-    ) {
-        registry.getAllOfType(AuditHooks::class).forEach { hook ->
-            hook.logEvent(
-                eventType = eventType,
-                timestamp = timestamp,
-                realmId = realmId,
-                actorId = actorId,
-                actorType = actorType,
-                targetId = targetId,
-                targetType = targetType,
-                result = result,
-                metadata = metadata,
-                sessionId = sessionId
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        hook.afterLoginFailure(identifier)
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            hook.afterLoginFailure(identifier)
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            hook.afterLoginFailure(identifier)
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in afterLoginFailure", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during afterLoginFailure execution",
+                failures
             )
         }
     }

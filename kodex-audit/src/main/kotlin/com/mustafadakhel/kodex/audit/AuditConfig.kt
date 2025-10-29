@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.audit
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
+import com.mustafadakhel.kodex.extension.ExtensionContext
 import io.ktor.utils.io.*
 
 /**
@@ -35,7 +36,7 @@ public class AuditConfig : ExtensionConfig() {
      */
     public var provider: AuditProvider = ConsoleAuditProvider()
 
-    override fun build(context: com.mustafadakhel.kodex.extension.ExtensionContext): AuditExtension {
+    override fun build(context: ExtensionContext): AuditExtension {
         return AuditExtension(provider)
     }
 }

@@ -39,6 +39,13 @@ private object ExposedTokenRepository : TokenRepository {
         Unit
     }
 
+    override fun revokeToken(tokenId: UUID): Unit = exposedTransaction {
+        Tokens.update({ Tokens.id eq tokenId }) {
+            it[Tokens.revoked] = true
+        }
+        Unit
+    }
+
     override fun findToken(tokenId: UUID): PersistedToken? = exposedTransaction {
         TokenDao.findById(tokenId)?.toEntity()
     }

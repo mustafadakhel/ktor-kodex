@@ -8,14 +8,11 @@ import io.ktor.utils.io.*
  * Scope used to provide roles for the kodex realm.
  */
 public interface RolesConfigScope {
-    /** Adds a role with the given [name] and optional [description]. */
     public fun role(name: String, description: String? = null)
 
-    /** Adds multiple roles from a list. */
     public fun roles(list: List<Role>)
 }
 
-/** Internal builder implementing [RolesConfigScope]. */
 @KtorDsl
 internal class RolesConfig(
     realm: Realm,

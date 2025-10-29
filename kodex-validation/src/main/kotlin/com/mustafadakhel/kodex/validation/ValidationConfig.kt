@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.validation
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
+import com.mustafadakhel.kodex.extension.ExtensionContext
 import io.ktor.utils.io.*
 
 /**
@@ -68,7 +69,7 @@ public class ValidationConfig : ExtensionConfig() {
         customAttributesConfig.apply(block)
     }
 
-    override fun build(context: com.mustafadakhel.kodex.extension.ExtensionContext): ValidationExtension {
+    override fun build(context: ExtensionContext): ValidationExtension {
         val configImpl = ValidationConfigImpl(
             email = emailConfig.build(),
             phone = phoneConfig.build(),

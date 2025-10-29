@@ -3,6 +3,7 @@ package com.mustafadakhel.kodex.update
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.FullUser
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.throwable.KodexThrowable
@@ -257,7 +258,7 @@ internal class UpdateCommandProcessor(
      * Applies user field updates.
      */
     private fun applyUserFieldUpdates(
-        current: com.mustafadakhel.kodex.model.database.FullUserEntity,
+        current: FullUserEntity,
         updates: UserFieldUpdates
     ): UpdateResult {
         // Determine new values
@@ -300,7 +301,7 @@ internal class UpdateCommandProcessor(
      * Applies profile field updates.
      */
     private fun applyProfileFieldUpdates(
-        current: com.mustafadakhel.kodex.model.database.FullUserEntity,
+        current: FullUserEntity,
         updates: ProfileFieldUpdates
     ): UpdateResult {
         // Build new profile by applying updates to current profile
@@ -360,7 +361,7 @@ internal class UpdateCommandProcessor(
      * Applies custom attribute updates.
      */
     private fun applyAttributeUpdates(
-        current: com.mustafadakhel.kodex.model.database.FullUserEntity,
+        current: FullUserEntity,
         changes: AttributeChanges
     ): UpdateResult {
         val currentAttrs = current.customAttributes ?: emptyMap()
@@ -408,7 +409,7 @@ internal class UpdateCommandProcessor(
      * All updates succeed or all fail together - no partial updates.
      */
     private fun applyBatchUpdate(
-        current: com.mustafadakhel.kodex.model.database.FullUserEntity,
+        current: FullUserEntity,
         batch: UpdateUserBatch
     ): UpdateResult {
         // Extract values from batch fields

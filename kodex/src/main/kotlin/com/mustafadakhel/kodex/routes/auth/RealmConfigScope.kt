@@ -1,8 +1,5 @@
-@file:Suppress("DEPRECATION") // AuditHooks still supported during migration period
-
 package com.mustafadakhel.kodex.routes.auth
 
-import com.mustafadakhel.kodex.extension.AuditHooks
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.PersistentExtension
@@ -15,7 +12,6 @@ import io.ktor.utils.io.*
 import kotlinx.datetime.TimeZone
 import kotlin.reflect.KClass
 
-/** Internal representation of a built realm configuration. */
 internal data class RealmConfig(
     internal val realm: Realm,
     internal val secretsProvider: SecretsConfig,
@@ -25,7 +21,8 @@ internal data class RealmConfig(
     internal val passwordHashingConfig: PasswordHashingConfig,
     internal val tokenRotationConfig: TokenRotationConfig,
     internal val extensions: ExtensionRegistry,
-    val timeZone: TimeZone
+    val timeZone: TimeZone,
+    val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy
 )
 
 @KtorDsl
@@ -55,6 +52,13 @@ public class RealmConfigScope internal constructor(
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
 
     /**
+     * Strategy for handling hook execution failures.
+     * Default is FAIL_FAST (stop on first error).
+     */
+    public var hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy =
+        com.mustafadakhel.kodex.extension.HookFailureStrategy.FAIL_FAST
+
+    /**
      * Gets the extension context for this realm configuration.
      * Used internally by extension() function to pass context to extensions.
      */
@@ -63,32 +67,26 @@ public class RealmConfigScope internal constructor(
         return extensionContext(realm, timeZone)
     }
 
-    /** Configure the secrets used to sign and verify tokens. */
     public fun secrets(block: SecretsConfigScope.() -> Unit) {
         secretsConfigScope.block()
     }
 
-    /** Configure static claims added to issued tokens. */
     public fun claims(block: ClaimsConfigScope.() -> Unit) {
         claimsConfigScope.block()
     }
 
-    /** Configure roles available within this realm. */
     public fun roles(block: RolesConfigScope.() -> Unit) {
         rolesConfig.block()
     }
 
-    /** Customize token validity durations and persistence options. */
     public fun tokenValidity(block: TokenConfigScope.() -> Unit) {
         tokenValidityConfig.block()
     }
 
-    /** Configure password hashing algorithm. */
     public fun passwordHashing(block: PasswordHashingConfigScope.() -> Unit) {
         passwordHashingConfigScope.apply(block)
     }
 
-    /** Configure token rotation policy for refresh tokens. */
     public fun tokenRotation(block: TokenRotationConfigScope.() -> Unit) {
         tokenRotationConfigScope.apply(block)
     }
@@ -129,10 +127,6 @@ public class RealmConfigScope internal constructor(
         if (extension is UserLifecycleHooks) {
             @Suppress("UNCHECKED_CAST")
             registerExtension(UserLifecycleHooks::class, extension as UserLifecycleHooks)
-        }
-        if (extension is AuditHooks) {
-            @Suppress("UNCHECKED_CAST")
-            registerExtension(AuditHooks::class, extension as AuditHooks)
         }
         if (extension is PersistentExtension) {
             @Suppress("UNCHECKED_CAST")
@@ -186,6 +180,7 @@ public class RealmConfigScope internal constructor(
             tokenRotationConfig = tokenRotationConfig,
             extensions = extensionRegistry,
             timeZone = timeZone,
+            hookFailureStrategy = hookFailureStrategy
         )
     }
 }

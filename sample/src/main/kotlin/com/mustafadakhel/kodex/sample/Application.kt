@@ -98,7 +98,7 @@ private fun Application.setupAuthentication() {
 
 fun Application.setupAuthRouting() = routing {
     DefaultRealms.forEach { realm ->
-        val kodexService = kodex.serviceOf(realm)
+        val services = kodex.servicesOf(realm)
         route("/${realm.owner}/auth") {
             post("/register") {
                 val params = call.receiveParameters()
@@ -111,7 +111,7 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
-                    kodexService.createUser(
+                    services.userCommand.createUser(
                         email = email,
                         phone = null,
                         password = password,
@@ -138,8 +138,8 @@ fun Application.setupAuthRouting() = routing {
                 // or use status-page to handle exceptions globally
                 try {
                     val tokenPair = when {
-                        email != null -> kodexService.tokenByEmail(email, password)
-                        phone != null -> kodexService.tokenByPhone(phone, password)
+                        email != null -> services.authentication.tokenByEmail(email, password)
+                        phone != null -> services.authentication.tokenByPhone(phone, password)
                         else -> throw KodexThrowable.Authorization.InvalidCredentials
                     }
                     call.respond(tokenPair)
@@ -162,8 +162,8 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
-                    val user = kodexService.getUserByEmail(email)
-                    val newTokens = kodexService.refresh(user.id, refreshToken)
+                    val user = services.userQuery.getUserByEmail(email)
+                    val newTokens = services.tokens.refresh(user.id, refreshToken)
                     call.respond(newTokens)
                 } catch (e: Throwable) {
                     call.respondText("Unable to refresh token", status = HttpStatusCode.Unauthorized)
@@ -178,8 +178,8 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
-                    val user = kodexService.getUserByEmail(email)
-                    kodexService.setVerified(user.id, verified)
+                    val user = services.userQuery.getUserByEmail(email)
+                    services.verification.setVerified(user.id, verified)
                     call.respondText("Verification updated", status = HttpStatusCode.OK)
                 } catch (e: KodexThrowable.UserNotFound) {
                     call.respondText("User not found: $email", status = HttpStatusCode.NotFound)
