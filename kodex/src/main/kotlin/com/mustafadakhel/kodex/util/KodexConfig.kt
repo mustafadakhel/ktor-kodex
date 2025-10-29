@@ -16,7 +16,7 @@ import io.ktor.utils.io.*
 public class KodexConfig internal constructor() {
 
     internal val realmConfigScopes: MutableList<RealmConfigScope> = mutableListOf()
-    internal var dataSource: HikariDataSource = hikariDataSource()
+    private var dataSource: HikariDataSource? = null
 
     /**
      * Configure the JDBC connection used by the plugin.
@@ -26,7 +26,16 @@ public class KodexConfig internal constructor() {
      */
     public fun database(block: HikariConfig.() -> Unit) {
         val hikariConfig = HikariConfig().apply(block)
+        dataSource?.close()
         dataSource = HikariDataSource(hikariConfig)
+    }
+
+    /**
+     * Returns the configured datasource, or creates a default H2 datasource
+     * if none was configured by the user.
+     */
+    internal fun getDataSource(): HikariDataSource {
+        return dataSource ?: hikariDataSource()
     }
 
     /**

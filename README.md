@@ -1,6 +1,8 @@
 # ktor-kodex
 
-`ktor-kodex` is a Ktor plugin that provides user management and JWT based authentication. It allows you to configure multiple realms, issue access and refresh tokens and integrate kodex aware routes in your Ktor application. A minimal sample application is included in this repository.
+`ktor-kodex` is a Ktor plugin that provides user management and JWT based authentication. It allows you to configure
+multiple realms, issue access and refresh tokens and integrate kodex aware routes in your Ktor application. A minimal
+sample application is included in this repository.
 
 ## Features
 
@@ -12,13 +14,25 @@
 
 ## Getting started
 
-Add the library module to your Gradle build:
+Add the library to your project:
+
+In your `build.gradle.kts` file:
 
 ```kotlin
-implementation(project(":kodex"))
+// Make sure to include the maven central repository
+repositories {
+    mavenCentral()
+}
 ```
 
-Install and configure the plugin inside your `Application` module. The example below mirrors the setup found in the `sample` project:
+In your `dependencies` block:
+
+```kotlin
+implementation("com.mustafadakhel.kodex:kodex:latest-version")
+```
+
+Install and configure the plugin inside your `Application` module. The example below mirrors the setup found in the
+`sample` project:
 
 ```kotlin
 fun Application.configureKodex() {
@@ -36,7 +50,9 @@ fun Application.configureKodex() {
 }
 ```
 
-Once installed you can obtain an `KodexService` for a realm and use it to create users or issue tokens. Routes can be protected using `authenticateFor` and the additional helpers provided by the plugin. Inside an authenticated block the current `KodexPrincipal` is available via `call.kodex`:
+Once installed you can obtain an `KodexService` for a realm and use it to create users or issue tokens. Routes can be
+protected using `authenticateFor` and the additional helpers provided by the plugin. Inside an authenticated block the
+current `KodexPrincipal` is available via `call.kodex`:
 
 ```kotlin
 routing {
@@ -59,7 +75,10 @@ The returned `KodexPrincipal` exposes several details about the authenticated us
 
 ## Plugin configuration
 
-Each realm can define its own secrets, claims, token validity and roles. Secrets are mandatory and can either be provided directly or read from your application configuration. Claims specify the issuer and audience of the generated tokens and you may attach additional static claims. Token validity controls how long access and refresh tokens remain valid and whether they should be persisted. Example:
+Each realm can define its own secrets, claims, token validity and roles. Secrets are mandatory and can either be
+provided directly or read from your application configuration. Claims specify the issuer and audience of the generated
+tokens and you may attach additional static claims. Token validity controls how long access and refresh tokens remain
+valid and whether they should be persisted. Example:
 
 ```kotlin
 realm("admin") {
@@ -85,11 +104,14 @@ realm("admin") {
 }
 ```
 
-Database connectivity is configured in the `database` block where a `HikariConfig` is available. After installation you can obtain services using `application.kodex.serviceOf(realm)`.
+Database connectivity is configured in the `database` block where a `HikariConfig` is available. After installation you
+can obtain services using `application.kodex.serviceOf(realm)`.
 
 ### Routing helpers
 
-The plugin ships with utilities for building routes that automatically supply the authenticated user ID. `me {}` registers a route at `/me` while `id {}` binds to `/{id}`. Both return an `AuthorizedRoute` where the handler receives the resolved `UUID`:
+The plugin ships with utilities for building routes that automatically supply the authenticated user ID. `me {}`
+registers a route at `/me` while `id {}` binds to `/{id}`. Both return an `AuthorizedRoute` where the handler receives
+the resolved `UUID`:
 
 ```kotlin
 routing {
@@ -108,14 +130,16 @@ routing {
 
 ## Running the sample
 
-The sample uses an in-memory H2 database. Before starting the server provide the database password using the `DB_PASSWORD` environment variable:
+The sample uses an in-memory H2 database. Before starting the server provide the database password using the
+`DB_PASSWORD` environment variable:
 
 ```bash
 export DB_PASSWORD=YourStrongPassword
 ./gradlew :sample:run
 ```
 
-Point your browser to `http://localhost:8080` and interact with the authentication routes defined in `sample/Application.kt`.
+Point your browser to `http://localhost:8080` and interact with the authentication routes defined in
+`sample/Application.kt`.
 
 ## Running the tests
 
@@ -125,8 +149,11 @@ Unit tests for the plugin reside under the `kodex` module. Execute them with:
 ./gradlew :kodex:test
 ```
 
-> **Note**: Gradle requires network access to download dependencies on the first run. The execution environment used for this README might block outbound connections which can cause the command to fail.
+> **Note**: Gradle requires network access to download dependencies on the first run. The execution environment used for
+> this README might block outbound connections which can cause the command to fail.
 
 ## Realm roles and additional roles
 
-Tokens generated by this library contain a `roles` claim. The first entry is the realm role and is prefixed with `realm:` to distinguish it from any extra roles assigned to the user. When validating a token the library checks all role claims. A token remains valid only if the user still possesses at least one of the roles listed in the claim.
+Tokens generated by this library contain a `roles` claim. The first entry is the realm role and is prefixed with
+`realm:` to distinguish it from any extra roles assigned to the user. When validating a token the library checks all
+role claims. A token remains valid only if the user still possesses at least one of the roles listed in the claim.

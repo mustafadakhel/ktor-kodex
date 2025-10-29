@@ -55,7 +55,7 @@ public class Kodex private constructor(
             val kodexConfig = KodexConfig().apply(configure)
             val realmConfigs = kodexConfig.realmConfigScopes.map { it.build() }
 
-            pipeline.connectDatabase(kodexConfig.dataSource)
+            pipeline.connectDatabase(kodexConfig.getDataSource())
 
             val userRepository: UserRepository = databaseUserRepository()
             val databaseTokenRepository = databaseTokenRepository()
