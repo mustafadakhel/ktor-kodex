@@ -1,9 +1,11 @@
 package com.mustafadakhel.kodex.util
 
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
-internal val CurrentKotlinInstant get() = Clock.System.now()
+public val CurrentKotlinInstant: Instant get() = Clock.System.now()
 
-internal fun now(timeZone: TimeZone) = CurrentKotlinInstant.toLocalDateTime(timeZone)
+public fun now(timeZone: TimeZone): LocalDateTime = CurrentKotlinInstant.toLocalDateTime(timeZone)

@@ -6,6 +6,7 @@ import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.*
 import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe

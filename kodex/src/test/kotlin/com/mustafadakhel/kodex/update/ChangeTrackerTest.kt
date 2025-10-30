@@ -3,6 +3,7 @@ package com.mustafadakhel.kodex.update
 import com.mustafadakhel.kodex.model.FullUser
 import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.UserStatus
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldContainExactly

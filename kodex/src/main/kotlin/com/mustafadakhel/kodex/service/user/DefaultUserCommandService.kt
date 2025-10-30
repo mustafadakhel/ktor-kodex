@@ -13,8 +13,7 @@ import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
-import com.mustafadakhel.kodex.util.now
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.now as nowLocal
 import kotlinx.datetime.TimeZone
 import java.util.UUID
 
@@ -42,7 +41,7 @@ internal class DefaultUserCommandService(
         customAttributes: Map<String, String>?,
         profile: UserProfile?
     ): User? {
-        val timestamp = Clock.System.now()
+        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
 
         return try {
             // Execute beforeUserCreate hooks (validation, transformation)
@@ -55,7 +54,7 @@ internal class DefaultUserCommandService(
                 phone = transformed.phone,
                 hashedPassword = hashingService.hash(password),
                 roleNames = (listOf(realm.owner) + roleNames).distinct(),
-                currentTime = now(timeZone),
+                currentTime = nowLocal(timeZone),
                 customAttributes = transformed.customAttributes,
                 profile = transformed.profile
             )

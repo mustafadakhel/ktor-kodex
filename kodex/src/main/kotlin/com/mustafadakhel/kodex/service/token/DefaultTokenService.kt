@@ -8,7 +8,7 @@ import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
 
 /**
@@ -31,7 +31,7 @@ internal class DefaultTokenService(
         eventBus.publish(
             TokenEvent.Issued(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = realm.owner,
                 userId = userId,
                 tokenId = accessTokenId
@@ -50,7 +50,7 @@ internal class DefaultTokenService(
             eventBus.publish(
                 TokenEvent.Refreshed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm.owner,
                     userId = userId,
                     oldTokenId = oldTokenId,
@@ -63,7 +63,7 @@ internal class DefaultTokenService(
             eventBus.publish(
                 TokenEvent.RefreshFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm.owner,
                     userId = userId,
                     reason = e.message ?: "Unknown error"
@@ -79,7 +79,7 @@ internal class DefaultTokenService(
         eventBus.publish(
             TokenEvent.Revoked(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = realm.owner,
                 userId = userId,
                 revokedCount = -1
@@ -94,7 +94,7 @@ internal class DefaultTokenService(
         eventBus.publish(
             TokenEvent.Revoked(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = realm.owner,
                 userId = UUID(0, 0),
                 revokedCount = 1,
@@ -111,7 +111,7 @@ internal class DefaultTokenService(
             eventBus.publish(
                 TokenEvent.VerifyFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm.owner,
                     reason = exception.message ?: "Unknown error"
                 )

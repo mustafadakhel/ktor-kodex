@@ -14,7 +14,8 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import java.util.UUID
@@ -25,7 +26,7 @@ class UpdateResultTest : DescribeSpec({
         it("should create success result with user and changes") {
             val user = createTestFullUser()
             val changes = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = mapOf("email" to FieldChange("email", "old@test.com", "new@test.com"))
             )
 
@@ -37,7 +38,7 @@ class UpdateResultTest : DescribeSpec({
 
         it("should return true for hasChanges when fields changed") {
             val changes = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = mapOf("email" to FieldChange("email", "old", "new"))
             )
             val result = UpdateResult.Success(createTestFullUser(), changes)
@@ -47,7 +48,7 @@ class UpdateResultTest : DescribeSpec({
 
         it("should return false for hasChanges when no fields changed") {
             val changes = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = emptyMap()
             )
             val result = UpdateResult.Success(createTestFullUser(), changes)
@@ -156,14 +157,14 @@ class UpdateResultTest : DescribeSpec({
                 "email" to FieldChange("email", "old@test.com", "new@test.com"),
                 "phone" to FieldChange("phone", "+1234", "+5678")
             )
-            val changeSet = ChangeSet(Clock.System.now(), changes)
+            val changeSet = ChangeSet(CurrentKotlinInstant, changes)
 
             changeSet.changedFields shouldBe changes
         }
 
         it("should check if field was changed") {
             val changeSet = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = mapOf("email" to FieldChange("email", "old", "new"))
             )
 
@@ -174,7 +175,7 @@ class UpdateResultTest : DescribeSpec({
         it("should get field change") {
             val fieldChange = FieldChange("email", "old", "new")
             val changeSet = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = mapOf("email" to fieldChange)
             )
 
@@ -184,7 +185,7 @@ class UpdateResultTest : DescribeSpec({
 
         it("should return list of changed field names") {
             val changeSet = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = mapOf(
                     "email" to FieldChange("email", "a", "b"),
                     "phone" to FieldChange("phone", "c", "d"),
@@ -201,7 +202,7 @@ class UpdateResultTest : DescribeSpec({
 
         it("should return empty list when no changes") {
             val changeSet = ChangeSet(
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 changedFields = emptyMap()
             )
 
@@ -254,7 +255,7 @@ class UpdateResultTest : DescribeSpec({
                 val user = createTestFullUser()
                 val success = UpdateResult.Success(
                     user = user,
-                    changes = ChangeSet(Clock.System.now(), emptyMap())
+                    changes = ChangeSet(CurrentKotlinInstant, emptyMap())
                 )
 
                 val result = success.toResult()
@@ -312,7 +313,7 @@ class UpdateResultTest : DescribeSpec({
                 val user = createTestFullUser()
                 val success = UpdateResult.Success(
                     user = user,
-                    changes = ChangeSet(Clock.System.now(), emptyMap())
+                    changes = ChangeSet(CurrentKotlinInstant, emptyMap())
                 )
 
                 success.userOrThrow() shouldBe user
@@ -371,7 +372,7 @@ class UpdateResultTest : DescribeSpec({
 })
 
 private fun createTestFullUser(): FullUser {
-    val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+    val now = now(TimeZone.UTC)
     return FullUser(
         id = UUID.randomUUID(),
         phoneNumber = null,
