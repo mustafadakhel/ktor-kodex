@@ -1,10 +1,11 @@
 package com.mustafadakhel.kodex.model
 
 import com.mustafadakhel.kodex.util.ClaimsConfig
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.util.UUID
-import java.time.Instant
+import kotlin.time.Duration.Companion.seconds
 
 class JwtClaimsValidatorTest : FunSpec({
     val issuer = "issuer"
@@ -19,8 +20,8 @@ class JwtClaimsValidatorTest : FunSpec({
     val realm = Realm(realmValue)
     val validator = JwtClaimsValidator(claimProvider = claimsConfig, realm = realm)
 
-    fun futureExpSecs() = Instant.now().plusSeconds(60).epochSecond
-    fun pastExpSecs() = Instant.now().minusSeconds(60).epochSecond
+    fun futureExpSecs() = CurrentKotlinInstant.plus(60.seconds).epochSeconds
+    fun pastExpSecs() = CurrentKotlinInstant.minus(60.seconds).epochSeconds
 
     fun baseClaims(
         exp: Long = futureExpSecs(),

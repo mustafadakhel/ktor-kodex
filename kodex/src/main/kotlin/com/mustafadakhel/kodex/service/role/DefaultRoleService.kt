@@ -5,7 +5,7 @@ import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.throwable.KodexThrowable
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
 
 /**
@@ -25,7 +25,7 @@ internal class DefaultRoleService(
     }
 
     override suspend fun updateUserRoles(userId: UUID, roleNames: List<String>) {
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
 
         // Verify user exists
         userRepository.findById(userId) ?: throw KodexThrowable.UserNotFound("User with id $userId not found")

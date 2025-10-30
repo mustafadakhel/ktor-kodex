@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.audit
 
 import com.mustafadakhel.kodex.audit.database.AuditLogs
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
@@ -110,8 +110,8 @@ internal class DefaultAuditRetentionService(
      * - All logs before 2025-07-23 will be deleted
      */
     private fun calculateCutoffDate(): LocalDateTime {
-        val now = Clock.System.now()
-        val cutoffInstant = now - retentionPeriod
+        val nowInstant = CurrentKotlinInstant
+        val cutoffInstant = nowInstant - retentionPeriod
         return cutoffInstant.toLocalDateTime(timeZone)
     }
 }

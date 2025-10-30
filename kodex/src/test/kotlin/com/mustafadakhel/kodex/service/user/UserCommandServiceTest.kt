@@ -29,7 +29,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import java.util.UUID
@@ -236,7 +236,7 @@ class UserCommandServiceTest : FunSpec({
             customAttributes = null
         )
         val changeSet = ChangeSet(
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             changedFields = mapOf(
                 "email" to FieldChange("email", "old@example.com", testEmail)
             )
@@ -277,7 +277,7 @@ class UserCommandServiceTest : FunSpec({
             customAttributes = null
         )
         val changeSet = ChangeSet(
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             changedFields = emptyMap()
         )
         val successResult = UpdateResult.Success(fullUser, changeSet)
@@ -320,7 +320,7 @@ class UserCommandServiceTest : FunSpec({
             customAttributes = null
         )
         val changeSet = ChangeSet(
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             changedFields = mapOf(
                 "email" to FieldChange("email", testEmail, null)
             )
