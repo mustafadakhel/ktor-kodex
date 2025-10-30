@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.repository
 
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.UserEntity
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe

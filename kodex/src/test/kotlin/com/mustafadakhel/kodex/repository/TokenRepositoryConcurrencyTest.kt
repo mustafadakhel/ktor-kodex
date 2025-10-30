@@ -19,7 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.deleteAll
@@ -56,7 +57,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
     fun ensureUserExists(userId: UUID) {
         exposedTransaction {
             if (UserDao.findById(userId) == null) {
-                val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                val now = now(TimeZone.UTC)
                 UserDao.new(userId) {
                     this.email = "test-${userId}@example.com"
                     this.phoneNumber = null
@@ -76,7 +77,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
             val tokenHash = "test-token-hash-${Random.nextInt()}"
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
             val tokenId = repository.storeToken(
                 PersistedToken(
                     id = UUID.randomUUID(),
@@ -110,7 +111,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
         test("should handle concurrent revocations of different tokens") {
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
             val tokens = List(50) { index ->
                 val tokenHash = "concurrent-token-$index"
                 val tokenId = repository.storeToken(
@@ -152,7 +153,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
         test("should atomically revoke all user tokens under concurrent access") {
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
 
             // Create 20 tokens for the user
             val tokenIds = List(20) { index ->
@@ -192,7 +193,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
         test("should handle concurrent revocations across multiple users") {
             val users = List(10) { UUID.randomUUID() }
             users.forEach { ensureUserExists(it) }
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
 
             // Create 5 tokens per user (50 total)
             val allTokens = users.flatMap { userId ->
@@ -238,7 +239,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
             val tokenFamily = UUID.randomUUID()
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
 
             // Create 15 tokens in the same family
             val tokenIds = List(15) { index ->
@@ -280,7 +281,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
             val families = List(8) { UUID.randomUUID() }
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
 
             // Create 5 tokens per family (40 total)
             val allTokens = families.flatMap { family ->
@@ -325,7 +326,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
         test("should only mark token as used once despite concurrent attempts") {
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
             val tokenId = repository.storeToken(
                 PersistedToken(
                     id = UUID.randomUUID(),
@@ -364,7 +365,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
         test("should handle concurrent marking across multiple tokens") {
             val userId = UUID.randomUUID()
             ensureUserExists(userId)
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
 
             // Create 30 unused tokens
             val tokenIds = List(30) { index ->
@@ -414,7 +415,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
             val userIds = List(5) { UUID.randomUUID() }
             userIds.forEach { ensureUserExists(it) }
             val families = List(5) { UUID.randomUUID() }
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
 
             // Create 100 tokens (mix of users and families)
             val tokenData = List(100) { index ->

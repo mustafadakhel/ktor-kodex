@@ -5,7 +5,7 @@ import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.database.FullUserEntity
 import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.model.database.toUserProfile
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 
 /** Detects and tracks changes to user data. */
 internal class ChangeTracker {
@@ -175,7 +175,7 @@ internal class ChangeTracker {
         current: FullUser,
         batch: UpdateUserBatch
     ): ChangeSet {
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
         val allChanges = mutableMapOf<String, FieldChange>()
 
         batch.userFields?.let { updates ->
@@ -200,7 +200,7 @@ internal class ChangeTracker {
         current: FullUserEntity,
         command: UpdateCommand
     ): ChangeSet {
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
         return when (command) {
             is UpdateUserFields -> ChangeSet(
                 timestamp = timestamp,

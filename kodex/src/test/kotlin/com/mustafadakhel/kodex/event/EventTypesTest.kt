@@ -5,7 +5,7 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
 
 class EventTypesTest : DescribeSpec({
@@ -15,7 +15,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = UserEvent.Created(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     email = "test@example.com",
@@ -28,7 +28,7 @@ class EventTypesTest : DescribeSpec({
             it("should allow null email and phone") {
                 val event = UserEvent.Created(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     email = null,
@@ -42,7 +42,7 @@ class EventTypesTest : DescribeSpec({
             it("should have default actor type SYSTEM") {
                 val event = UserEvent.Created(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     email = "test@example.com",
@@ -55,7 +55,7 @@ class EventTypesTest : DescribeSpec({
             it("should allow custom actor type") {
                 val event = UserEvent.Created(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     email = "test@example.com",
@@ -71,7 +71,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = UserEvent.Updated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -88,7 +88,7 @@ class EventTypesTest : DescribeSpec({
                 )
                 val event = UserEvent.Updated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -103,7 +103,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = UserEvent.ProfileUpdated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -118,7 +118,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = UserEvent.RolesUpdated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     previousRoles = setOf("user"),
@@ -131,7 +131,7 @@ class EventTypesTest : DescribeSpec({
             it("should have default actor type ADMIN") {
                 val event = UserEvent.RolesUpdated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     previousRoles = setOf(),
@@ -146,7 +146,7 @@ class EventTypesTest : DescribeSpec({
                 val newRoles = setOf("user", "admin", "editor")
                 val event = UserEvent.RolesUpdated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     previousRoles = previousRoles,
@@ -162,7 +162,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = UserEvent.CustomAttributesUpdated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -177,7 +177,7 @@ class EventTypesTest : DescribeSpec({
                 val keys = setOf("department", "location", "level")
                 val event = UserEvent.CustomAttributesUpdated(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -194,7 +194,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = UserEvent.CustomAttributesReplaced(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -212,7 +212,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = AuthEvent.LoginSuccess(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     identifier = "test@example.com",
@@ -225,7 +225,7 @@ class EventTypesTest : DescribeSpec({
             it("should store login method") {
                 val event = AuthEvent.LoginSuccess(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     identifier = "test@example.com",
@@ -240,7 +240,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = AuthEvent.LoginFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     identifier = "test@example.com",
                     reason = "Invalid password",
@@ -253,7 +253,7 @@ class EventTypesTest : DescribeSpec({
             it("should allow null userId") {
                 val event = AuthEvent.LoginFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     identifier = "unknown@example.com",
                     reason = "User not found",
@@ -267,7 +267,7 @@ class EventTypesTest : DescribeSpec({
             it("should have default actor type ANONYMOUS") {
                 val event = AuthEvent.LoginFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     identifier = "test@example.com",
                     reason = "Invalid password",
@@ -280,7 +280,7 @@ class EventTypesTest : DescribeSpec({
             it("should store failure reason") {
                 val event = AuthEvent.LoginFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     identifier = "test@example.com",
                     reason = "Account locked",
@@ -295,7 +295,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = AuthEvent.PasswordChanged(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID()
@@ -309,7 +309,7 @@ class EventTypesTest : DescribeSpec({
                 val actorId = UUID.randomUUID()
                 val event = AuthEvent.PasswordChanged(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = userId,
                     actorId = actorId
@@ -324,7 +324,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = AuthEvent.PasswordChangeFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -337,7 +337,7 @@ class EventTypesTest : DescribeSpec({
             it("should store failure reason") {
                 val event = AuthEvent.PasswordChangeFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     actorId = UUID.randomUUID(),
@@ -352,7 +352,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = AuthEvent.PasswordReset(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID()
                 )
@@ -363,7 +363,7 @@ class EventTypesTest : DescribeSpec({
             it("should have default actor type ADMIN") {
                 val event = AuthEvent.PasswordReset(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID()
                 )
@@ -378,7 +378,7 @@ class EventTypesTest : DescribeSpec({
             it("should have correct event type") {
                 val event = SecurityEvent.TokenReplayDetected(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
                     tokenId = UUID.randomUUID(),
@@ -399,7 +399,7 @@ class EventTypesTest : DescribeSpec({
 
                 val event = SecurityEvent.TokenReplayDetected(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = userId,
                     tokenId = tokenId,
