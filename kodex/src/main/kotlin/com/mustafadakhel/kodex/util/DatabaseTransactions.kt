@@ -14,7 +14,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
  * kodexTransaction {
  *     FailedLoginAttempts.insert {
  *         it[identifier] = email
- *         it[attemptedAt] = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+ *         it[attemptedAt] = now(TimeZone.UTC)
  *         it[reason] = "Invalid credentials"
  *     }
  * }

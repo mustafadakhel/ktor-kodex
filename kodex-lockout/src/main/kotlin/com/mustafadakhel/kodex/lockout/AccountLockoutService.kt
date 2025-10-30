@@ -3,7 +3,8 @@ package com.mustafadakhel.kodex.lockout
 import com.mustafadakhel.kodex.lockout.database.AccountLockouts
 import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -38,8 +39,8 @@ internal class DefaultAccountLockoutService(
         if (!policy.enabled) return
 
         kodexTransaction {
-            val clockNow = Clock.System.now()
-            val now = clockNow.toLocalDateTime(TimeZone.UTC)
+            val clockNow = CurrentKotlinInstant
+            val nowLocal = clockNow.toLocalDateTime(TimeZone.UTC)
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
             // Clean old attempts only for this specific identifier
@@ -51,7 +52,7 @@ internal class DefaultAccountLockoutService(
             // Record the new failed attempt
             FailedLoginAttempts.insert {
                 it[FailedLoginAttempts.identifier] = identifier
-                it[attemptedAt] = now
+                it[attemptedAt] = nowLocal
                 it[FailedLoginAttempts.reason] = reason
             }
 
@@ -62,7 +63,7 @@ internal class DefaultAccountLockoutService(
             }.count()
 
             if (recentAttempts >= policy.maxFailedAttempts) {
-                lockAccount(identifier, recentAttempts.toInt(), now, clockNow)
+                lockAccount(identifier, recentAttempts.toInt(), nowLocal, clockNow)
             }
         }
     }
@@ -71,7 +72,7 @@ internal class DefaultAccountLockoutService(
         if (!policy.enabled) return LockoutResult.NotLocked
 
         return kodexTransaction {
-            val now = Clock.System.now().toLocalDateTime(timeZone)
+            val nowLocal = now(timeZone)
 
             val lockout = AccountLockouts.selectAll().where {
                 AccountLockouts.identifier eq identifier
@@ -82,7 +83,7 @@ internal class DefaultAccountLockoutService(
             }
 
             val lockedUntil = lockout[AccountLockouts.lockedUntil]
-            if (lockedUntil <= now) {
+            if (lockedUntil <= nowLocal) {
                 AccountLockouts.deleteWhere { AccountLockouts.identifier eq identifier }
                 return@kodexTransaction LockoutResult.NotLocked
             }
