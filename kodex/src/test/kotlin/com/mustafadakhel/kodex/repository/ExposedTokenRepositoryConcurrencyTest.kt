@@ -17,7 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.deleteAll
@@ -53,7 +54,7 @@ class ExposedTokenRepositoryConcurrencyTest : FunSpec({
     fun ensureUserExists(userId: UUID) {
         exposedTransaction {
             if (UserDao.findById(userId) == null) {
-                val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                val now = now(TimeZone.UTC)
                 UserDao.new(userId) {
                     this.email = "test-${userId}@example.com"
                     this.phoneNumber = null
@@ -388,7 +389,7 @@ private fun createToken(
     tokenFamily: UUID = UUID.randomUUID(),
     revoked: Boolean = false
 ): PersistedToken {
-    val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+    val now = now(TimeZone.UTC)
     return PersistedToken(
         id = UUID.randomUUID(),
         userId = userId,

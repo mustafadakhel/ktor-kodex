@@ -4,7 +4,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
@@ -13,9 +13,9 @@ class LocalDateTimeTest : DescribeSpec({
 
     describe("CurrentKotlinInstant") {
         it("should return current instant") {
-            val before = Clock.System.now()
+            val before = CurrentKotlinInstant
             val instant = CurrentKotlinInstant
-            val after = Clock.System.now()
+            val after = CurrentKotlinInstant
 
             instant.toEpochMilliseconds() shouldBeGreaterThanOrEqual before.toEpochMilliseconds()
             instant.toEpochMilliseconds() shouldBeLessThan (after.toEpochMilliseconds() + 1000)
@@ -35,7 +35,7 @@ class LocalDateTimeTest : DescribeSpec({
             val timeZone = TimeZone.UTC
             val localDateTime = now(timeZone)
 
-            val expected = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val expected = now(TimeZone.UTC)
             localDateTime.year shouldBe expected.year
             localDateTime.monthNumber shouldBe expected.monthNumber
             localDateTime.dayOfMonth shouldBe expected.dayOfMonth
@@ -45,7 +45,7 @@ class LocalDateTimeTest : DescribeSpec({
             val timeZone = TimeZone.of("America/New_York")
             val localDateTime = now(timeZone)
 
-            val expected = Clock.System.now().toLocalDateTime(timeZone)
+            val expected = now(timeZone)
             localDateTime.year shouldBe expected.year
             localDateTime.monthNumber shouldBe expected.monthNumber
             localDateTime.dayOfMonth shouldBe expected.dayOfMonth
@@ -55,7 +55,7 @@ class LocalDateTimeTest : DescribeSpec({
             val timeZone = TimeZone.of("Europe/London")
             val localDateTime = now(timeZone)
 
-            val expected = Clock.System.now().toLocalDateTime(timeZone)
+            val expected = now(timeZone)
             localDateTime.year shouldBe expected.year
             localDateTime.monthNumber shouldBe expected.monthNumber
         }
@@ -64,7 +64,7 @@ class LocalDateTimeTest : DescribeSpec({
             val timeZone = TimeZone.of("Asia/Tokyo")
             val localDateTime = now(timeZone)
 
-            val expected = Clock.System.now().toLocalDateTime(timeZone)
+            val expected = now(timeZone)
             localDateTime.year shouldBe expected.year
             localDateTime.monthNumber shouldBe expected.monthNumber
         }
