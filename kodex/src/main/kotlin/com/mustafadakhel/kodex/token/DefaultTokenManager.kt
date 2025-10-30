@@ -127,7 +127,7 @@ internal class DefaultTokenManager(
     }
 
     private suspend fun refreshWithRotation(userId: UUID, refreshToken: String): TokenPair {
-        val clockNow = Clock.System.now()
+        val clockNow = CurrentKotlinInstant
         val now = clockNow.toLocalDateTime(timeZone)
 
         val decodedJWT = JWT.decode(refreshToken)

@@ -20,6 +20,7 @@ import com.mustafadakhel.kodex.util.ClaimsConfig
 import com.mustafadakhel.kodex.util.Db
 import com.mustafadakhel.kodex.util.SecretsConfig
 import com.mustafadakhel.kodex.util.exposedTransaction
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now
 import com.mustafadakhel.kodex.util.setupExposedEngine
 import com.zaxxer.hikari.HikariConfig

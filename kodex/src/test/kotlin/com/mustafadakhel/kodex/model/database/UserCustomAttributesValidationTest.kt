@@ -7,7 +7,8 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.contain
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -21,7 +22,7 @@ class UserCustomAttributesValidationTest : DescribeSpec({
     beforeEach {
         transaction {
             // Create test user
-            val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+            val now = now(TimeZone.UTC)
             UserDao.new {
                 passwordHash = "hash"
                 createdAt = now

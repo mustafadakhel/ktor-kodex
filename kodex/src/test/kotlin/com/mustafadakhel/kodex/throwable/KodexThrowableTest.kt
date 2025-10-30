@@ -3,7 +3,8 @@ package com.mustafadakhel.kodex.throwable
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import java.util.UUID
@@ -152,7 +153,7 @@ class KodexThrowableTest : DescribeSpec({
 
         describe("AccountLocked") {
             it("should include locked until and reason in message") {
-                val lockedUntil = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                val lockedUntil = now(TimeZone.UTC)
                 val exception = KodexThrowable.Authorization.AccountLocked(
                     lockedUntil = lockedUntil,
                     reason = "Too many failed login attempts"

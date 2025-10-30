@@ -8,7 +8,7 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.Collections
 import java.util.UUID
@@ -69,7 +69,7 @@ class EventBusTest : FunSpec({
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -106,7 +106,7 @@ class EventBusTest : FunSpec({
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "UPDATE"
@@ -137,7 +137,7 @@ class EventBusTest : FunSpec({
 
             val event1 = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -145,7 +145,7 @@ class EventBusTest : FunSpec({
 
             val event2 = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "UPDATE"
@@ -183,7 +183,7 @@ class EventBusTest : FunSpec({
 
             val userEvent = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -191,7 +191,7 @@ class EventBusTest : FunSpec({
 
             val securityEvent = TestSecurityEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 severity = EventSeverity.CRITICAL
             )
@@ -248,7 +248,7 @@ class EventBusTest : FunSpec({
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -292,7 +292,7 @@ class EventBusTest : FunSpec({
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -324,7 +324,7 @@ class EventBusTest : FunSpec({
 
             val event1 = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -341,7 +341,7 @@ class EventBusTest : FunSpec({
 
             val event2 = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "UPDATE"
@@ -398,7 +398,7 @@ class EventBusTest : FunSpec({
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -429,7 +429,7 @@ class EventBusTest : FunSpec({
 
             val userEvent = TestUserEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 userId = UUID.randomUUID(),
                 action = "CREATE"
@@ -437,7 +437,7 @@ class EventBusTest : FunSpec({
 
             val securityEvent = TestSecurityEvent(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = "test-realm",
                 severity = EventSeverity.CRITICAL
             )
@@ -466,7 +466,7 @@ class EventBusTest : FunSpec({
 
             val baseEvent = object : KodexEvent {
                 override val eventId = UUID.randomUUID()
-                override val timestamp = Clock.System.now()
+                override val timestamp = CurrentKotlinInstant
                 override val realmId = "test-realm"
                 override val eventType = "BASE_EVENT"
             }
