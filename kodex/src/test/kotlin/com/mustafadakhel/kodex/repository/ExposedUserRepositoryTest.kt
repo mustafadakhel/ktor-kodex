@@ -226,7 +226,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val full = userRepository.findFullById(u.id)!!
             full.roles.map(RoleEntity::name)
-                .shouldContainExactlyInAnyOrder(roles)
+                .shouldContainExactlyInAnyOrder(*roles.toTypedArray())
             full.profile!!.address shouldBe "Addr"
             full.customAttributes?.shouldContainExactly(attrs)
         }

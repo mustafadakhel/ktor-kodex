@@ -90,8 +90,10 @@ private fun Application.setupAuthentication() {
                 audit {
                     provider = DatabaseAuditProvider()
                 }
+
+                // Configure metrics extension (uses SimpleMeterRegistry by default)
                 metrics {
-                    registry
+                    // registry = SimpleMeterRegistry() // default
                 }
             }
         }
@@ -115,7 +117,7 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
-                    services.userCommand.createUser(
+                    services.users.createUser(
                         email = email,
                         phone = null,
                         password = password,
@@ -142,8 +144,8 @@ fun Application.setupAuthRouting() = routing {
                 // or use status-page to handle exceptions globally
                 try {
                     val tokenPair = when {
-                        email != null -> services.authentication.tokenByEmail(email, password)
-                        phone != null -> services.authentication.tokenByPhone(phone, password)
+                        email != null -> services.auth.login(email, password)
+                        phone != null -> services.auth.loginByPhone(phone, password)
                         else -> throw KodexThrowable.Authorization.InvalidCredentials
                     }
                     call.respond(tokenPair)
@@ -166,7 +168,7 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
-                    val user = services.userQuery.getUserByEmail(email)
+                    val user = services.users.getUserByEmail(email)
                     val newTokens = services.tokens.refresh(user.id, refreshToken)
                     call.respond(newTokens)
                 } catch (e: Throwable) {
@@ -182,8 +184,8 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
-                    val user = services.userQuery.getUserByEmail(email)
-                    services.verification.setVerified(user.id, verified)
+                    val user = services.users.getUserByEmail(email)
+                    services.users.setVerified(user.id, verified)
                     call.respondText("Verification updated", status = HttpStatusCode.OK)
                 } catch (e: KodexThrowable.UserNotFound) {
                     call.respondText("User not found: $email", status = HttpStatusCode.NotFound)

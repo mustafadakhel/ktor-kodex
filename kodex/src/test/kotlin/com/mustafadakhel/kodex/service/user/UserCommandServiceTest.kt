@@ -42,7 +42,7 @@ class UserCommandServiceTest : FunSpec({
     lateinit var updateCommandProcessor: UpdateCommandProcessor
     lateinit var timeZone: TimeZone
     lateinit var realm: Realm
-    lateinit var userCommandService: UserCommandService
+    lateinit var userCommandService: UserService
 
     val testUserId = UUID.randomUUID()
     val testEmail = "test@example.com"
@@ -78,7 +78,7 @@ class UserCommandServiceTest : FunSpec({
         realm = mockk()
         every { realm.owner } returns realmOwner
 
-        userCommandService = DefaultUserCommandService(
+        userCommandService = DefaultUserService(
             userRepository,
             hashingService,
             hookExecutor,
