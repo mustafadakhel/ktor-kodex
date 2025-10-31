@@ -46,12 +46,20 @@ public interface UserLifecycleHooks : RealmExtension {
     }
 
     /** Called before login. Can check account status or transform identifier. */
-    public suspend fun beforeLogin(identifier: String): String {
+    public suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
         return identifier
     }
 
     /** Called after failed login attempt. */
-    public suspend fun afterLoginFailure(identifier: String) {
+    public suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
+    }
+
+    /** Called after successful authentication, before token generation. Extensions can check user state and throw to block login. */
+    public suspend fun afterAuthentication(userId: UUID) {
+    }
+
+    /** Called before user deletion. Extensions can perform cleanup (e.g., anonymize audit logs). */
+    public suspend fun beforeUserDelete(userId: UUID) {
     }
 }
 
@@ -72,4 +80,9 @@ public data class UserProfileUpdateData(
     val lastName: String?,
     val address: String?,
     val profilePicture: String?
+)
+
+public data class LoginMetadata(
+    val ipAddress: String,
+    val userAgent: String?
 )

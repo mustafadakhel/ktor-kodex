@@ -133,11 +133,8 @@ class AuthenticationFlowTest : FunSpec({
 
                     user.shouldNotBeNull()
                     user.email shouldBe "test@example.com"
-                    user.isVerified shouldBe false
 
-                    services.users.setVerified(user.id, true)
-
-                    val tokens = services.auth.login("test@example.com", "SecurePass123")
+                    val tokens = services.auth.login("test@example.com", "SecurePass123", "192.168.1.1", "TestAgent")
                     tokens.shouldNotBeNull()
                 }
             }
@@ -177,10 +174,8 @@ class AuthenticationFlowTest : FunSpec({
                         profile = null
                     )!!
 
-                    services.users.setVerified(user.id, true)
-
                     val result = runCatching {
-                        services.auth.login("wrongpass@example.com", "WrongPassword")
+                        services.auth.login("wrongpass@example.com", "WrongPassword", "192.168.1.1", "TestAgent")
                     }
 
                     result.isFailure shouldBe true
@@ -222,9 +217,7 @@ class AuthenticationFlowTest : FunSpec({
                         profile = null
                     )!!
 
-                    services.users.setVerified(user.id, true)
-
-                    val originalTokens = services.auth.login("refresh@example.com", "SecurePass123")
+                    val originalTokens = services.auth.login("refresh@example.com", "SecurePass123", "192.168.1.1", "TestAgent")
                     val refreshedTokens = services.tokens.refresh(user.id, originalTokens.refresh)
 
                     refreshedTokens.shouldNotBeNull()

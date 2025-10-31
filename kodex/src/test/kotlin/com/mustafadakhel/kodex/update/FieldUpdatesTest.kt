@@ -165,11 +165,6 @@ class FieldUpdatesTest : DescribeSpec({
                 updates.hasChanges() shouldBe true
             }
 
-            it("should return true when isVerified changes") {
-                val updates = UserFieldUpdates(isVerified = FieldUpdate.SetValue(true))
-                updates.hasChanges() shouldBe true
-            }
-
             it("should return true when status changes") {
                 val updates = UserFieldUpdates(status = FieldUpdate.SetValue(UserStatus.SUSPENDED))
                 updates.hasChanges() shouldBe true
@@ -198,10 +193,9 @@ class FieldUpdatesTest : DescribeSpec({
             it("should return all changed fields") {
                 val updates = UserFieldUpdates(
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.SetValue("+1234567890"),
-                    isVerified = FieldUpdate.SetValue(true)
+                    phone = FieldUpdate.SetValue("+1234567890")
                 )
-                updates.changedFields() shouldContainExactlyInAnyOrder listOf("email", "phone", "isVerified")
+                updates.changedFields() shouldContainExactlyInAnyOrder listOf("email", "phone")
             }
 
             it("should include fields cleared with ClearValue") {

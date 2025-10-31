@@ -62,7 +62,6 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                     this.email = "test-${userId}@example.com"
                     this.phoneNumber = null
                     this.passwordHash = "hashed"
-                    this.isVerified = false
                     this.status = UserStatus.ACTIVE
                     this.createdAt = now
                     this.updatedAt = now

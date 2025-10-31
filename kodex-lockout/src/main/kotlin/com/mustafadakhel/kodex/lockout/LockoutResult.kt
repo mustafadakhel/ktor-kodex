@@ -3,24 +3,30 @@ package com.mustafadakhel.kodex.lockout
 import kotlinx.datetime.LocalDateTime
 
 /**
- * Result of checking whether an account is locked out.
+ * Result of throttling checks (Layer 1 - identifier/IP based).
  */
-public sealed class LockoutResult {
-    /**
-     * Account is not locked.
-     */
-    public data object NotLocked : LockoutResult()
+public sealed class ThrottleResult {
+    /** Request can proceed */
+    public data object NotThrottled : ThrottleResult()
 
-    /**
-     * Account is currently locked due to too many failed attempts.
-     *
-     * @property lockedUntil Time when the lockout expires
-     * @property reason Human-readable reason for lockout
-     * @property failedAttemptCount Number of failed attempts that triggered lockout
-     */
-    public data class Locked(
-        val lockedUntil: LocalDateTime,
+    /** Request should be throttled */
+    public data class Throttled(
         val reason: String,
-        val failedAttemptCount: Int
-    ) : LockoutResult()
+        val attemptCount: Int
+    ) : ThrottleResult()
 }
+
+/**
+ * Result of account lockout check (Layer 2 - real accounts only).
+ */
+public sealed class LockAccountResult {
+    /** No action needed */
+    public data object NoAction : LockAccountResult()
+
+    /** Account should be locked */
+    public data class ShouldLock(
+        val lockedUntil: LocalDateTime,
+        val attemptCount: Int
+    ) : LockAccountResult()
+}
+

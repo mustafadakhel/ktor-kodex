@@ -13,7 +13,6 @@ internal object Users : UUIDTable() {
     val passwordHash = varchar("password_hash", 255)
     val createdAt = datetime("created_at").defaultExpression(CurrentDateTime)
     val updatedAt = datetime("updated_at").defaultExpression(CurrentDateTime)
-    val isVerified = bool("is_verified").default(false)
     val phoneNumber = varchar("phone_number", 20).nullable().uniqueIndex()
     val email = varchar("email", 255).nullable().uniqueIndex()
     val lastLoginAt = datetime("last_login_at").nullable()
@@ -26,7 +25,6 @@ internal class UserDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var passwordHash by Users.passwordHash
     var createdAt by Users.createdAt
     var updatedAt by Users.updatedAt
-    var isVerified by Users.isVerified
     var phoneNumber by Users.phoneNumber
     var email by Users.email
     var lastLoginAt by Users.lastLoginAt

@@ -42,19 +42,6 @@ internal class ChangeTracker {
             is FieldUpdate.NoChange -> {}
         }
 
-        when (val verifiedUpdate = updates.isVerified) {
-            is FieldUpdate.SetValue -> {
-                if (current.isVerified != verifiedUpdate.value) {
-                    put("isVerified", FieldChange("isVerified", current.isVerified, verifiedUpdate.value))
-                }
-            }
-            is FieldUpdate.ClearValue -> {
-                // isVerified is non-nullable, so clearing doesn't make sense
-                // This is a design decision: ignore ClearValue for non-nullable fields
-            }
-            is FieldUpdate.NoChange -> {}
-        }
-
         when (val statusUpdate = updates.status) {
             is FieldUpdate.SetValue -> {
                 if (current.status != statusUpdate.value) {

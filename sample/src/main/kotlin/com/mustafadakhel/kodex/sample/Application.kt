@@ -10,6 +10,8 @@ import com.mustafadakhel.kodex.metrics.metrics
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.validation.validation
+import com.mustafadakhel.kodex.verification.verification
+import com.mustafadakhel.kodex.verification.VerificationConfig
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -95,6 +97,33 @@ private fun Application.setupAuthentication() {
                 metrics {
                     // registry = SimpleMeterRegistry() // default
                 }
+
+                verification {
+                    strategy = VerificationConfig.VerificationStrategy.VERIFY_ALL_PROVIDED
+                    defaultTokenExpiration = 24.hours
+
+                    email {
+                        required = true
+                        autoSend = false  // Set to false until sender is implemented
+                        tokenExpiration = 24.hours
+                        // sender = EmailVerificationSender(emailProvider)  // TODO: Implement email sender
+                    }
+
+                    phone {
+                        required = true
+                        autoSend = false  // Set to false until sender is implemented
+                        tokenExpiration = 10.minutes  // SMS should expire faster
+                        // sender = SMSVerificationSender(twilioClient)  // TODO: Implement SMS sender
+                    }
+
+                    // Example: Custom attribute verification
+                    // customAttribute("discord") {
+                    //     required = false
+                    //     autoSend = false
+                    //     tokenExpiration = 30.minutes
+                    //     sender = DiscordVerificationSender(discordBot)
+                    // }
+                }
             }
         }
     }
@@ -143,9 +172,12 @@ fun Application.setupAuthRouting() = routing {
 
                 // or use status-page to handle exceptions globally
                 try {
+                    val ipAddress = call.request.local.remoteHost
+                    val userAgent = call.request.userAgent()
+
                     val tokenPair = when {
-                        email != null -> services.auth.login(email, password)
-                        phone != null -> services.auth.loginByPhone(phone, password)
+                        email != null -> services.auth.login(email, password, ipAddress, userAgent)
+                        phone != null -> services.auth.loginByPhone(phone, password, ipAddress, userAgent)
                         else -> throw KodexThrowable.Authorization.InvalidCredentials
                     }
                     call.respond(tokenPair)
@@ -180,16 +212,9 @@ fun Application.setupAuthRouting() = routing {
                 val params = call.receiveParameters()
                 val email =
                     params["email"] ?: return@post call.respondText("Missing email", status = HttpStatusCode.BadRequest)
-                val verified = params["verified"]?.toBoolean() ?: true
-
-                // or use status-page to handle exceptions globally
-                try {
-                    val user = services.users.getUserByEmail(email)
-                    services.users.setVerified(user.id, verified)
-                    call.respondText("Verification updated", status = HttpStatusCode.OK)
-                } catch (e: KodexThrowable.UserNotFound) {
-                    call.respondText("User not found: $email", status = HttpStatusCode.NotFound)
-                }
+                // Verification functionality moved to kodex-verification extension
+                // TODO: Update this endpoint once verification extension is implemented
+                call.respondText("Verification feature requires kodex-verification extension", status = HttpStatusCode.NotImplemented)
             }
         }
     }

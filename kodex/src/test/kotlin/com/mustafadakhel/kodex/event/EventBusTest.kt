@@ -124,7 +124,7 @@ class EventBusTest : FunSpec({
         }
 
         test("should deliver multiple events to subscriber") {
-            val receivedEvents = mutableListOf<TestUserEvent>()
+            val receivedEvents = Collections.synchronizedList(mutableListOf<TestUserEvent>())
 
             val subscriber = object : EventSubscriber<TestUserEvent> {
                 override val eventType: KClass<out TestUserEvent> = TestUserEvent::class

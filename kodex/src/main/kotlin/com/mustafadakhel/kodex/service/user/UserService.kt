@@ -42,12 +42,10 @@ public interface UserService {
 
     public suspend fun updateUser(command: UpdateCommand): UpdateResult
 
+    public suspend fun deleteUser(userId: UUID): Boolean
+
     // ==================== Role Management ====================
 
     public fun getSeededRoles(): List<String>
     public suspend fun updateUserRoles(userId: UUID, roleNames: List<String>)
-
-    // ==================== Verification ====================
-
-    public fun setVerified(userId: UUID, verified: Boolean)
 }
