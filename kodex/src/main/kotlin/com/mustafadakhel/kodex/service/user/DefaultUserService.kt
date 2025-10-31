@@ -3,27 +3,31 @@ package com.mustafadakhel.kodex.service.user
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.HookExecutor
+import com.mustafadakhel.kodex.model.FullUser
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.User
 import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.database.UserEntity
+import com.mustafadakhel.kodex.model.database.toFullUser
+import com.mustafadakhel.kodex.model.database.toUserProfile
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now as nowLocal
 import kotlinx.datetime.TimeZone
 import java.util.UUID
 
 /**
- * Default implementation of UserCommandService.
+ * Default implementation of UserService.
  *
- * This implementation orchestrates complex user creation and update workflows
- * including hook execution, validation, event publishing, and change tracking.
+ * Consolidates user queries, commands, profile management, role assignments,
+ * verification, and custom attributes into a single cohesive service.
  */
-internal class DefaultUserCommandService(
+internal class DefaultUserService(
     private val userRepository: UserRepository,
     private val hashingService: HashingService,
     private val hookExecutor: HookExecutor,
@@ -31,7 +35,60 @@ internal class DefaultUserCommandService(
     private val updateCommandProcessor: UpdateCommandProcessor,
     private val timeZone: TimeZone,
     private val realm: Realm
-) : UserCommandService {
+) : UserService {
+
+    // ==================== Query Operations ====================
+
+    override fun getAllUsers(): List<User> {
+        return userRepository.getAll().map { it.toUser() }
+    }
+
+    override fun getAllFullUsers(): List<FullUser> {
+        return userRepository.getAllFull().map { it.toFullUser() }
+    }
+
+    override fun getUser(userId: UUID): User {
+        return userRepository.findById(userId)?.toUser()
+            ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
+    }
+
+    override fun getUserOrNull(userId: UUID): User? {
+        return userRepository.findById(userId)?.toUser()
+    }
+
+    override fun getUserByEmail(email: String): User {
+        return userRepository.findByEmail(email)?.toUser()
+            ?: throw KodexThrowable.UserNotFound("User with email $email not found")
+    }
+
+    override fun getUserByPhone(phone: String): User {
+        return userRepository.findByPhone(phone)?.toUser()
+            ?: throw KodexThrowable.UserNotFound("User with phone number $phone not found")
+    }
+
+    override fun getFullUser(userId: UUID): FullUser {
+        return getFullUserOrNull(userId)
+            ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
+    }
+
+    override fun getFullUserOrNull(userId: UUID): FullUser? {
+        return userRepository.findFullById(userId)?.toFullUser()
+    }
+
+    override fun getUserProfile(userId: UUID): UserProfile {
+        return getUserProfileOrNull(userId)
+            ?: throw KodexThrowable.ProfileNotFound(userId)
+    }
+
+    override fun getUserProfileOrNull(userId: UUID): UserProfile? {
+        return userRepository.findProfileByUserId(userId)?.toUserProfile()
+    }
+
+    override fun getCustomAttributes(userId: UUID): Map<String, String> {
+        return userRepository.findCustomAttributesByUserId(userId)
+    }
+
+    // ==================== Command Operations ====================
 
     override suspend fun createUser(
         email: String?,
@@ -41,10 +98,9 @@ internal class DefaultUserCommandService(
         customAttributes: Map<String, String>?,
         profile: UserProfile?
     ): User? {
-        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
+        val timestamp = CurrentKotlinInstant
 
         return try {
-            // Execute beforeUserCreate hooks (validation, transformation)
             val transformed = hookExecutor.executeBeforeUserCreate(
                 email, phone, password, customAttributes, profile
             )
@@ -60,7 +116,6 @@ internal class DefaultUserCommandService(
             )
             val user = result.userOrThrow().toUser()
 
-            // Publish event
             eventBus.publish(
                 UserEvent.Created(
                     eventId = UUID.randomUUID(),
@@ -81,11 +136,9 @@ internal class DefaultUserCommandService(
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {
         val result = updateCommandProcessor.execute(command)
 
-        // Publish events for successful updates
         when (result) {
             is UpdateResult.Success -> {
                 if (result.hasChanges()) {
-                    // Build change metadata for event
                     val changeMetadata = buildMap<String, String> {
                         result.changes.changedFields.forEach { (fieldName, change) ->
                             put(fieldName, change.newValue?.toString() ?: "")
@@ -112,11 +165,55 @@ internal class DefaultUserCommandService(
         return result
     }
 
+    // ==================== Role Management ====================
+
+    override fun getSeededRoles(): List<String> {
+        return userRepository.getAllRoles().map { it.name }
+    }
+
+    override suspend fun updateUserRoles(userId: UUID, roleNames: List<String>) {
+        val timestamp = CurrentKotlinInstant
+
+        userRepository.findById(userId)
+            ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
+
+        val currentRoles = userRepository.findRoles(userId).map { it.name }
+
+        val result = userRepository.updateRolesForUser(userId, roleNames)
+
+        when (result) {
+            is UserRepository.UpdateRolesResult.Success -> {
+                eventBus.publish(
+                    UserEvent.RolesUpdated(
+                        eventId = UUID.randomUUID(),
+                        timestamp = timestamp,
+                        realmId = realm.owner,
+                        userId = userId,
+                        actorType = "ADMIN",
+                        previousRoles = currentRoles.toSet(),
+                        newRoles = roleNames.toSet()
+                    )
+                )
+            }
+            is UserRepository.UpdateRolesResult.InvalidRole -> {
+                throw KodexThrowable.RoleNotFound(result.roleName)
+            }
+        }
+    }
+
+    // ==================== Verification ====================
+
+    override fun setVerified(userId: UUID, verified: Boolean) {
+        userRepository.setVerified(userId, verified)
+    }
+
+    // ==================== Helper Functions ====================
+
     private fun UserRepository.CreateUserResult.userOrThrow() = when (this) {
         is UserRepository.CreateUserResult.EmailAlreadyExists ->
             throw KodexThrowable.EmailAlreadyExists()
-
-        is UserRepository.CreateUserResult.InvalidRole -> throw KodexThrowable.RoleNotFound(roleName)
+        is UserRepository.CreateUserResult.InvalidRole ->
+            throw KodexThrowable.RoleNotFound(roleName)
         is UserRepository.CreateUserResult.Success -> user
         is UserRepository.CreateUserResult.PhoneAlreadyExists ->
             throw KodexThrowable.PhoneAlreadyExists()

@@ -42,7 +42,7 @@ class TokenServiceTest : FunSpec({
 
         coEvery { tokenManager.issueNewTokens(userId) } returns expectedTokenPair
 
-        val result = tokenService.issueTokens(userId)
+        val result = tokenService.issue(userId)
 
         result shouldBe expectedTokenPair
         coVerify(exactly = 1) { tokenManager.issueNewTokens(userId) }
@@ -69,7 +69,7 @@ class TokenServiceTest : FunSpec({
 
         every { tokenManager.revokeTokensForUser(userId) } returns Unit
 
-        tokenService.revokeTokens(userId)
+        tokenService.revoke(userId)
 
         verify(exactly = 1) { tokenManager.revokeTokensForUser(userId) }
     }
@@ -107,7 +107,7 @@ class TokenServiceTest : FunSpec({
 
         every { tokenManager.verifyToken(any(), TokenType.AccessToken) } returns expectedPrincipal
 
-        val result = tokenService.verifyAccessToken(token)
+        val result = tokenService.verify(token)
 
         result shouldNotBe null
         result?.userId shouldBe userId
@@ -121,7 +121,7 @@ class TokenServiceTest : FunSpec({
 
         every { tokenManager.verifyToken(any(), TokenType.AccessToken) } throws RuntimeException("Invalid token")
 
-        val result = tokenService.verifyAccessToken(token)
+        val result = tokenService.verify(token)
 
         result shouldBe null
     }
@@ -129,7 +129,7 @@ class TokenServiceTest : FunSpec({
     test("verifyAccessToken should return null for malformed JWT") {
         val malformedToken = "not.a.valid.jwt"
 
-        val result = tokenService.verifyAccessToken(malformedToken)
+        val result = tokenService.verify(malformedToken)
 
         result shouldBe null
     }

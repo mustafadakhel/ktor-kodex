@@ -23,14 +23,14 @@ import io.ktor.util.*
 /**
  * Main entry point of the kodex plugin.
  *
- * After installation the plugin exposes realm specific [RealmServices]
+ * After installation the plugin exposes realm specific [KodexRealmServices]
  * instances which handle authentication and token management.
  */
 public class Kodex private constructor(
     private val realmConfigs: List<RealmConfig>,
-    private val realmServices: Map<Realm, RealmServices>
+    private val realmServices: Map<Realm, KodexRealmServices>
 ) {
-    public fun servicesOf(realm: Realm): RealmServices {
+    public fun servicesOf(realm: Realm): KodexRealmServices {
         return realmServices[realm] ?: throw MissingRealmServiceException(realm)
     }
 
@@ -115,12 +115,11 @@ public class Kodex private constructor(
                     extensions = realmConfig.extensions
                 )
 
-                // Create the 6 specialized services
+                // Create the 3 core services
                 val tokenSvc = tokenService(tokenManager, eventBus, realmConfig.realm)
-                RealmServices(
+                KodexRealmServices(
                     realm = realmConfig.realm,
-                    userQuery = userQueryService(userRepository),
-                    userCommand = userCommandService(
+                    users = userService(
                         userRepository,
                         passwordHasher,
                         hookExecutor,
@@ -129,9 +128,7 @@ public class Kodex private constructor(
                         realmConfig.timeZone,
                         realmConfig.realm
                     ),
-                    roles = roleService(userRepository, eventBus, realmConfig.realm),
-                    verification = verificationService(userRepository),
-                    authentication = authenticationService(
+                    auth = authService(
                         userRepository,
                         passwordHasher,
                         tokenSvc,
@@ -151,7 +148,7 @@ public class Kodex private constructor(
                         bearer(realm.authProviderName) {
                             this.realm = realm.owner
                             authenticate { token ->
-                                realmServices.tokens.verifyAccessToken(token.token)
+                                realmServices.tokens.verify(token.token)
                             }
                         }
                     }

@@ -23,7 +23,7 @@ internal class DefaultTokenService(
     private val realm: Realm
 ) : TokenService {
 
-    override suspend fun issueTokens(userId: UUID): TokenPair {
+    override suspend fun issue(userId: UUID): TokenPair {
         val result = tokenManager.issueNewTokens(userId)
 
         val accessTokenId = extractTokenId(result.access)
@@ -73,7 +73,7 @@ internal class DefaultTokenService(
         }
     }
 
-    override suspend fun revokeTokens(userId: UUID) {
+    override suspend fun revoke(userId: UUID) {
         tokenManager.revokeTokensForUser(userId)
 
         eventBus.publish(
@@ -103,7 +103,7 @@ internal class DefaultTokenService(
         )
     }
 
-    override suspend fun verifyAccessToken(token: String): KodexPrincipal? {
+    override suspend fun verify(token: String): KodexPrincipal? {
         return runCatching {
             val jwt = JWT.decode(token)
             tokenManager.verifyToken(jwt, TokenType.AccessToken)
