@@ -13,7 +13,7 @@
 - **Audit logging** – comprehensive event tracking with query and export capabilities for compliance
 - **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
 - **Role management** – roles are stored per realm and attached to issued tokens
-- **Ktor routing helpers** – easily protect routes and retrieve the appropriate `KodexService`
+- **Ktor routing helpers** – easily protect routes and access realm services
 - **Extension system** – modular architecture for adding custom functionality via lifecycle hooks
 
 ## Extension system
@@ -191,7 +191,7 @@ fun Application.configureKodex() {
 }
 ```
 
-Once installed you can obtain an `KodexService` for a realm and use it to create users or issue tokens. Routes can be
+Once installed you can obtain `KodexRealmServices` for a realm and use it to create users or issue tokens. Routes can be
 protected using `authenticateFor` and the additional helpers provided by the plugin. Inside an authenticated block the
 current `KodexPrincipal` is available via `call.kodex`:
 
@@ -255,7 +255,25 @@ realm("admin") {
 ```
 
 Database connectivity is configured in the `database` block where a `HikariConfig` is available. After installation you
-can obtain services using `application.kodex.serviceOf(realm)`.
+can obtain services using `application.kodex.serviceOf(realm)`:
+
+```kotlin
+val services = application.kodex.serviceOf(Realm("admin"))
+
+// User management operations
+val user = services.users.createUser(email, phone, password)
+services.users.setVerified(userId, true)
+services.users.updateUserRoles(userId, listOf("admin", "moderator"))
+
+// Authentication operations
+val tokens = services.auth.login(email, password)
+services.auth.changePassword(userId, oldPassword, newPassword)
+
+// Token operations
+val newTokens = services.tokens.refresh(userId, refreshToken)
+services.tokens.revoke(userId)
+val principal = services.tokens.verify(accessToken)
+```
 
 ### Password hashing
 
@@ -365,7 +383,8 @@ tokenRotation {
 The rotation is transparent to your application code - simply call `refresh()` as usual:
 
 ```kotlin
-val tokenPair = kodexService.refresh(userId, refreshToken)
+val services = application.kodex.serviceOf(Realm("admin"))
+val tokenPair = services.tokens.refresh(userId, refreshToken)
 // Returns new access and refresh tokens
 // Old refresh token is now single-use and cannot be replayed
 ```
@@ -420,8 +439,10 @@ realm("admin") {
 **Validation is automatically enforced** on all user operations (when configured):
 
 ```kotlin
+val services = application.kodex.serviceOf(Realm("admin"))
+
 // Validation happens automatically
-val user = kodexService.createUser(
+val user = services.users.createUser(
     email = "user@example.com",    // Validated against RFC 5322
     phone = "+14155552671",         // Validated as E.164
     password = "MyStr0ngP@ssw0rd!",  // Strength scored 0-4
@@ -435,23 +456,6 @@ val user = kodexService.createUser(
 // - InvalidPhone(phone, errors)
 // - WeakPassword(score, feedback)
 // - InvalidInput(field, errors)
-```
-
-**Password strength analysis:**
-
-```kotlin
-val strength = kodexService.analyzePasswordStrength("password123")
-// PasswordStrength(
-//     score = 0,              // 0-4 (very weak to very strong)
-//     entropy = 28.2,         // Bits of entropy
-//     crackTime = 0.001s,     // Estimated crack time
-//     feedback = [
-//         "This password is commonly used and easily guessed",
-//         "Use at least 12 characters for better security",
-//         "Add special characters (!@#$%)"
-//     ],
-//     isAcceptable = false
-// )
 ```
 
 ### Audit logging
@@ -492,11 +496,13 @@ All user and authentication operations publish typed events:
 The event bus provides a clean separation between domain logic and audit logging:
 
 ```kotlin
+val services = application.kodex.serviceOf(Realm("admin"))
+
 // Events are published automatically by the service layer
-kodexService.createUser(email, phone, password, ...)
+services.users.createUser(email, phone, password, ...)
 // Publishes: UserEvent.Created
 
-kodexService.tokenByEmail(email, password)
+services.auth.login(email, password)
 // Publishes: AuthEvent.LoginSuccess or AuthEvent.LoginFailed
 
 // The audit extension subscribes to these events and logs them
@@ -577,17 +583,6 @@ export DB_PASSWORD=YourStrongPassword
 
 Point your browser to `http://localhost:8080` and interact with the authentication routes defined in
 `sample/Application.kt`.
-
-## Running the tests
-
-Unit tests for the plugin reside under the `kodex` module. Execute them with:
-
-```bash
-./gradlew :kodex:test
-```
-
-> **Note**: Gradle requires network access to download dependencies on the first run. The execution environment used for
-> this README might block outbound connections which can cause the command to fail.
 
 ## Realm roles and additional roles
 

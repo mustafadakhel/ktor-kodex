@@ -78,7 +78,6 @@ class ExposedUserRepositoryTest : FunSpec({
 
             user.email shouldBe email
             user.phoneNumber.shouldBeNull()
-            user.isVerified shouldBe false
             user.createdAt shouldBe now
             user.updatedAt shouldBe now
 
@@ -110,7 +109,6 @@ class ExposedUserRepositoryTest : FunSpec({
 
             user.phoneNumber shouldBe phone
             user.email.shouldBeNull()
-            user.isVerified shouldBe false
             user.createdAt shouldBe now
             user.updatedAt shouldBe now
         }
@@ -226,7 +224,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val full = userRepository.findFullById(u.id)!!
             full.roles.map(RoleEntity::name)
-                .shouldContainExactlyInAnyOrder(roles)
+                .shouldContainExactlyInAnyOrder(*roles.toTypedArray())
             full.profile!!.address shouldBe "Addr"
             full.customAttributes?.shouldContainExactly(attrs)
         }
@@ -254,7 +252,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 FieldUpdate.SetValue("new@x"),
                 FieldUpdate.SetValue("+1"),
                 FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
                 now
             ) shouldBe UpdateUserResult.Success
 
@@ -268,7 +265,6 @@ class ExposedUserRepositoryTest : FunSpec({
             userRepository.updateById(
                 UUID.randomUUID(),
                 FieldUpdate.SetValue("x@x"),
-                FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
                 now
@@ -301,14 +297,12 @@ class ExposedUserRepositoryTest : FunSpec({
                 u1.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
                 now
             ) shouldBe UpdateUserResult.EmailAlreadyExists
             userRepository.updateById(
                 u2.id,
                 FieldUpdate.NoChange(),
                 u1.phoneNumber?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
                 now
             ) shouldBe UpdateUserResult.PhoneAlreadyExists
@@ -445,31 +439,6 @@ class ExposedUserRepositoryTest : FunSpec({
         }
     }
 
-    context("User Verification") {
-        test("setVerified toggles and returns true") {
-            userRepository.seedRoles(listOf(Role("U", "")))
-            val u = (userRepository.create(
-                "v@x",
-                null,
-                "pw",
-                listOf("U"),
-                null,
-                null,
-                now
-            ) as CreateUserResult.Success).user
-
-            userRepository.setVerified(u.id, true) shouldBe true
-            userRepository.findById(u.id)!!.isVerified shouldBe true
-
-            userRepository.setVerified(u.id, false) shouldBe true
-            userRepository.findById(u.id)!!.isVerified shouldBe false
-        }
-
-        test("setVerified returns false if user absent") {
-            userRepository.setVerified(UUID.randomUUID(), true) shouldBe false
-        }
-    }
-
     context("getAllFull - Batch Loading") {
         test("should batch load full user entities with roles, profiles, and attributes") {
             userRepository.seedRoles(listOf(
@@ -582,7 +551,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.ClearValue(),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 currentTime = now
             )
@@ -607,7 +575,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.ClearValue(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 currentTime = now
             )
@@ -617,32 +584,7 @@ class ExposedUserRepositoryTest : FunSpec({
         }
     }
 
-    context("updateById - isVerified and status SetValue") {
-        test("should update isVerified when SetValue is used") {
-            userRepository.seedRoles(listOf(Role("U", "")))
-            val user = (userRepository.create(
-                "test@example.com",
-                null,
-                "hash",
-                listOf("U"),
-                null,
-                null,
-                now
-            ) as CreateUserResult.Success).user
-
-            val result = userRepository.updateById(
-                userId = user.id,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.SetValue(true),
-                status = FieldUpdate.NoChange(),
-                currentTime = now
-            )
-
-            result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.isVerified shouldBe true
-        }
-
+    context("updateById - status SetValue") {
         test("should update status when SetValue is used") {
             userRepository.seedRoles(listOf(Role("U", "")))
             val user = (userRepository.create(
@@ -659,7 +601,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
                 currentTime = now
             )
@@ -686,7 +627,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.SetValue("new@example.com"),
                 phone = FieldUpdate.SetValue("+2222222222"),
-                isVerified = FieldUpdate.SetValue(true),
                 status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
                 profile = FieldUpdate.SetValue(UserProfile("NewFirst", "NewLast", "New Address", "new.jpg")),
                 customAttributes = FieldUpdate.SetValue(mapOf("new" to "attr")),
@@ -697,7 +637,6 @@ class ExposedUserRepositoryTest : FunSpec({
             val updated = userRepository.findById(user.id)!!
             updated.email shouldBe "new@example.com"
             updated.phoneNumber shouldBe "+2222222222"
-            updated.isVerified shouldBe true
             updated.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
         }
 
@@ -717,7 +656,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.ClearValue(),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.NoChange(),
                 customAttributes = FieldUpdate.NoChange(),
@@ -744,7 +682,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.ClearValue(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.NoChange(),
                 customAttributes = FieldUpdate.NoChange(),
@@ -771,7 +708,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.ClearValue(),
                 customAttributes = FieldUpdate.NoChange(),
@@ -798,7 +734,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.NoChange(),
                 customAttributes = FieldUpdate.ClearValue(),
@@ -814,7 +749,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = UUID.randomUUID(),
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.NoChange(),
                 customAttributes = FieldUpdate.NoChange(),
@@ -850,7 +784,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user2.id,
                 email = FieldUpdate.SetValue("user1@example.com"),
                 phone = FieldUpdate.NoChange(),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.NoChange(),
                 customAttributes = FieldUpdate.NoChange(),
@@ -886,7 +819,6 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user2.id,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.SetValue("+1111111111"),
-                isVerified = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
                 profile = FieldUpdate.NoChange(),
                 customAttributes = FieldUpdate.NoChange(),

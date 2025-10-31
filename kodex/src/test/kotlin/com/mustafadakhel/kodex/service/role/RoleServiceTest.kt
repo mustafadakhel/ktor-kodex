@@ -2,10 +2,15 @@ package com.mustafadakhel.kodex.service.role
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.UserEvent
+import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.database.RoleEntity
 import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.service.HashingService
+import com.mustafadakhel.kodex.service.user.DefaultUserService
+import com.mustafadakhel.kodex.service.user.UserService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
+import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
@@ -17,23 +22,41 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.datetime.TimeZone
 import java.util.UUID
 
 class RoleServiceTest : FunSpec({
     lateinit var userRepository: UserRepository
+    lateinit var hashingService: HashingService
+    lateinit var hookExecutor: HookExecutor
     lateinit var eventBus: EventBus
+    lateinit var updateCommandProcessor: UpdateCommandProcessor
+    lateinit var timeZone: TimeZone
     lateinit var realm: Realm
-    lateinit var roleService: RoleService
+    lateinit var roleService: UserService
 
     val testUserId = UUID.randomUUID()
     val realmOwner = "test-realm"
 
     beforeEach {
         userRepository = mockk()
+        hashingService = mockk(relaxed = true)
+        hookExecutor = mockk(relaxed = true)
         eventBus = mockk(relaxed = true)
+        updateCommandProcessor = mockk(relaxed = true)
+        timeZone = TimeZone.UTC
         realm = mockk()
         every { realm.owner } returns realmOwner
-        roleService = DefaultRoleService(userRepository, eventBus, realm)
+
+        roleService = DefaultUserService(
+            userRepository,
+            hashingService,
+            hookExecutor,
+            eventBus,
+            updateCommandProcessor,
+            timeZone,
+            realm
+        )
     }
 
     test("getSeededRoles should return list of seeded roles") {

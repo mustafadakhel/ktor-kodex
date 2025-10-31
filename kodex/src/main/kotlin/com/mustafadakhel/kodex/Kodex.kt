@@ -23,14 +23,14 @@ import io.ktor.util.*
 /**
  * Main entry point of the kodex plugin.
  *
- * After installation the plugin exposes realm specific [RealmServices]
+ * After installation the plugin exposes realm specific [KodexRealmServices]
  * instances which handle authentication and token management.
  */
 public class Kodex private constructor(
     private val realmConfigs: List<RealmConfig>,
-    private val realmServices: Map<Realm, RealmServices>
+    private val realmServices: Map<Realm, KodexRealmServices>
 ) {
-    public fun servicesOf(realm: Realm): RealmServices {
+    public fun servicesOf(realm: Realm): KodexRealmServices {
         return realmServices[realm] ?: throw MissingRealmServiceException(realm)
     }
 
@@ -53,7 +53,13 @@ public class Kodex private constructor(
 
         override fun install(pipeline: Application, configure: KodexConfig.() -> Unit): Kodex {
             val kodexConfig = KodexConfig().apply(configure)
-            val realmConfigs = kodexConfig.realmConfigScopes.map { it.build() }
+
+            // Create userRepository early so extensions can access it
+            val userRepository: UserRepository = databaseUserRepository()
+            val databaseTokenRepository = databaseTokenRepository()
+
+            // Build realm configs (extensions need userRepository access)
+            val realmConfigs = kodexConfig.realmConfigScopes.map { it.build(userRepository) }
 
             // Collect extension tables from all realms
             val extensionTables = realmConfigs
@@ -61,9 +67,6 @@ public class Kodex private constructor(
                 .distinct()
 
             pipeline.connectDatabase(kodexConfig.getDataSource(), extensionTables)
-
-            val userRepository: UserRepository = databaseUserRepository()
-            val databaseTokenRepository = databaseTokenRepository()
 
             userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
 
@@ -115,12 +118,11 @@ public class Kodex private constructor(
                     extensions = realmConfig.extensions
                 )
 
-                // Create the 6 specialized services
+                // Create the 3 core services
                 val tokenSvc = tokenService(tokenManager, eventBus, realmConfig.realm)
-                RealmServices(
+                KodexRealmServices(
                     realm = realmConfig.realm,
-                    userQuery = userQueryService(userRepository),
-                    userCommand = userCommandService(
+                    users = userService(
                         userRepository,
                         passwordHasher,
                         hookExecutor,
@@ -129,9 +131,7 @@ public class Kodex private constructor(
                         realmConfig.timeZone,
                         realmConfig.realm
                     ),
-                    roles = roleService(userRepository, eventBus, realmConfig.realm),
-                    verification = verificationService(userRepository),
-                    authentication = authenticationService(
+                    auth = authService(
                         userRepository,
                         passwordHasher,
                         tokenSvc,
@@ -151,7 +151,7 @@ public class Kodex private constructor(
                         bearer(realm.authProviderName) {
                             this.realm = realm.owner
                             authenticate { token ->
-                                realmServices.tokens.verifyAccessToken(token.token)
+                                realmServices.tokens.verify(token.token)
                             }
                         }
                     }

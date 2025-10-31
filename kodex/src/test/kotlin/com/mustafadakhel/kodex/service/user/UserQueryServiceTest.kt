@@ -1,6 +1,9 @@
 package com.mustafadakhel.kodex.service.user
 
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.model.FullUser
+import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.User
 import com.mustafadakhel.kodex.model.UserProfile
@@ -12,7 +15,9 @@ import com.mustafadakhel.kodex.model.database.UserProfileEntity
 import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.model.database.toUserProfile
 import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
+import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldHaveSize
@@ -22,11 +27,18 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
 import java.util.UUID
 
 class UserQueryServiceTest : FunSpec({
     lateinit var userRepository: UserRepository
-    lateinit var userQueryService: UserQueryService
+    lateinit var hashingService: HashingService
+    lateinit var hookExecutor: HookExecutor
+    lateinit var eventBus: EventBus
+    lateinit var updateCommandProcessor: UpdateCommandProcessor
+    lateinit var timeZone: TimeZone
+    lateinit var realm: Realm
+    lateinit var userQueryService: UserService
 
     val testUserId = UUID.randomUUID()
     val testEmail = "test@example.com"
@@ -39,7 +51,6 @@ class UserQueryServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = true,
         lastLoggedIn = testTime,
         status = UserStatus.ACTIVE
     )
@@ -60,7 +71,6 @@ class UserQueryServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = true,
         lastLoggedIn = testTime,
         status = UserStatus.ACTIVE,
         roles = listOf(testRoleEntity),
@@ -70,7 +80,23 @@ class UserQueryServiceTest : FunSpec({
 
     beforeEach {
         userRepository = mockk()
-        userQueryService = DefaultUserQueryService(userRepository)
+        hashingService = mockk(relaxed = true)
+        hookExecutor = mockk(relaxed = true)
+        eventBus = mockk(relaxed = true)
+        updateCommandProcessor = mockk(relaxed = true)
+        timeZone = TimeZone.UTC
+        realm = mockk()
+        every { realm.owner } returns "test-realm"
+
+        userQueryService = DefaultUserService(
+            userRepository,
+            hashingService,
+            hookExecutor,
+            eventBus,
+            updateCommandProcessor,
+            timeZone,
+            realm
+        )
     }
 
     test("getAllUsers should return list of users") {

@@ -379,7 +379,6 @@ private fun createTestFullUser(): FullUser {
         email = "test@example.com",
         createdAt = now,
         updatedAt = now,
-        isVerified = true,
         lastLoggedIn = now,
         roles = listOf(Role(name = "user", description = "User role")),
         profile = UserProfile(

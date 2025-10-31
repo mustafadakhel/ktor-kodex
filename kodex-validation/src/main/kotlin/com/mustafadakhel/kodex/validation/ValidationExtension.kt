@@ -127,9 +127,9 @@ public class ValidationExtension internal constructor(
         }
     }
 
-    override suspend fun beforeLogin(identifier: String): String = identifier
+    override suspend fun beforeLogin(identifier: String, metadata: com.mustafadakhel.kodex.extension.LoginMetadata): String = identifier
 
-    override suspend fun afterLoginFailure(identifier: String) {
+    override suspend fun afterLoginFailure(identifier: String, metadata: com.mustafadakhel.kodex.extension.LoginMetadata) {
         // Extension point for future validation tracking
     }
 }

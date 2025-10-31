@@ -7,7 +7,6 @@ public data class User(
     val id: UUID,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
-    val isVerified: Boolean,
     val phoneNumber: String? = null,
     val email: String? = null,
     val lastLoggedIn: LocalDateTime? = null,

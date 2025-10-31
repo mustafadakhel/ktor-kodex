@@ -99,7 +99,7 @@ class KodexMultiRealmTest : StringSpec({
                     }
                 }
 
-                actualKodex.servicesOf(adminRealm).roles.getSeededRoles() shouldContainExactlyInAnyOrder listOf(
+                actualKodex.servicesOf(adminRealm).users.getSeededRoles() shouldContainExactlyInAnyOrder listOf(
                     "admin",
                     "user",
                     "maintain",

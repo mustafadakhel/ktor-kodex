@@ -42,7 +42,7 @@ class UserCommandServiceTest : FunSpec({
     lateinit var updateCommandProcessor: UpdateCommandProcessor
     lateinit var timeZone: TimeZone
     lateinit var realm: Realm
-    lateinit var userCommandService: UserCommandService
+    lateinit var userCommandService: UserService
 
     val testUserId = UUID.randomUUID()
     val testEmail = "test@example.com"
@@ -58,7 +58,6 @@ class UserCommandServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = false,
         lastLoggedIn = null,
         status = UserStatus.ACTIVE
     )
@@ -78,7 +77,7 @@ class UserCommandServiceTest : FunSpec({
         realm = mockk()
         every { realm.owner } returns realmOwner
 
-        userCommandService = DefaultUserCommandService(
+        userCommandService = DefaultUserService(
             userRepository,
             hashingService,
             hookExecutor,
@@ -228,7 +227,6 @@ class UserCommandServiceTest : FunSpec({
             phoneNumber = testPhone,
             createdAt = testTime,
             updatedAt = testTime,
-            isVerified = true,
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
             roles = listOf(Role("user", "Regular user")),
@@ -269,7 +267,6 @@ class UserCommandServiceTest : FunSpec({
             phoneNumber = testPhone,
             createdAt = testTime,
             updatedAt = testTime,
-            isVerified = true,
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
             roles = emptyList(),
@@ -312,7 +309,6 @@ class UserCommandServiceTest : FunSpec({
             phoneNumber = testPhone,
             createdAt = testTime,
             updatedAt = testTime,
-            isVerified = true,
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
             roles = emptyList(),

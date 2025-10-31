@@ -21,11 +21,12 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     phone_number VARCHAR(20) UNIQUE,
     email VARCHAR(255) UNIQUE,
     last_login_at TIMESTAMP,
-    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+    is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+    locked_until TIMESTAMP
 );
 
 -- Roles table: Role definitions
@@ -103,22 +104,15 @@ CREATE TABLE IF NOT EXISTS audit_events (
     session_id UUID
 );
 
--- Failed login attempts: Track authentication failures for lockout detection
+-- Failed login attempts: Track authentication failures for lockout/throttling detection
 CREATE TABLE IF NOT EXISTS failed_login_attempts (
     id UUID PRIMARY KEY,
     identifier VARCHAR(255) NOT NULL,
+    user_id UUID,
+    ip_address VARCHAR(45),
     attempted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    reason VARCHAR(255) NOT NULL
-);
-
--- Account lockouts: Active account lockouts after exceeded failed attempts
-CREATE TABLE IF NOT EXISTS account_lockouts (
-    id UUID PRIMARY KEY,
-    identifier VARCHAR(255) NOT NULL UNIQUE,
-    locked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    locked_until TIMESTAMP NOT NULL,
     reason VARCHAR(255) NOT NULL,
-    failed_attempt_count INT NOT NULL
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- ============================================================================
@@ -143,4 +137,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_realm_id ON audit_events(realm_id);
 
 -- Failed login attempts indexes
 CREATE INDEX IF NOT EXISTS idx_failed_attempts_identifier ON failed_login_attempts(identifier);
+CREATE INDEX IF NOT EXISTS idx_failed_attempts_user_id ON failed_login_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_failed_attempts_ip_address ON failed_login_attempts(ip_address);
 CREATE INDEX IF NOT EXISTS idx_failed_attempts_attempted_at ON failed_login_attempts(attempted_at);
