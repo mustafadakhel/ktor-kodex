@@ -22,7 +22,6 @@ class ChangeTrackerTest : DescribeSpec({
             id = testUserId,
             email = "old@example.com",
             phoneNumber = "+1234567890",
-            isVerified = false,
             status = UserStatus.ACTIVE,
             createdAt = currentTime,
             updatedAt = currentTime,
@@ -69,29 +68,16 @@ class ChangeTrackerTest : DescribeSpec({
                 changes["status"]?.newValue shouldBe UserStatus.SUSPENDED
             }
 
-            it("should detect verified change") {
-                val updates = UserFieldUpdates(
-                    isVerified = FieldUpdate.SetValue(true)
-                )
-
-                val changes = tracker.detectUserFieldChanges(baseUser, updates)
-
-                changes.size shouldBe 1
-                changes["isVerified"]?.oldValue shouldBe false
-                changes["isVerified"]?.newValue shouldBe true
-            }
-
             it("should detect multiple changes") {
                 val updates = UserFieldUpdates(
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.SetValue("+9876543210"),
-                    isVerified = FieldUpdate.SetValue(true)
+                    phone = FieldUpdate.SetValue("+9876543210")
                 )
 
                 val changes = tracker.detectUserFieldChanges(baseUser, updates)
 
-                changes.size shouldBe 3
-                changes.keys shouldContainExactly setOf("email", "phoneNumber", "isVerified")
+                changes.size shouldBe 2
+                changes.keys shouldContainExactly setOf("email", "phoneNumber")
             }
 
             it("should not detect changes when value is same") {
@@ -155,7 +141,6 @@ class ChangeTrackerTest : DescribeSpec({
                 val updates = UserFieldUpdates(
                     email = FieldUpdate.SetValue("new@example.com"),
                     phone = FieldUpdate.ClearValue(),
-                    isVerified = FieldUpdate.NoChange(),
                     status = FieldUpdate.SetValue(UserStatus.SUSPENDED)
                 )
 

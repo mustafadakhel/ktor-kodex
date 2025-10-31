@@ -10,7 +10,6 @@ internal fun FullUserEntity.toFullUser() = FullUser(
     email = email,
     createdAt = createdAt,
     updatedAt = updatedAt,
-    isVerified = isVerified,
     lastLoggedIn = lastLoggedIn,
     roles = roles.map { Role(it.name, it.description) },
     profile = profile?.let {

@@ -41,6 +41,9 @@ class AuthServiceTest : FunSpec({
     val testHashedPassword = "hashed-password"
     val realmOwner = "test-realm"
     val testTime = LocalDateTime.parse("2024-01-01T12:00:00")
+    val testIpAddress = "192.168.1.1"
+    val testUserAgent = "Mozilla/5.0"
+    val testLoginMetadata = com.mustafadakhel.kodex.extension.LoginMetadata(testIpAddress, testUserAgent)
 
     val testUserEntity = UserEntity(
         id = testUserId,
@@ -48,7 +51,6 @@ class AuthServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = true,
         lastLoggedIn = null,
         status = UserStatus.ACTIVE
     )
@@ -82,18 +84,19 @@ class AuthServiceTest : FunSpec({
     test("tokenByEmail should authenticate successfully and return tokens") {
         val eventSlot = slot<AuthEvent.LoginSuccess>()
 
-        coEvery { hookExecutor.executeBeforeLogin(testEmail) } returns testEmail
+        coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
         every { userRepository.findByEmail(testEmail) } returns testUserEntity
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
+        coEvery { hookExecutor.executeAfterAuthentication(testUserId) } returns Unit
         every { userRepository.updateLastLogin(testUserId, any()) } returns true
         coEvery { tokenService.issue(testUserId) } returns testTokenPair
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
-        val result = authService.login(testEmail, testPassword)
+        val result = authService.login(testEmail, testPassword, testIpAddress, testUserAgent)
 
         result shouldBe testTokenPair
-        coVerify(exactly = 1) { hookExecutor.executeBeforeLogin(testEmail) }
+        coVerify(exactly = 1) { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) }
         verify(exactly = 1) { userRepository.findByEmail(testEmail) }
         verify(exactly = 1) { hashingService.verify(testPassword, testHashedPassword) }
         verify(exactly = 1) { userRepository.updateLastLogin(testUserId, any()) }
@@ -110,17 +113,17 @@ class AuthServiceTest : FunSpec({
     test("tokenByEmail should throw InvalidCredentials when user doesn't exist (timing attack prevention)") {
         val eventSlot = slot<AuthEvent.LoginFailed>()
 
-        coEvery { hookExecutor.executeBeforeLogin(testEmail) } returns testEmail
+        coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
         every { userRepository.findByEmail(testEmail) } returns null
-        coEvery { hookExecutor.executeAfterLoginFailure(testEmail) } returns Unit
+        coEvery { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
-            authService.login(testEmail, testPassword)
+            authService.login(testEmail, testPassword, testIpAddress, testUserAgent)
         }
 
         verify(exactly = 1) { hashingService.verify(testPassword, any()) }
-        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail) }
+        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) }
 
         eventSlot.captured.apply {
             identifier shouldBe testEmail
@@ -134,18 +137,18 @@ class AuthServiceTest : FunSpec({
     test("tokenByEmail should throw InvalidCredentials when password is wrong") {
         val eventSlot = slot<AuthEvent.LoginFailed>()
 
-        coEvery { hookExecutor.executeBeforeLogin(testEmail) } returns testEmail
+        coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
         every { userRepository.findByEmail(testEmail) } returns testUserEntity
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns false
-        coEvery { hookExecutor.executeAfterLoginFailure(testEmail) } returns Unit
+        coEvery { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
-            authService.login(testEmail, testPassword)
+            authService.login(testEmail, testPassword, testIpAddress, testUserAgent)
         }
 
-        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail) }
+        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) }
 
         eventSlot.captured.apply {
             identifier shouldBe testEmail
@@ -156,34 +159,19 @@ class AuthServiceTest : FunSpec({
         }
     }
 
-    test("tokenByEmail should throw UnverifiedAccount when user is not verified") {
-        val unverifiedUser = testUserEntity.copy(isVerified = false)
-
-        coEvery { hookExecutor.executeBeforeLogin(testEmail) } returns testEmail
-        every { userRepository.findByEmail(testEmail) } returns unverifiedUser
-        every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
-        every { hashingService.verify(testPassword, testHashedPassword) } returns true
-
-        shouldThrow<KodexThrowable.Authorization.UnverifiedAccount> {
-            authService.login(testEmail, testPassword)
-        }
-
-        verify(exactly = 0) { userRepository.updateLastLogin(any(), any()) }
-        coVerify(exactly = 0) { tokenService.issue(any()) }
-    }
-
     test("tokenByPhone should authenticate successfully and return tokens") {
         val eventSlot = slot<AuthEvent.LoginSuccess>()
 
-        coEvery { hookExecutor.executeBeforeLogin(testPhone) } returns testPhone
+        coEvery { hookExecutor.executeBeforeLogin(testPhone, testLoginMetadata) } returns testPhone
         every { userRepository.findByPhone(testPhone) } returns testUserEntity
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
+        coEvery { hookExecutor.executeAfterAuthentication(testUserId) } returns Unit
         every { userRepository.updateLastLogin(testUserId, any()) } returns true
         coEvery { tokenService.issue(testUserId) } returns testTokenPair
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
-        val result = authService.loginByPhone(testPhone, testPassword)
+        val result = authService.loginByPhone(testPhone, testPassword, testIpAddress, testUserAgent)
 
         result shouldBe testTokenPair
 
@@ -197,15 +185,15 @@ class AuthServiceTest : FunSpec({
         val dummyHash = "dummy-hash"
         val eventSlot = slot<AuthEvent.LoginFailed>()
 
-        coEvery { hookExecutor.executeBeforeLogin(testPhone) } returns testPhone
+        coEvery { hookExecutor.executeBeforeLogin(testPhone, testLoginMetadata) } returns testPhone
         every { userRepository.findByPhone(testPhone) } returns null
         every { hashingService.hash("dummy-password-for-timing-attack-prevention") } returns dummyHash
         every { hashingService.verify(testPassword, dummyHash) } returns false
-        coEvery { hookExecutor.executeAfterLoginFailure(testPhone) } returns Unit
+        coEvery { hookExecutor.executeAfterLoginFailure(testPhone, testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
-            authService.loginByPhone(testPhone, testPassword)
+            authService.loginByPhone(testPhone, testPassword, testIpAddress, testUserAgent)
         }
 
         eventSlot.captured.method shouldBe "phone"

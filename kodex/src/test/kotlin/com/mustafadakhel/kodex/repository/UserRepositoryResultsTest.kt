@@ -18,7 +18,6 @@ class UserRepositoryResultsTest : DescribeSpec({
         id = testUserId,
         createdAt = now,
         updatedAt = now,
-        isVerified = false,
         phoneNumber = null,
         email = "test@example.com",
         lastLoggedIn = null,

@@ -1,11 +1,13 @@
 package com.mustafadakhel.kodex.extension
 
+import com.mustafadakhel.kodex.repository.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import org.jetbrains.exposed.sql.Table
 
 // Test extension interfaces
@@ -317,9 +319,11 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "custom"
 
+            val mockUserRepository = mockk<UserRepository>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
-                timeZone = kotlinx.datetime.TimeZone.UTC
+                timeZone = kotlinx.datetime.TimeZone.UTC,
+                userRepository = mockUserRepository
             )
 
             val extension = config.build(context)
@@ -330,9 +334,11 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "configured"
 
+            val mockUserRepository = mockk<UserRepository>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
-                timeZone = kotlinx.datetime.TimeZone.UTC
+                timeZone = kotlinx.datetime.TimeZone.UTC,
+                userRepository = mockUserRepository
             )
 
             val extension = config.build(context) as? RealmExtension
@@ -350,9 +356,11 @@ class ExtensionRegistryTest : DescribeSpec({
             }
 
             val config = ContextAwareConfig()
+            val mockUserRepository = mockk<UserRepository>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("my-realm"),
-                timeZone = kotlinx.datetime.TimeZone.of("America/New_York")
+                timeZone = kotlinx.datetime.TimeZone.of("America/New_York"),
+                userRepository = mockUserRepository
             )
 
             val extension = config.build(context)

@@ -35,19 +35,33 @@ internal class DefaultAuthService(
 
     private val dummyHash = hashingService.hash("dummy-password-for-timing-attack-prevention")
 
-    override suspend fun login(email: String, password: String): TokenPair =
+    override suspend fun login(
+        email: String,
+        password: String,
+        ipAddress: String,
+        userAgent: String?
+    ): TokenPair =
         authenticateAndGenerateToken(
             identifier = email,
             password = password,
             identifierType = "email",
+            ipAddress = ipAddress,
+            userAgent = userAgent,
             userFetcher = { userRepository.findByEmail(it) }
         )
 
-    override suspend fun loginByPhone(phone: String, password: String): TokenPair =
+    override suspend fun loginByPhone(
+        phone: String,
+        password: String,
+        ipAddress: String,
+        userAgent: String?
+    ): TokenPair =
         authenticateAndGenerateToken(
             identifier = phone,
             password = password,
             identifierType = "phone",
+            ipAddress = ipAddress,
+            userAgent = userAgent,
             userFetcher = { userRepository.findByPhone(it) }
         )
 
@@ -117,11 +131,14 @@ internal class DefaultAuthService(
         identifier: String,
         password: String,
         identifierType: String,
+        ipAddress: String,
+        userAgent: String?,
         userFetcher: suspend (String) -> UserEntity?
     ): TokenPair {
         val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
+        val metadata = com.mustafadakhel.kodex.extension.LoginMetadata(ipAddress, userAgent)
 
-        hookExecutor.executeBeforeLogin(identifier)
+        hookExecutor.executeBeforeLogin(identifier, metadata)
 
         val user = userFetcher(identifier)
 
@@ -133,7 +150,7 @@ internal class DefaultAuthService(
         }
 
         if (!authSuccess) {
-            hookExecutor.executeAfterLoginFailure(identifier)
+            hookExecutor.executeAfterLoginFailure(identifier, metadata)
 
             val actualReason = when {
                 user == null -> "User not found"
@@ -156,9 +173,7 @@ internal class DefaultAuthService(
             throw KodexThrowable.Authorization.InvalidCredentials
         }
 
-        if (!user!!.isVerified) {
-            throw KodexThrowable.Authorization.UnverifiedAccount
-        }
+        hookExecutor.executeAfterAuthentication(user!!.id)
 
         userRepository.updateLastLogin(user.id, nowLocal(timeZone))
 

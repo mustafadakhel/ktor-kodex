@@ -9,7 +9,6 @@ public data class FullUser(
     val email: String? = null,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
-    val isVerified: Boolean,
     val lastLoggedIn: LocalDateTime?,
     val roles: List<Role>,
     val profile: UserProfile?,

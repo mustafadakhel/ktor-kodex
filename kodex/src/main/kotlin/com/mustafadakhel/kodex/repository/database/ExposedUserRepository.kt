@@ -14,6 +14,7 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.update
 import java.util.*
 
 internal fun databaseUserRepository(): UserRepository = ExposedUserRepository
@@ -64,7 +65,6 @@ private object ExposedUserRepository : UserRepository {
                 id = user.id.value,
                 createdAt = user.createdAt,
                 updatedAt = user.updatedAt,
-                isVerified = user.isVerified,
                 phoneNumber = user.phoneNumber,
                 email = user.email,
                 lastLoggedIn = user.lastLoginAt,
@@ -150,7 +150,6 @@ private object ExposedUserRepository : UserRepository {
         userId: UUID,
         email: FieldUpdate<String>,
         phone: FieldUpdate<String>,
-        isVerified: FieldUpdate<Boolean>,
         status: FieldUpdate<UserStatus>,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
@@ -185,17 +184,6 @@ private object ExposedUserRepository : UserRepository {
             }
             is FieldUpdate.ClearValue -> {
                 user.phoneNumber = null
-            }
-        }
-
-        when (isVerified) {
-            is FieldUpdate.NoChange -> { /* no change */ }
-            is FieldUpdate.SetValue -> {
-                user.isVerified = isVerified.value
-            }
-            is FieldUpdate.ClearValue -> {
-                // isVerified is non-nullable, so ClearValue doesn't make sense
-                // but we handle it for completeness
             }
         }
 
@@ -307,13 +295,6 @@ private object ExposedUserRepository : UserRepository {
         UserRepository.UpdateUserResult.Success
     }
 
-    override fun setVerified(userId: UUID, verified: Boolean) = exposedTransaction {
-        UserDao.findById(userId)?.let {
-            it.isVerified = verified
-            true
-        } ?: false
-    }
-
     override fun updateLastLogin(userId: UUID, loginTime: LocalDateTime) = exposedTransaction {
         UserDao.findById(userId)?.let {
             it.lastLoginAt = loginTime
@@ -328,11 +309,20 @@ private object ExposedUserRepository : UserRepository {
         } ?: false
     }
 
+    override fun deleteUser(userId: UUID): UserRepository.DeleteResult = exposedTransaction {
+        val user = UserDao.findById(userId)
+        if (user == null) {
+            UserRepository.DeleteResult.NotFound
+        } else {
+            user.delete()
+            UserRepository.DeleteResult.Success
+        }
+    }
+
     override fun updateBatch(
         userId: UUID,
         email: FieldUpdate<String>,
         phone: FieldUpdate<String>,
-        isVerified: FieldUpdate<Boolean>,
         status: FieldUpdate<UserStatus>,
         profile: FieldUpdate<UserProfile>,
         customAttributes: FieldUpdate<Map<String, String>>,
@@ -372,14 +362,6 @@ private object ExposedUserRepository : UserRepository {
             is FieldUpdate.ClearValue -> {
                 user.phoneNumber = null
             }
-        }
-
-        when (isVerified) {
-            is FieldUpdate.NoChange -> { /* no change */ }
-            is FieldUpdate.SetValue -> {
-                user.isVerified = isVerified.value
-            }
-            is FieldUpdate.ClearValue -> { /* isVerified is non-nullable */ }
         }
 
         when (status) {
@@ -433,7 +415,6 @@ private object ExposedUserRepository : UserRepository {
         id = id.value,
         createdAt = createdAt,
         updatedAt = updatedAt,
-        isVerified = isVerified,
         phoneNumber = phoneNumber,
         email = email,
         lastLoggedIn = lastLoginAt,
@@ -444,7 +425,6 @@ private object ExposedUserRepository : UserRepository {
         id = id.value,
         createdAt = createdAt,
         updatedAt = updatedAt,
-        isVerified = isVerified,
         phoneNumber = phoneNumber,
         email = email,
         lastLoggedIn = lastLoginAt,

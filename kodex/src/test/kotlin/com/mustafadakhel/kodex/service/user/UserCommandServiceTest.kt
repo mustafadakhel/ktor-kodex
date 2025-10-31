@@ -58,7 +58,6 @@ class UserCommandServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = false,
         lastLoggedIn = null,
         status = UserStatus.ACTIVE
     )
@@ -228,7 +227,6 @@ class UserCommandServiceTest : FunSpec({
             phoneNumber = testPhone,
             createdAt = testTime,
             updatedAt = testTime,
-            isVerified = true,
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
             roles = listOf(Role("user", "Regular user")),
@@ -269,7 +267,6 @@ class UserCommandServiceTest : FunSpec({
             phoneNumber = testPhone,
             createdAt = testTime,
             updatedAt = testTime,
-            isVerified = true,
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
             roles = emptyList(),
@@ -312,7 +309,6 @@ class UserCommandServiceTest : FunSpec({
             phoneNumber = testPhone,
             createdAt = testTime,
             updatedAt = testTime,
-            isVerified = true,
             lastLoggedIn = null,
             status = UserStatus.ACTIVE,
             roles = emptyList(),

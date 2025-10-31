@@ -49,7 +49,10 @@ public class RealmConfigScope internal constructor(
     private var rolesConfig: RolesConfig = RolesConfig(realm)
     private var passwordHashingConfigScope: PasswordHashingConfigScope = PasswordHashingConfigScope()
     private var tokenRotationConfigScope: TokenRotationConfigScope = TokenRotationConfigScope()
-    private val extensionsMap = mutableMapOf<KClass<out RealmExtension>, MutableList<RealmExtension>>()
+    @PublishedApi
+    internal val extensionConfigs: MutableList<Pair<ExtensionConfig, Int>> = mutableListOf()
+    @PublishedApi
+    internal var extensionPriorityCounter: Int = 0
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
 
     /**
@@ -61,11 +64,13 @@ public class RealmConfigScope internal constructor(
 
     /**
      * Gets the extension context for this realm configuration.
-     * Used internally by extension() function to pass context to extensions.
+     * Used internally during build() to create extension context with userRepository.
      */
     @PublishedApi
-    internal fun getExtensionContext(): com.mustafadakhel.kodex.extension.ExtensionContext {
-        return extensionContext(realm, timeZone)
+    internal fun getExtensionContext(
+        userRepository: com.mustafadakhel.kodex.repository.UserRepository
+    ): com.mustafadakhel.kodex.extension.ExtensionContext {
+        return extensionContext(realm, timeZone, userRepository)
     }
 
     public fun secrets(block: SecretsConfigScope.() -> Unit) {
@@ -121,33 +126,8 @@ public class RealmConfigScope internal constructor(
         block: C.() -> Unit
     ) {
         config.apply(block)
-        val context = getExtensionContext()
-        val extension = config.build(context)
-
-        // Register the extension for each hook interface it implements
-        if (extension is UserLifecycleHooks) {
-            @Suppress("UNCHECKED_CAST")
-            registerExtension(UserLifecycleHooks::class, extension as UserLifecycleHooks)
-        }
-        if (extension is PersistentExtension) {
-            @Suppress("UNCHECKED_CAST")
-            registerExtension(PersistentExtension::class, extension as PersistentExtension)
-        }
-        if (extension is EventSubscriberProvider) {
-            @Suppress("UNCHECKED_CAST")
-            registerExtension(EventSubscriberProvider::class, extension as EventSubscriberProvider)
-        }
-    }
-
-    /**
-     * Registers an extension with this realm.
-     * Multiple extensions of the same type can be registered for chaining.
-     *
-     * @param extensionClass The class of the extension interface
-     * @param extension The extension instance
-     */
-    public fun <T : RealmExtension> registerExtension(extensionClass: KClass<T>, extension: T) {
-        extensionsMap.getOrPut(extensionClass) { mutableListOf() }.add(extension)
+        // Store config with order for later building
+        extensionConfigs.add(config to extensionPriorityCounter++)
     }
 
     /** Configure time zone for this realm. */
@@ -157,14 +137,33 @@ public class RealmConfigScope internal constructor(
 
     /**
      * Finalises this scope returning an immutable [RealmConfig].
-     * Called by the plugin during installation.
+     * Called by the plugin during installation with userRepository for extension building.
      */
-    internal fun build(): RealmConfig {
+    internal fun build(userRepository: com.mustafadakhel.kodex.repository.UserRepository): RealmConfig {
         val secretsConfig = secretsConfigScope
         val claimConfig = claimsConfigScope
         val tokenValidity = tokenValidityConfig
         val passwordHashingConfig = passwordHashingConfigScope.build()
         val tokenRotationConfig = tokenRotationConfigScope.build()
+
+        // Build extensions from configs with userRepository access
+        val context = getExtensionContext(userRepository)
+        val extensionsMap = mutableMapOf<KClass<out RealmExtension>, MutableList<RealmExtension>>()
+
+        extensionConfigs.forEach { (config, _) ->
+            val extension = config.build(context)
+
+            // Register the extension for each hook interface it implements
+            if (extension is UserLifecycleHooks) {
+                extensionsMap.getOrPut(UserLifecycleHooks::class) { mutableListOf() }.add(extension)
+            }
+            if (extension is PersistentExtension) {
+                extensionsMap.getOrPut(PersistentExtension::class) { mutableListOf() }.add(extension)
+            }
+            if (extension is EventSubscriberProvider) {
+                extensionsMap.getOrPut(EventSubscriberProvider::class) { mutableListOf() }.add(extension)
+            }
+        }
 
         val extensionRegistry = ExtensionRegistry.fromLists(extensionsMap.toMap())
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")
