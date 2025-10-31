@@ -287,20 +287,6 @@ class KodexLoggerTest : DescribeSpec({
             }
         }
 
-        describe("logAccountLockout") {
-            it("should log account locked") {
-                val userId = UUID.randomUUID()
-                logger.logAccountLockout(userId, true, "test-realm")
-                // No assertion - just verify it doesn't throw
-            }
-
-            it("should log account unlocked") {
-                val userId = UUID.randomUUID()
-                logger.logAccountLockout(userId, false, "test-realm")
-                // No assertion - just verify it doesn't throw
-            }
-        }
-
         describe("logValidationFailure") {
             it("should log validation failure") {
                 logger.logValidationFailure("email", "Invalid format", "test-realm")

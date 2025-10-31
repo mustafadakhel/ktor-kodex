@@ -20,7 +20,7 @@ import java.util.UUID
  * Provides secure authentication flows with:
  * - Constant-time password verification (timing attack prevention)
  * - Dummy hash verification when user doesn't exist
- * - Hook execution for extensibility (account lockout, rate limiting)
+ * - Hook execution for extensibility
  * - Comprehensive audit event publishing
  */
 internal class DefaultAuthService(
