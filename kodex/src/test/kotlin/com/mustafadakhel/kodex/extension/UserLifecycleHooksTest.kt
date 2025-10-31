@@ -13,6 +13,7 @@ class UserLifecycleHooksTest : DescribeSpec({
 
     val hooks = DefaultHooksImpl()
     val testUserId = UUID.randomUUID()
+    val testLoginMetadata = LoginMetadata("192.168.1.1", "TestAgent")
     val testProfile = UserProfile(
         firstName = "John",
         lastName = "Doe",
@@ -211,7 +212,7 @@ class UserLifecycleHooksTest : DescribeSpec({
         describe("beforeLogin") {
             it("should return unchanged email identifier") {
                 val result = runBlocking {
-                    hooks.beforeLogin("user@example.com")
+                    hooks.beforeLogin("user@example.com", testLoginMetadata)
                 }
 
                 result shouldBe "user@example.com"
@@ -219,7 +220,7 @@ class UserLifecycleHooksTest : DescribeSpec({
 
             it("should return unchanged phone identifier") {
                 val result = runBlocking {
-                    hooks.beforeLogin("+1234567890")
+                    hooks.beforeLogin("+1234567890", testLoginMetadata)
                 }
 
                 result shouldBe "+1234567890"
@@ -227,7 +228,7 @@ class UserLifecycleHooksTest : DescribeSpec({
 
             it("should return unchanged any identifier") {
                 val result = runBlocking {
-                    hooks.beforeLogin("custom-identifier-123")
+                    hooks.beforeLogin("custom-identifier-123", testLoginMetadata)
                 }
 
                 result shouldBe "custom-identifier-123"
@@ -237,21 +238,21 @@ class UserLifecycleHooksTest : DescribeSpec({
         describe("afterLoginFailure") {
             it("should complete without error for email") {
                 runBlocking {
-                    hooks.afterLoginFailure("failed@example.com")
+                    hooks.afterLoginFailure("failed@example.com", testLoginMetadata)
                 }
                 // No assertion - just verify it doesn't throw
             }
 
             it("should complete without error for phone") {
                 runBlocking {
-                    hooks.afterLoginFailure("+9999999999")
+                    hooks.afterLoginFailure("+9999999999", testLoginMetadata)
                 }
                 // No assertion - just verify it doesn't throw
             }
 
             it("should complete without error for any identifier") {
                 runBlocking {
-                    hooks.afterLoginFailure("any-failed-identifier")
+                    hooks.afterLoginFailure("any-failed-identifier", testLoginMetadata)
                 }
                 // No assertion - just verify it doesn't throw
             }

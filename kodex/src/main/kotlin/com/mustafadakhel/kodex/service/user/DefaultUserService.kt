@@ -165,6 +165,29 @@ internal class DefaultUserService(
         return result
     }
 
+    override suspend fun deleteUser(userId: UUID): Boolean {
+        // Execute beforeUserDelete hooks (extensions can perform cleanup)
+        hookExecutor.executeBeforeUserDelete(userId)
+
+        // Delete user from database
+        val result = userRepository.deleteUser(userId)
+
+        if (result is UserRepository.DeleteResult.Success) {
+            eventBus.publish(
+                UserEvent.Deleted(
+                    eventId = UUID.randomUUID(),
+                    timestamp = CurrentKotlinInstant,
+                    realmId = realm.owner,
+                    userId = userId,
+                    actorId = userId
+                )
+            )
+            return true
+        }
+
+        return false
+    }
+
     // ==================== Role Management ====================
 
     override fun getSeededRoles(): List<String> {
@@ -201,12 +224,6 @@ internal class DefaultUserService(
         }
     }
 
-    // ==================== Verification ====================
-
-    override fun setVerified(userId: UUID, verified: Boolean) {
-        userRepository.setVerified(userId, verified)
-    }
-
     // ==================== Helper Functions ====================
 
     private fun UserRepository.CreateUserResult.userOrThrow() = when (this) {
@@ -223,7 +240,6 @@ internal class DefaultUserService(
         id = id,
         createdAt = createdAt,
         updatedAt = updatedAt,
-        isVerified = isVerified,
         email = email,
         phoneNumber = phoneNumber,
         lastLoggedIn = lastLoggedIn,

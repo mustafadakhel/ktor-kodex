@@ -9,14 +9,13 @@ import com.mustafadakhel.kodex.model.UserStatus
 public data class UserFieldUpdates(
     val email: FieldUpdate<String> = FieldUpdate.NoChange(),
     val phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-    val isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
     val status: FieldUpdate<UserStatus> = FieldUpdate.NoChange()
 ) {
     /**
      * Returns true if any field has a change.
      */
     public fun hasChanges(): Boolean =
-        email.hasChange() || phone.hasChange() || isVerified.hasChange() || status.hasChange()
+        email.hasChange() || phone.hasChange() || status.hasChange()
 
     /**
      * Returns a list of field names that have changes.
@@ -24,7 +23,6 @@ public data class UserFieldUpdates(
     public fun changedFields(): List<String> = buildList {
         if (email.hasChange()) add("email")
         if (phone.hasChange()) add("phone")
-        if (isVerified.hasChange()) add("isVerified")
         if (status.hasChange()) add("status")
     }
 }

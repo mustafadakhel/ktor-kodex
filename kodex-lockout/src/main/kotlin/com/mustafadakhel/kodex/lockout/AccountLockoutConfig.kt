@@ -40,7 +40,7 @@ public class AccountLockoutConfig : ExtensionConfig() {
     public var policy: AccountLockoutPolicy = AccountLockoutPolicy.moderate()
 
     override fun build(context: ExtensionContext): AccountLockoutExtension {
-        val service = accountLockoutService(policy)
-        return AccountLockoutExtension(service, context.timeZone)
+        val service = accountLockoutService(policy, context.timeZone)
+        return AccountLockoutExtension(service, context.userRepository, context.timeZone)
     }
 }

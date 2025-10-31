@@ -11,21 +11,21 @@ import com.mustafadakhel.kodex.update.FieldUpdate
 import kotlinx.datetime.LocalDateTime
 import java.util.*
 
-internal interface UserRepository {
+public interface UserRepository {
 
-    fun getAll(): List<UserEntity>
+    public fun getAll(): List<UserEntity>
 
-    fun getAllFull(): List<FullUserEntity>
+    public fun getAllFull(): List<FullUserEntity>
 
-    fun findById(userId: UUID): UserEntity?
+    public fun findById(userId: UUID): UserEntity?
 
-    fun findByPhone(phone: String): UserEntity?
+    public fun findByPhone(phone: String): UserEntity?
 
-    fun findByEmail(email: String): UserEntity?
+    public fun findByEmail(email: String): UserEntity?
 
-    fun findFullById(userId: UUID): FullUserEntity?
+    public fun findFullById(userId: UUID): FullUserEntity?
 
-    fun create(
+    public fun create(
         email: String? = null,
         phone: String? = null,
         hashedPassword: String,
@@ -35,95 +35,93 @@ internal interface UserRepository {
         currentTime: LocalDateTime,
     ) : CreateUserResult
 
-    fun updateById(
+    public fun updateById(
         userId: UUID,
         email: FieldUpdate<String> = FieldUpdate.NoChange(),
         phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-        isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
         status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
         currentTime: LocalDateTime,
     ): UpdateUserResult
 
-    fun seedRoles(roles: List<Role>)
+    public fun seedRoles(roles: List<Role>)
 
-    fun findRoles(userId: UUID): List<RoleEntity>
+    public fun findRoles(userId: UUID): List<RoleEntity>
 
-    fun getAllRoles(): List<RoleEntity>
+    public fun getAllRoles(): List<RoleEntity>
 
-    fun updateRolesForUser(
+    public fun updateRolesForUser(
         userId: UUID,
         roleNames: List<String>,
     ): UpdateRolesResult
 
-    fun getHashedPassword(
+    public fun getHashedPassword(
         userId: UUID,
     ): String?
 
-    fun findProfileByUserId(userId: UUID): UserProfileEntity?
+    public fun findProfileByUserId(userId: UUID): UserProfileEntity?
 
-    fun updateProfileByUserId(userId: UUID, profile: UserProfile): UpdateProfileResult
+    public fun updateProfileByUserId(userId: UUID, profile: UserProfile): UpdateProfileResult
 
-    fun findCustomAttributesByUserId(userId: UUID): Map<String, String>
+    public fun findCustomAttributesByUserId(userId: UUID): Map<String, String>
 
-    fun replaceAllCustomAttributesByUserId(userId: UUID, customAttributes: Map<String, String>): UpdateUserResult
+    public fun replaceAllCustomAttributesByUserId(userId: UUID, customAttributes: Map<String, String>): UpdateUserResult
 
-    fun updateCustomAttributesByUserId(userId: UUID, customAttributes: Map<String, String>): UpdateUserResult
+    public fun updateCustomAttributesByUserId(userId: UUID, customAttributes: Map<String, String>): UpdateUserResult
 
-    fun setVerified(userId: UUID, verified: Boolean): Boolean
+    public fun updateLastLogin(userId: UUID, loginTime: LocalDateTime): Boolean
 
-    fun updateLastLogin(userId: UUID, loginTime: LocalDateTime): Boolean
+    public fun updatePassword(userId: UUID, hashedPassword: String): Boolean
 
-    fun updatePassword(userId: UUID, hashedPassword: String): Boolean
+    public fun deleteUser(userId: UUID): DeleteResult
 
     /** Updates multiple user fields atomically in one transaction. */
-    fun updateBatch(
+    public fun updateBatch(
         userId: UUID,
         email: FieldUpdate<String> = FieldUpdate.NoChange(),
         phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-        isVerified: FieldUpdate<Boolean> = FieldUpdate.NoChange(),
         status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
         profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange(),
         customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange(),
         currentTime: LocalDateTime
     ): UpdateUserResult
 
-    sealed interface CreateResult {
-        sealed interface Duplicate : CreateResult
-        sealed interface UnexpectedError : CreateResult
+    public sealed interface CreateResult {
+        public sealed interface Duplicate : CreateResult
+        public sealed interface UnexpectedError : CreateResult
     }
 
-    sealed interface CreateUserResult : CreateResult {
-        data class Success(val user: UserEntity) : CreateUserResult
-        data object EmailAlreadyExists : CreateUserResult, CreateResult.Duplicate
-        data object PhoneAlreadyExists : CreateUserResult, CreateResult.Duplicate
-        data class InvalidRole(val roleName: String) : CreateUserResult, CreateResult.Duplicate
+    public sealed interface CreateUserResult : CreateResult {
+        public data class Success(val user: UserEntity) : CreateUserResult
+        public data object EmailAlreadyExists : CreateUserResult, CreateResult.Duplicate
+        public data object PhoneAlreadyExists : CreateUserResult, CreateResult.Duplicate
+        public data class InvalidRole(val roleName: String) : CreateUserResult, CreateResult.Duplicate
     }
 
-    sealed interface UpdateResult {
-        sealed interface NotFound : UpdateResult
-        sealed interface Duplicate : UpdateResult
+    public sealed interface UpdateResult {
+        public sealed interface NotFound : UpdateResult
+        public sealed interface Duplicate : UpdateResult
     }
 
-    sealed interface UpdateUserResult : UpdateResult {
-        data object Success : UpdateUserResult
-        object NotFound : UpdateUserResult, UpdateResult.NotFound
-        data object EmailAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
-        data object PhoneAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
-        data class InvalidRole(val roleName: String) : UpdateUserResult, UpdateResult.NotFound
+    public sealed interface UpdateUserResult : UpdateResult {
+        public data object Success : UpdateUserResult
+        public object NotFound : UpdateUserResult, UpdateResult.NotFound
+        public data object EmailAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
+        public data object PhoneAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
+        public data class InvalidRole(val roleName: String) : UpdateUserResult, UpdateResult.NotFound
     }
 
-    sealed interface UpdateProfileResult : UpdateResult {
-        data class Success(val user: UserEntity) : UpdateProfileResult
-        data object NotFound : UpdateProfileResult, UpdateResult.NotFound
+    public sealed interface UpdateProfileResult : UpdateResult {
+        public data class Success(val user: UserEntity) : UpdateProfileResult
+        public data object NotFound : UpdateProfileResult, UpdateResult.NotFound
     }
 
-    sealed interface UpdateRolesResult : UpdateResult {
-        data object Success : UpdateRolesResult
-        data class InvalidRole(val roleName: String) : UpdateRolesResult, UpdateResult.NotFound
+    public sealed interface UpdateRolesResult : UpdateResult {
+        public data object Success : UpdateRolesResult
+        public data class InvalidRole(val roleName: String) : UpdateRolesResult, UpdateResult.NotFound
     }
 
-    sealed interface DeleteResult {
-        object NotFound : DeleteResult
-        object Success : DeleteResult
+    public sealed interface DeleteResult {
+        public object NotFound : DeleteResult
+        public object Success : DeleteResult
     }
 }

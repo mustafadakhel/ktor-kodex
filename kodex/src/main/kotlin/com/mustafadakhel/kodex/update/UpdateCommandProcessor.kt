@@ -267,7 +267,6 @@ internal class UpdateCommandProcessor(
             userId = current.id,
             email = updates.email,
             phone = updates.phone,
-            isVerified = updates.isVerified,
             status = updates.status,
             currentTime = now(timeZone)
         )
@@ -418,7 +417,6 @@ internal class UpdateCommandProcessor(
             userId = current.id,
             email = batch.userFields?.email ?: FieldUpdate.NoChange(),
             phone = batch.userFields?.phone ?: FieldUpdate.NoChange(),
-            isVerified = batch.userFields?.isVerified ?: FieldUpdate.NoChange(),
             status = batch.userFields?.status ?: FieldUpdate.NoChange(),
             profile = if (batch.profileFields?.hasChanges() == true) {
                 val currentProfile = current.profile

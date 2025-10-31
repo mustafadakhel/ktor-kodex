@@ -53,7 +53,13 @@ public class Kodex private constructor(
 
         override fun install(pipeline: Application, configure: KodexConfig.() -> Unit): Kodex {
             val kodexConfig = KodexConfig().apply(configure)
-            val realmConfigs = kodexConfig.realmConfigScopes.map { it.build() }
+
+            // Create userRepository early so extensions can access it
+            val userRepository: UserRepository = databaseUserRepository()
+            val databaseTokenRepository = databaseTokenRepository()
+
+            // Build realm configs (extensions need userRepository access)
+            val realmConfigs = kodexConfig.realmConfigScopes.map { it.build(userRepository) }
 
             // Collect extension tables from all realms
             val extensionTables = realmConfigs
@@ -61,9 +67,6 @@ public class Kodex private constructor(
                 .distinct()
 
             pipeline.connectDatabase(kodexConfig.getDataSource(), extensionTables)
-
-            val userRepository: UserRepository = databaseUserRepository()
-            val databaseTokenRepository = databaseTokenRepository()
 
             userRepository.seedRoles(realmConfigs.flatMap { it.rolesConfig.roles })
 

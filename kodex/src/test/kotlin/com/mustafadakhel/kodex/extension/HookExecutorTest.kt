@@ -10,6 +10,8 @@ import java.util.UUID
 
 class HookExecutorTest : FunSpec({
 
+    val testLoginMetadata = LoginMetadata("192.168.1.1", "TestAgent")
+
     context("Single Hook Execution") {
         test("should execute single beforeUserCreate hook") {
             val hook = object : UserLifecycleHooks {
@@ -138,7 +140,7 @@ class HookExecutorTest : FunSpec({
 
         test("should execute single beforeLogin hook") {
             val hook = object : UserLifecycleHooks {
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     return identifier.lowercase().trim()
                 }
             }
@@ -147,7 +149,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry)
 
             val result = runBlocking {
-                executor.executeBeforeLogin("  TEST@EXAMPLE.COM  ")
+                executor.executeBeforeLogin("  TEST@EXAMPLE.COM  ", testLoginMetadata)
             }
 
             result shouldBe "test@example.com"
@@ -157,7 +159,7 @@ class HookExecutorTest : FunSpec({
             val capturedIdentifiers = mutableListOf<String>()
 
             val hook = object : UserLifecycleHooks {
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     capturedIdentifiers.add(identifier)
                 }
             }
@@ -166,8 +168,8 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry)
 
             runBlocking {
-                executor.executeAfterLoginFailure("test@example.com")
-                executor.executeAfterLoginFailure("another@example.com")
+                executor.executeAfterLoginFailure("test@example.com", testLoginMetadata)
+                executor.executeAfterLoginFailure("another@example.com", testLoginMetadata)
             }
 
             capturedIdentifiers shouldContainExactly listOf("test@example.com", "another@example.com")
@@ -288,13 +290,13 @@ class HookExecutorTest : FunSpec({
             val hook2Calls = mutableListOf<String>()
 
             val hook1 = object : UserLifecycleHooks {
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook1Calls.add(identifier)
                 }
             }
 
             val hook2 = object : UserLifecycleHooks {
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook2Calls.add(identifier)
                 }
             }
@@ -305,7 +307,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry)
 
             runBlocking {
-                executor.executeAfterLoginFailure("test@example.com")
+                executor.executeAfterLoginFailure("test@example.com", testLoginMetadata)
             }
 
             hook1Calls shouldContainExactly listOf("test@example.com")
@@ -353,7 +355,7 @@ class HookExecutorTest : FunSpec({
 
             val hook1 = object : UserLifecycleHooks {
                 override val priority: Int = 1
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     hook1Executed.add(true)
                     return identifier.lowercase()
                 }
@@ -361,7 +363,7 @@ class HookExecutorTest : FunSpec({
 
             val hook2 = object : UserLifecycleHooks {
                 override val priority: Int = 2
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     hook2Executed.add(true)
                     throw RuntimeException("Hook 2 failed")
                 }
@@ -369,7 +371,7 @@ class HookExecutorTest : FunSpec({
 
             val hook3 = object : UserLifecycleHooks {
                 override val priority: Int = 3
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     hook3Executed.add(true)
                     return identifier
                 }
@@ -382,7 +384,7 @@ class HookExecutorTest : FunSpec({
 
             runCatching {
                 runBlocking {
-                    executor.executeBeforeLogin("TEST@EXAMPLE.COM")
+                    executor.executeBeforeLogin("TEST@EXAMPLE.COM", testLoginMetadata)
                 }
             }
 
@@ -443,7 +445,7 @@ class HookExecutorTest : FunSpec({
 
             val hook1 = object : UserLifecycleHooks {
                 override val priority: Int = 1
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook1Executed.add(true)
                     throw RuntimeException("Hook 1 failed")
                 }
@@ -451,14 +453,14 @@ class HookExecutorTest : FunSpec({
 
             val hook2 = object : UserLifecycleHooks {
                 override val priority: Int = 2
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook2Executed.add(true)
                 }
             }
 
             val hook3 = object : UserLifecycleHooks {
                 override val priority: Int = 3
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook3Executed.add(true)
                     throw RuntimeException("Hook 3 failed")
                 }
@@ -471,7 +473,7 @@ class HookExecutorTest : FunSpec({
 
             runCatching {
                 runBlocking {
-                    executor.executeAfterLoginFailure("test@example.com")
+                    executor.executeAfterLoginFailure("test@example.com", testLoginMetadata)
                 }
             }
 
@@ -661,7 +663,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry)
 
             val result = runBlocking {
-                executor.executeBeforeLogin("test@example.com")
+                executor.executeBeforeLogin("test@example.com", testLoginMetadata)
             }
 
             result shouldBe "test@example.com"
@@ -672,7 +674,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry)
 
             runBlocking {
-                executor.executeAfterLoginFailure("test@example.com")
+                executor.executeAfterLoginFailure("test@example.com", testLoginMetadata)
             }
         }
     }
@@ -912,13 +914,13 @@ class HookExecutorTest : FunSpec({
 
         test("beforeLogin with COLLECT_ERRORS should collect all errors") {
             val hook1 = object : UserLifecycleHooks {
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     throw RuntimeException("Hook 1 failed")
                 }
             }
 
             val hook2 = object : UserLifecycleHooks {
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     throw RuntimeException("Hook 2 failed")
                 }
             }
@@ -930,7 +932,7 @@ class HookExecutorTest : FunSpec({
 
             val result = runCatching {
                 runBlocking {
-                    executor.executeBeforeLogin("test@example.com")
+                    executor.executeBeforeLogin("test@example.com", testLoginMetadata)
                 }
             }
 
@@ -942,21 +944,21 @@ class HookExecutorTest : FunSpec({
         test("beforeLogin with SKIP_FAILED should skip failing hooks") {
             val hook1 = object : UserLifecycleHooks {
                 override val priority: Int = 1
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     return identifier.trim()
                 }
             }
 
             val hook2 = object : UserLifecycleHooks {
                 override val priority: Int = 2
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     throw RuntimeException("Hook 2 failed")
                 }
             }
 
             val hook3 = object : UserLifecycleHooks {
                 override val priority: Int = 3
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     return identifier.lowercase()
                 }
             }
@@ -967,7 +969,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry, HookFailureStrategy.SKIP_FAILED)
 
             val result = runBlocking {
-                executor.executeBeforeLogin("  TEST@EXAMPLE.COM  ")
+                executor.executeBeforeLogin("  TEST@EXAMPLE.COM  ", testLoginMetadata)
             }
 
             result shouldBe "test@example.com"
@@ -980,14 +982,14 @@ class HookExecutorTest : FunSpec({
 
             val hook1 = object : UserLifecycleHooks {
                 override val priority: Int = 1
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook1Calls.add(identifier)
                 }
             }
 
             val hook2 = object : UserLifecycleHooks {
                 override val priority: Int = 2
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook2Calls.add(identifier)
                     throw RuntimeException("Hook 2 failed")
                 }
@@ -995,7 +997,7 @@ class HookExecutorTest : FunSpec({
 
             val hook3 = object : UserLifecycleHooks {
                 override val priority: Int = 3
-                override suspend fun afterLoginFailure(identifier: String) {
+                override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
                     hook3Calls.add(identifier)
                 }
             }
@@ -1006,7 +1008,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry, HookFailureStrategy.SKIP_FAILED)
 
             runBlocking {
-                executor.executeAfterLoginFailure("test@example.com")
+                executor.executeAfterLoginFailure("test@example.com", testLoginMetadata)
             }
 
             hook1Calls shouldContainExactly listOf("test@example.com")
@@ -1105,7 +1107,7 @@ class HookExecutorTest : FunSpec({
 
         test("beforeLogin with COLLECT_ERRORS should collect errors from anonymous hooks") {
             val anonymousHook = object : UserLifecycleHooks {
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     throw RuntimeException("Anonymous hook failed")
                 }
             }
@@ -1117,7 +1119,7 @@ class HookExecutorTest : FunSpec({
 
             val result = runCatching {
                 runBlocking {
-                    executor.executeBeforeLogin("test@example.com")
+                    executor.executeBeforeLogin("test@example.com", testLoginMetadata)
                 }
             }
 
@@ -1202,13 +1204,13 @@ class HookExecutorTest : FunSpec({
 
         test("beforeLogin with COLLECT_ERRORS should succeed when hooks succeed") {
             val hook1 = object : UserLifecycleHooks {
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     return identifier.uppercase()
                 }
             }
 
             val hook2 = object : UserLifecycleHooks {
-                override suspend fun beforeLogin(identifier: String): String {
+                override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
                     return identifier.trim()
                 }
             }
@@ -1219,7 +1221,7 @@ class HookExecutorTest : FunSpec({
             val executor = HookExecutor(registry, HookFailureStrategy.COLLECT_ERRORS)
 
             val result = runBlocking {
-                executor.executeBeforeLogin("test@example.com")
+                executor.executeBeforeLogin("test@example.com", testLoginMetadata)
             }
 
             result shouldBe "TEST@EXAMPLE.COM"

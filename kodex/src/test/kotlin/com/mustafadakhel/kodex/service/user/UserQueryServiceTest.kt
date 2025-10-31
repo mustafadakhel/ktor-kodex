@@ -51,7 +51,6 @@ class UserQueryServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = true,
         lastLoggedIn = testTime,
         status = UserStatus.ACTIVE
     )
@@ -72,7 +71,6 @@ class UserQueryServiceTest : FunSpec({
         phoneNumber = testPhone,
         createdAt = testTime,
         updatedAt = testTime,
-        isVerified = true,
         lastLoggedIn = testTime,
         status = UserStatus.ACTIVE,
         roles = listOf(testRoleEntity),
