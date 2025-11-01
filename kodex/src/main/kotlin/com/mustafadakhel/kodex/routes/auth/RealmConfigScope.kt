@@ -6,6 +6,7 @@ import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.RealmExtension
+import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.extensionContext
 import com.mustafadakhel.kodex.model.Realm
@@ -166,6 +167,9 @@ public class RealmConfigScope internal constructor(
             }
             if (extension is EventSubscriberProvider) {
                 extensionsMap.getOrPut(EventSubscriberProvider::class) { mutableListOf() }.add(extension)
+            }
+            if (extension is ServiceProvider) {
+                extensionsMap.getOrPut(ServiceProvider::class) { mutableListOf() }.add(extension)
             }
         }
 
