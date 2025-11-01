@@ -51,7 +51,12 @@ public interface UserLifecycleHooks : RealmExtension {
     }
 
     /** Called after failed login attempt. */
-    public suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
+    public suspend fun afterLoginFailure(
+        identifier: String,
+        userId: UUID?,
+        identifierType: String,
+        metadata: LoginMetadata
+    ) {
     }
 
     /** Called after successful authentication, before token generation. Extensions can check user state and throw to block login. */

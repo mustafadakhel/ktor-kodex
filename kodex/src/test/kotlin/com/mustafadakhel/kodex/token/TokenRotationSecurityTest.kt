@@ -28,6 +28,7 @@ import com.zaxxer.hikari.HikariDataSource
 import io.kotest.assertions.throwables.shouldNotThrow
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
+import io.mockk.mockk
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import kotlinx.datetime.TimeZone
@@ -99,7 +100,7 @@ class TokenRotationSecurityTest : FunSpec({
             timeZone = TimeZone.UTC,
             realm = realm,
             tokenRotationPolicy = rotationPolicy,
-            extensions = ExtensionRegistry.empty()
+            eventBus = mockk(relaxed = true)
         )
     }
 

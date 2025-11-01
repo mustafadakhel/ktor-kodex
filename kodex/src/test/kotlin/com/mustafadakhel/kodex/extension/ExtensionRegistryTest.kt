@@ -319,11 +319,11 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "custom"
 
-            val mockUserRepository = mockk<UserRepository>()
+            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
                 timeZone = kotlinx.datetime.TimeZone.UTC,
-                userRepository = mockUserRepository
+                eventBus = mockEventBus
             )
 
             val extension = config.build(context)
@@ -334,11 +334,11 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "configured"
 
-            val mockUserRepository = mockk<UserRepository>()
+            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
                 timeZone = kotlinx.datetime.TimeZone.UTC,
-                userRepository = mockUserRepository
+                eventBus = mockEventBus
             )
 
             val extension = config.build(context) as? RealmExtension
@@ -356,11 +356,11 @@ class ExtensionRegistryTest : DescribeSpec({
             }
 
             val config = ContextAwareConfig()
-            val mockUserRepository = mockk<UserRepository>()
+            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("my-realm"),
                 timeZone = kotlinx.datetime.TimeZone.of("America/New_York"),
-                userRepository = mockUserRepository
+                eventBus = mockEventBus
             )
 
             val extension = config.build(context)

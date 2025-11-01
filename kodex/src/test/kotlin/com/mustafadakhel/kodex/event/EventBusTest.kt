@@ -18,9 +18,11 @@ import kotlin.time.Duration.Companion.seconds
 class EventBusTest : FunSpec({
 
     // Helper function to create EventBus with subscribers properly registered
-    fun createEventBusWithSubscribers(vararg subscribers: EventSubscriber<*>): EventBus {
+    fun createEventBusWithSubscribers(vararg subscribers: EventSubscriber<*>): DefaultEventBus {
+        val eventBus = DefaultEventBus()
+
         if (subscribers.isEmpty()) {
-            return DefaultEventBus(ExtensionRegistry.empty())
+            return eventBus
         }
 
         val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
@@ -31,7 +33,8 @@ class EventBusTest : FunSpec({
             mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
         )
 
-        return DefaultEventBus(registry)
+        eventBus.registerExtensionSubscribers(registry)
+        return eventBus
     }
 
     // Test event classes
@@ -288,7 +291,8 @@ class EventBusTest : FunSpec({
                 mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
             )
 
-            val eventBus = DefaultEventBus(registry)
+            val eventBus = DefaultEventBus()
+            eventBus.registerExtensionSubscribers(registry)
 
             val event = TestUserEvent(
                 eventId = UUID.randomUUID(),
@@ -500,7 +504,7 @@ class EventBusTest : FunSpec({
                 override suspend fun onEvent(event: TestUserEvent) {}
             }
 
-            val eventBus = DefaultEventBus(ExtensionRegistry.empty())
+            val eventBus = DefaultEventBus()
 
             val exception = io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
                 eventBus.subscribe(rogueSubscriber)
@@ -528,7 +532,8 @@ class EventBusTest : FunSpec({
                 mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
             )
 
-            val eventBus = DefaultEventBus(registry)
+            val eventBus = DefaultEventBus()
+            eventBus.registerExtensionSubscribers(registry)
 
             // Should not throw - subscriber is from registered extension
             io.kotest.assertions.throwables.shouldNotThrow<IllegalArgumentException> {

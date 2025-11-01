@@ -3,6 +3,7 @@ package com.mustafadakhel.kodex.service.auth
 import com.mustafadakhel.kodex.event.AuthEvent
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.extension.HookExecutor
+import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
@@ -10,6 +11,7 @@ import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.service.token.TokenService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.TokenPair
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now as nowLocal
 import kotlinx.datetime.TimeZone
 import java.util.UUID
@@ -135,8 +137,8 @@ internal class DefaultAuthService(
         userAgent: String?,
         userFetcher: suspend (String) -> UserEntity?
     ): TokenPair {
-        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
-        val metadata = com.mustafadakhel.kodex.extension.LoginMetadata(ipAddress, userAgent)
+        val timestamp = CurrentKotlinInstant
+        val metadata = LoginMetadata(ipAddress, userAgent)
 
         hookExecutor.executeBeforeLogin(identifier, metadata)
 
@@ -150,7 +152,7 @@ internal class DefaultAuthService(
         }
 
         if (!authSuccess) {
-            hookExecutor.executeAfterLoginFailure(identifier, metadata)
+            hookExecutor.executeAfterLoginFailure(identifier, user?.id, identifierType, metadata)
 
             val actualReason = when {
                 user == null -> "User not found"

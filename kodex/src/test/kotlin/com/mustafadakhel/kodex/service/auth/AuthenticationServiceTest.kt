@@ -115,7 +115,7 @@ class AuthServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
         every { userRepository.findByEmail(testEmail) } returns null
-        coEvery { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) } returns Unit
+        coEvery { hookExecutor.executeAfterLoginFailure(testEmail, null, "email", testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
@@ -123,7 +123,7 @@ class AuthServiceTest : FunSpec({
         }
 
         verify(exactly = 1) { hashingService.verify(testPassword, any()) }
-        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) }
+        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail, null, "email", testLoginMetadata) }
 
         eventSlot.captured.apply {
             identifier shouldBe testEmail
@@ -141,14 +141,14 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findByEmail(testEmail) } returns testUserEntity
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns false
-        coEvery { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) } returns Unit
+        coEvery { hookExecutor.executeAfterLoginFailure(testEmail, testUserId, "email", testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {
             authService.login(testEmail, testPassword, testIpAddress, testUserAgent)
         }
 
-        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail, testLoginMetadata) }
+        coVerify(exactly = 1) { hookExecutor.executeAfterLoginFailure(testEmail, testUserId, "email", testLoginMetadata) }
 
         eventSlot.captured.apply {
             identifier shouldBe testEmail
@@ -189,7 +189,7 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findByPhone(testPhone) } returns null
         every { hashingService.hash("dummy-password-for-timing-attack-prevention") } returns dummyHash
         every { hashingService.verify(testPassword, dummyHash) } returns false
-        coEvery { hookExecutor.executeAfterLoginFailure(testPhone, testLoginMetadata) } returns Unit
+        coEvery { hookExecutor.executeAfterLoginFailure(testPhone, null, "phone", testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         shouldThrow<KodexThrowable.Authorization.InvalidCredentials> {

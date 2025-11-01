@@ -18,9 +18,7 @@ import kotlin.reflect.KClass
  * Events are queued in an unbounded channel and processed asynchronously.
  * Each subscriber runs in an isolated coroutine with error handling.
  */
-internal class DefaultEventBus(
-    private val extensionRegistry: ExtensionRegistry
-) : EventBus {
+internal class DefaultEventBus() : EventBus {
 
     private val logger = LoggerFactory.getLogger(DefaultEventBus::class.java)
     private val subscribers = ConcurrentHashMap<KClass<*>, MutableList<EventSubscriber<*>>>()
@@ -31,6 +29,19 @@ internal class DefaultEventBus(
     private val allowedSubscribers = ConcurrentHashMap.newKeySet<EventSubscriber<*>>()
 
     init {
+        // Start event processing coroutine loop
+        scope.launch {
+            for (event in eventQueue) {
+                processEvent(event)
+            }
+        }
+    }
+
+    /**
+     * Registers subscribers from an extension registry.
+     * Called after extensions are built to allow them access to EventBus during construction.
+     */
+    internal fun registerExtensionSubscribers(extensionRegistry: ExtensionRegistry) {
         // Collect all subscribers from registered extensions
         val extensionSubscribers = extensionRegistry.getAllOfType(EventSubscriberProvider::class)
             .flatMap { provider -> provider.getEventSubscribers() }
@@ -41,13 +52,6 @@ internal class DefaultEventBus(
         // Register all allowed subscribers
         extensionSubscribers.forEach { subscriber ->
             subscribeInternal(subscriber)
-        }
-
-        // Start event processing coroutine loop
-        scope.launch {
-            for (event in eventQueue) {
-                processEvent(event)
-            }
         }
     }
 
