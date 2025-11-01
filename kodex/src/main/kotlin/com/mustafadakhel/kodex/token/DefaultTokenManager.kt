@@ -2,10 +2,8 @@ package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
-import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SecurityEvent
-import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.model.Claim
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
@@ -40,9 +38,8 @@ internal class DefaultTokenManager(
     private val timeZone: TimeZone,
     private val realm: Realm,
     private val tokenRotationPolicy: TokenRotationPolicy,
-    extensions: ExtensionRegistry,
+    private val eventBus: EventBus
 ) : TokenManager {
-    private val eventBus: EventBus = DefaultEventBus(extensions)
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
         // Create new token family for session

@@ -238,21 +238,21 @@ class UserLifecycleHooksTest : DescribeSpec({
         describe("afterLoginFailure") {
             it("should complete without error for email") {
                 runBlocking {
-                    hooks.afterLoginFailure("failed@example.com", testLoginMetadata)
+                    hooks.afterLoginFailure("failed@example.com", null, "email", testLoginMetadata)
                 }
                 // No assertion - just verify it doesn't throw
             }
 
             it("should complete without error for phone") {
                 runBlocking {
-                    hooks.afterLoginFailure("+9999999999", testLoginMetadata)
+                    hooks.afterLoginFailure("+9999999999", null, "phone", testLoginMetadata)
                 }
                 // No assertion - just verify it doesn't throw
             }
 
             it("should complete without error for any identifier") {
                 runBlocking {
-                    hooks.afterLoginFailure("any-failed-identifier", testLoginMetadata)
+                    hooks.afterLoginFailure("any-failed-identifier", testUserId, "email", testLoginMetadata)
                 }
                 // No assertion - just verify it doesn't throw
             }

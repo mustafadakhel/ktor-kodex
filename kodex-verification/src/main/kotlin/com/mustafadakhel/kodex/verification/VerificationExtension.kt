@@ -63,7 +63,12 @@ public class VerificationExtension internal constructor(
         customAttributes: Map<String, String>
     ): Map<String, String> = customAttributes
 
-    override suspend fun afterLoginFailure(identifier: String, metadata: com.mustafadakhel.kodex.extension.LoginMetadata) {
+    override suspend fun afterLoginFailure(
+        identifier: String,
+        userId: UUID?,
+        identifierType: String,
+        metadata: com.mustafadakhel.kodex.extension.LoginMetadata
+    ) {
         // No action needed for verification
     }
 
