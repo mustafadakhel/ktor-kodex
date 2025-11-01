@@ -140,7 +140,8 @@ public class Kodex private constructor(
                 realm = context.realm,
                 users = userService(context, updateCommandProcessor),
                 auth = authService(context, tokens),
-                tokens = tokens
+                tokens = tokens,
+                extensions = realmConfig.extensions
             )
         }
 

@@ -4,6 +4,7 @@ import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.PersistentExtension
+import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserUpdateData
@@ -14,6 +15,7 @@ import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import kotlinx.datetime.TimeZone
 import org.jetbrains.exposed.sql.Table
 import java.util.UUID
+import kotlin.reflect.KClass
 
 /**
  * Verification extension that manages contact verification (email, phone, custom attributes).
@@ -27,10 +29,10 @@ import java.util.UUID
  * Priority: 50 - runs after lockout checks but before normal hooks.
  */
 public class VerificationExtension internal constructor(
-    internal val verificationService: VerificationService,
+    public val verificationService: VerificationService,
     private val config: VerificationConfig,
     private val timeZone: TimeZone
-) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider {
+) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider, ServiceProvider {
 
     override val priority: Int = 50
 
@@ -146,5 +148,13 @@ public class VerificationExtension internal constructor(
                 }
             }
         )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any> getService(type: KClass<T>): T? {
+        return when (type) {
+            VerificationService::class -> verificationService as T
+            else -> null
+        }
     }
 }
