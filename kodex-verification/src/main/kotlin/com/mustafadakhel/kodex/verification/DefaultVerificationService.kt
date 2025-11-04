@@ -24,9 +24,6 @@ import java.util.UUID
 
 /**
  * Default implementation of VerificationService.
- *
- * Stores verification status per contact type in the database
- * and generates tokens for verification workflows.
  */
 internal class DefaultVerificationService(
     private val config: VerificationConfig,
@@ -37,13 +34,10 @@ internal class DefaultVerificationService(
 
     private val rateLimiter = RateLimiter()
 
-    // === Contact Management ===
-
     override suspend fun setContact(userId: UUID, identifier: ContactIdentifier, value: String) {
         kodexTransaction {
             val now = Clock.System.now().toLocalDateTime(timeZone)
 
-            // Check if contact exists with different value
             val existing = VerifiableContacts
                 .selectAll()
                 .where {
@@ -54,7 +48,6 @@ internal class DefaultVerificationService(
                 .singleOrNull()
 
             if (existing != null) {
-                // Update existing contact
                 val existingValue = existing[VerifiableContacts.contactValue]
                 val resetVerification = existingValue != value
 
@@ -69,7 +62,6 @@ internal class DefaultVerificationService(
                     it[VerifiableContacts.updatedAt] = now
                 }
             } else {
-                // Insert new contact
                 VerifiableContacts.insert {
                     it[VerifiableContacts.userId] = userId
                     it[VerifiableContacts.contactType] = identifier.type
@@ -91,7 +83,6 @@ internal class DefaultVerificationService(
                 (customAttributeKey eq identifier.customAttributeKey)
             }
 
-            // Also delete any tokens for this contact
             VerificationTokens.deleteWhere {
                 (VerificationTokens.userId eq userId) and
                 (contactType eq identifier.type) and
@@ -141,8 +132,6 @@ internal class DefaultVerificationService(
         }
     }
 
-    // === Verification Status ===
-
     override fun isContactVerified(userId: UUID, identifier: ContactIdentifier): Boolean {
         return getContact(userId, identifier)?.isVerified ?: false
     }
@@ -151,11 +140,9 @@ internal class DefaultVerificationService(
         val requiredContacts = config.getRequiredContacts()
 
         if (requiredContacts.isEmpty()) {
-            // No verification required
             return true
         }
 
-        // Check if all required contacts are verified
         return requiredContacts.all { identifier ->
             isContactVerified(userId, identifier)
         }
@@ -174,8 +161,6 @@ internal class DefaultVerificationService(
         }
     }
 
-    // === Token Operations ===
-
     override suspend fun sendVerification(
         userId: UUID,
         identifier: ContactIdentifier,
@@ -184,12 +169,9 @@ internal class DefaultVerificationService(
         val contact = getContact(userId, identifier)
             ?: error("Contact not found for user $userId: ${identifier.key}")
 
-        // Get registered sender from config
         val sender = config.getSender(identifier)
             ?: error("No sender configured for contact type: ${identifier.key}")
 
-        // Check rate limits (3-dimensional: user, contact value, IP)
-        // Use checkAndReserve for two-phase commit pattern with optional cooldown
         val userReservation = rateLimiter.checkAndReserve(
             key = "verify:send:user:$userId",
             limit = config.maxSendAttemptsPerUser,
@@ -212,7 +194,6 @@ internal class DefaultVerificationService(
             cooldown = config.sendCooldownPeriod
         )
         if (!contactReservation.isAllowed()) {
-            // Release user reservation
             rateLimiter.releaseReservation(userReservation.reservationId)
             val reason = when (val result = contactReservation.result) {
                 is RateLimitResult.Exceeded -> result.reason
@@ -231,7 +212,6 @@ internal class DefaultVerificationService(
                 cooldown = config.sendCooldownPeriod
             )
             if (!ipReservation.isAllowed()) {
-                // Release previous reservations
                 rateLimiter.releaseReservation(userReservation.reservationId)
                 rateLimiter.releaseReservation(contactReservation.reservationId)
                 val reason = when (val result = ipReservation.result) {
@@ -243,19 +223,15 @@ internal class DefaultVerificationService(
             }
         }
 
-        // Generate token but DON'T store yet
         val token = generateToken()
 
-        // Try to send FIRST
         try {
             sender.send(contact.contactValue, token)
         } catch (e: Exception) {
-            // Release ALL reservations on send failure
             rateLimiter.releaseReservation(userReservation.reservationId)
             rateLimiter.releaseReservation(contactReservation.reservationId)
             rateLimiter.releaseReservation(ipReservation?.reservationId)
 
-            // Emit failure event
             eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.VerificationFailed(
                 eventId = UUID.randomUUID(),
                 timestamp = kotlinx.datetime.Clock.System.now(),
@@ -265,14 +241,11 @@ internal class DefaultVerificationService(
                 reason = e.message ?: "Send failed"
             ))
 
-            // Return SendFailed so user can retry
             return VerificationSendResult.SendFailed(e.message ?: "Failed to send verification")
         }
 
-        // Send succeeded - NOW store token and keep rate limit reservations
         storeToken(userId, identifier, token)
 
-        // Emit success event
         eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.EmailVerificationSent(
             eventId = UUID.randomUUID(),
             timestamp = kotlinx.datetime.Clock.System.now(),
@@ -293,8 +266,6 @@ internal class DefaultVerificationService(
     ): VerificationResult {
         val startTime = System.nanoTime()
 
-        // SECURITY: Rate limit on (userId + IP) instead of token to prevent token enumeration
-        // Using token in rate limit key would reveal which tokens exist in database
         val rateLimitKey = "verify:attempt:user:$userId:ip:${ipAddress ?: "unknown"}"
         val userIpLimit = rateLimiter.checkLimit(
             key = rateLimitKey,
@@ -302,7 +273,6 @@ internal class DefaultVerificationService(
             window = config.verifyRateLimitWindow
         )
         if (userIpLimit is RateLimitResult.Exceeded) {
-            // Add constant-time delay before returning
             ensureMinimumResponseTime(startTime)
             return VerificationResult.RateLimitExceeded(userIpLimit.reason)
         }
@@ -324,7 +294,6 @@ internal class DefaultVerificationService(
                 return@kodexTransaction VerificationResult.Invalid("Token not found")
             }
 
-            // Validate token using common utility
             val validation = TokenValidator.validate(
                 expiresAt = tokenRecord[VerificationTokens.expiresAt],
                 usedAt = tokenRecord[VerificationTokens.usedAt],
@@ -335,22 +304,18 @@ internal class DefaultVerificationService(
                 return@kodexTransaction VerificationResult.Invalid(validation.reason!!)
             }
 
-            // Mark token as used
             VerificationTokens.update({ VerificationTokens.token eq token }) {
                 it[VerificationTokens.usedAt] = now
             }
 
-            // Mark contact as verified
             setVerified(userId, identifier, true)
 
-            // Clear rate limits after successful verification
             rateLimiter.clear(rateLimitKey)
             rateLimiter.clear("verify:send:user:$userId")
 
             VerificationResult.Success
         }
 
-        // Emit events after transaction completes
         when (result) {
             is VerificationResult.Success -> {
                 val contactValue = getContact(userId, identifier)?.contactValue ?: ""
@@ -390,21 +355,14 @@ internal class DefaultVerificationService(
                 ))
             }
             is VerificationResult.RateLimitExceeded -> {
-                // Rate limit exceeded, no additional event needed
             }
         }
 
-        // SECURITY: Add constant-time delay to prevent timing attacks
-        // Ensures both valid and invalid tokens take similar time to verify
         ensureMinimumResponseTime(startTime)
 
         return result
     }
 
-    /**
-     * Ensures minimum response time to prevent timing attacks.
-     * Adds delay if operation completed faster than minimum.
-     */
     private suspend fun ensureMinimumResponseTime(startTimeNanos: Long) {
         val elapsedMs = (System.nanoTime() - startTimeNanos) / 1_000_000
         val minResponseTime = config.minVerificationResponseTimeMs
@@ -419,7 +377,6 @@ internal class DefaultVerificationService(
         identifier: ContactIdentifier,
         ipAddress: String?
     ): VerificationSendResult {
-        // Invalidate existing tokens for this contact
         kodexTransaction {
             VerificationTokens.deleteWhere {
                 (VerificationTokens.userId eq userId) and
@@ -428,11 +385,8 @@ internal class DefaultVerificationService(
             }
         }
 
-        // Send new verification (includes rate limiting)
         return sendVerification(userId, identifier, ipAddress)
     }
-
-    // === Manual Control ===
 
     override fun setVerified(userId: UUID, identifier: ContactIdentifier, verified: Boolean) {
         kodexTransaction {
@@ -450,14 +404,11 @@ internal class DefaultVerificationService(
         }
     }
 
-    // === Private Helpers ===
-
     private fun generateToken(): String = TokenGenerator.generate(HexFormat())
 
     private fun storeToken(userId: UUID, identifier: ContactIdentifier, token: String) {
         kodexTransaction {
             val now = Clock.System.now()
-            // Use per-contact expiration, falling back to default
             val expiration = config.getTokenExpiration(identifier)
             val expiresAt = ExpirationCalculator.calculateExpiration(expiration, timeZone, now)
 

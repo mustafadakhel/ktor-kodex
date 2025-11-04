@@ -18,16 +18,6 @@ import kotlin.time.Duration.Companion.days
  * Service for cleaning up expired and used verification tokens.
  */
 public interface TokenCleanupService {
-    /**
-     * Purges expired and used tokens older than the retention period.
-     *
-     * Deletes tokens that are either:
-     * - Expired and older than retentionPeriod
-     * - Used and older than retentionPeriod
-     *
-     * @param retentionPeriod How long to keep tokens after expiry/use. Default: 30 days
-     * @return Number of tokens deleted
-     */
     public suspend fun purgeExpiredTokens(retentionPeriod: Duration = 30.days): Int
 }
 
@@ -45,8 +35,6 @@ internal class DefaultTokenCleanupService(
         val clockNow = Clock.System.now()
         val cutoff = clockNow.minus(retentionPeriod).toLocalDateTime(timeZone)
 
-        // PERFORMANCE: Delete in batches to avoid long table locks
-        // Delete max 1000 tokens per transaction to prevent blocking other operations
         val batchSize = 1000
         var totalDeleted = 0
 
@@ -60,13 +48,11 @@ internal class DefaultTokenCleanupService(
 
             totalDeleted += deletedInBatch
 
-            // Small delay between batches to allow other operations to proceed
             if (deletedInBatch == batchSize) {
-                delay(10) // 10ms pause between batches
+                delay(10)
             }
-        } while (deletedInBatch == batchSize) // Continue if we deleted a full batch
+        } while (deletedInBatch == batchSize)
 
-        // Emit cleanup event
         if (totalDeleted > 0) {
             eventBus?.publish(com.mustafadakhel.kodex.event.TokenCleanupEvent.TokensCleanedUp(
                 eventId = java.util.UUID.randomUUID(),

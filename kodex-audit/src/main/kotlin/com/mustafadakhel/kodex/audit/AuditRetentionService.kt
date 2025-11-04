@@ -14,32 +14,11 @@ import kotlin.time.Duration.Companion.days
 
 /**
  * Service for managing audit log retention and cleanup.
- *
- * Provides automatic deletion of audit logs older than the configured retention period
- * to prevent unbounded database growth and ensure GDPR compliance.
- *
- * Features:
- * - Configurable retention period (default: 90 days)
- * - Efficient batch deletion using indexed timestamp queries
- * - Returns count of deleted records for monitoring
- * - Thread-safe database operations
- *
- * GDPR Compliance:
- * - Audit logs are considered "logs of processing activities" under GDPR Article 30
- * - Retention should align with legal requirements (typically 6 months to 2 years)
- * - Default 90 days is conservative and suitable for most applications
- * - Organizations should configure based on their specific compliance needs
  */
 public interface AuditRetentionService {
 
     /**
      * Deletes audit log entries older than the configured retention period.
-     *
-     * This operation:
-     * - Uses indexed timestamp column for efficient queries
-     * - Deletes all audit events with timestamp < (now - retentionPeriod)
-     * - Is safe to run concurrently (uses database transactions)
-     * - Returns count of deleted records for monitoring/logging
      *
      * @return Number of audit log entries deleted
      */
@@ -47,11 +26,6 @@ public interface AuditRetentionService {
 
     /**
      * Deletes audit logs older than a specific cutoff date.
-     *
-     * Useful for:
-     * - Manual cleanup operations
-     * - Testing retention policies
-     * - One-time migrations or bulk deletions
      *
      * @param cutoffDate Delete all audit logs with timestamp before this date
      * @return Number of audit log entries deleted
@@ -84,9 +58,6 @@ internal class DefaultAuditRetentionService(
 
     override fun cleanupAuditLogsOlderThan(cutoffDate: LocalDateTime): Int {
         return kodexTransaction {
-            // Delete all audit logs with timestamp less than cutoff
-            // Uses indexed timestamp column for efficient query
-            // Convert LocalDateTime to Instant for comparison
             val cutoffInstant = cutoffDate.toInstant(timeZone)
             AuditLogs.deleteWhere {
                 AuditLogs.timestamp less cutoffInstant
@@ -98,17 +69,6 @@ internal class DefaultAuditRetentionService(
         return retentionPeriod
     }
 
-    /**
-     * Calculates the cutoff date for audit log deletion.
-     *
-     * Formula: current_time - retention_period
-     *
-     * Example:
-     * - Current time: 2025-10-21 12:00:00
-     * - Retention period: 90 days
-     * - Cutoff date: 2025-07-23 12:00:00
-     * - All logs before 2025-07-23 will be deleted
-     */
     private fun calculateCutoffDate(): LocalDateTime {
         val nowInstant = CurrentKotlinInstant
         val cutoffInstant = nowInstant - retentionPeriod

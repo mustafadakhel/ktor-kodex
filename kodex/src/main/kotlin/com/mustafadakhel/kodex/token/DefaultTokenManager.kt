@@ -43,7 +43,6 @@ internal class DefaultTokenManager(
 ) : TokenManager {
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
         val roles = userRepository.findRoles(userId).map { it.name }
-        // Create new token family for session
         val tokenFamily = UUID.randomUUID()
         val accessToken = issueToken(
             userId = userId,
@@ -76,7 +75,6 @@ internal class DefaultTokenManager(
             tokenType = tokenType.claim,
             roles = roles
         )
-        // Store token in database if persistence is enable for this type
         if (tokenPersistence[tokenType] == true)
             tokenRepository.storeToken(
                 PersistedToken(

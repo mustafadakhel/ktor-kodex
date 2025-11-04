@@ -32,16 +32,6 @@ internal data class RealmConfig(
 @KtorDsl
 /**
  * Scope used to configure a single kodex realm.
- *
- * Example:
- * ```kotlin
- * kodex {
- *     realm(Realm.Main) {
- *         tokenValidity { /* ... */ }
- *         passwordHashing { /* ... */ }
- *     }
- * }
- * ```
  */
 public class RealmConfigScope internal constructor(
     private val realm: Realm,
@@ -58,17 +48,9 @@ public class RealmConfigScope internal constructor(
     internal var extensionPriorityCounter: Int = 0
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
 
-    /**
-     * Strategy for handling hook execution failures.
-     * Default is FAIL_FAST (stop on first error).
-     */
     public var hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy =
         com.mustafadakhel.kodex.extension.HookFailureStrategy.FAIL_FAST
 
-    /**
-     * Gets the extension context for this realm configuration.
-     * Used internally during build() to create extension context with eventBus.
-     */
     @PublishedApi
     internal fun getExtensionContext(
         eventBus: com.mustafadakhel.kodex.event.EventBus

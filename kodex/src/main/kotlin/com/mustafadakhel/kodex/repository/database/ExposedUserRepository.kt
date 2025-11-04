@@ -25,7 +25,6 @@ private object ExposedUserRepository : UserRepository {
         UserDao.all().map { it.toEntity() }
     }
 
-    /** Gets all users with complete data using eager loading. */
     override fun getAllFull(): List<FullUserEntity> = exposedTransaction {
         val users = UserDao.all().toList()
 
@@ -33,7 +32,6 @@ private object ExposedUserRepository : UserRepository {
 
         val userIds = users.map { it.id.value }
 
-        // Batch load all user roles in a single query
         val userRolesMap = mutableMapOf<UUID, MutableList<RoleEntity>>()
         UserRoles
             .innerJoin(Roles)
@@ -48,18 +46,15 @@ private object ExposedUserRepository : UserRepository {
                 userRolesMap.getOrPut(userId) { mutableListOf() }.add(role)
             }
 
-        // Batch load all profiles in a single query
         val userProfilesMap = UserProfileDao
             .find { UserProfiles.id inList userIds }
             .associate { it.id.value to it.toEntity() }
 
-        // Batch load all custom attributes in a single query
         val userAttributesMap = UserCustomAttributesDao
             .find { UserCustomAttributes.userId inList userIds }
             .groupBy({ it.userId.value }) { it.key to it.value }
             .mapValues { (_, pairs) -> pairs.toMap() }
 
-        // Construct FullUserEntity objects with preloaded data
         users.map { user ->
             FullUserEntity(
                 id = user.id.value,
