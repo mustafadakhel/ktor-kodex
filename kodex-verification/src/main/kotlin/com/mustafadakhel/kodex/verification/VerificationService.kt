@@ -115,13 +115,15 @@ public interface VerificationService {
      *
      * @param userId The ID of the user
      * @param identifier The contact identifier
-     * @return The generated verification token
+     * @param ipAddress Optional IP address for rate limiting
+     * @return VerificationSendResult indicating success or rate limit exceeded
      * @throws IllegalStateException if no sender is configured for this contact type
      */
     public suspend fun sendVerification(
         userId: UUID,
-        identifier: ContactIdentifier
-    ): String
+        identifier: ContactIdentifier,
+        ipAddress: String? = null
+    ): VerificationSendResult
 
     /**
      * Verify a token for a specific contact.
@@ -129,9 +131,15 @@ public interface VerificationService {
      * @param userId The ID of the user
      * @param identifier The contact identifier
      * @param token The verification token
-     * @return true if the token is valid and contact was verified, false otherwise
+     * @param ipAddress Optional IP address for rate limiting
+     * @return VerificationResult indicating success, invalid token, or rate limit exceeded
      */
-    public suspend fun verifyToken(userId: UUID, identifier: ContactIdentifier, token: String): Boolean
+    public suspend fun verifyToken(
+        userId: UUID,
+        identifier: ContactIdentifier,
+        token: String,
+        ipAddress: String? = null
+    ): VerificationResult
 
     /**
      * Resend verification for a contact.
@@ -141,12 +149,15 @@ public interface VerificationService {
      *
      * @param userId The ID of the user
      * @param identifier The contact identifier
+     * @param ipAddress Optional IP address for rate limiting
+     * @return VerificationSendResult indicating success or rate limit exceeded
      * @throws IllegalStateException if no sender is configured for this contact type
      */
     public suspend fun resendVerification(
         userId: UUID,
-        identifier: ContactIdentifier
-    )
+        identifier: ContactIdentifier,
+        ipAddress: String? = null
+    ): VerificationSendResult
 
     // === Manual Control ===
 

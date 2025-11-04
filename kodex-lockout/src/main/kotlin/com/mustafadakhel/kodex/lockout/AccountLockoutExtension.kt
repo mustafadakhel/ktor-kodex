@@ -8,7 +8,6 @@ import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.lockout.database.AccountLocks
 import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
@@ -25,7 +24,6 @@ import java.util.*
  */
 public class AccountLockoutExtension internal constructor(
     private val service: AccountLockoutService,
-    private val userRepository: UserRepository,
     private val timeZone: TimeZone
 ) : UserLifecycleHooks, PersistentExtension {
 
@@ -83,13 +81,17 @@ public class AccountLockoutExtension internal constructor(
         }
     }
 
-    override suspend fun afterLoginFailure(identifier: String, metadata: LoginMetadata) {
+    override suspend fun afterLoginFailure(
+        identifier: String,
+        userId: UUID?,
+        identifierType: String,
+        metadata: LoginMetadata
+    ) {
         // Record failed attempt with all metadata
         // userId will be null if account doesn't exist (prevents username enumeration)
-        val user = userRepository.findByEmail(identifier) ?: userRepository.findByPhone(identifier)
         service.recordFailedAttempt(
             identifier = identifier,
-            userId = user?.id,
+            userId = userId,
             ipAddress = metadata.ipAddress,
             reason = "Invalid credentials"
         )

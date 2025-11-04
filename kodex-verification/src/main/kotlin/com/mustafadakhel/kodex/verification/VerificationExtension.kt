@@ -4,6 +4,7 @@ import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.PersistentExtension
+import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserUpdateData
@@ -14,6 +15,7 @@ import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import kotlinx.datetime.TimeZone
 import org.jetbrains.exposed.sql.Table
 import java.util.UUID
+import kotlin.reflect.KClass
 
 /**
  * Verification extension that manages contact verification (email, phone, custom attributes).
@@ -22,15 +24,16 @@ import java.util.UUID
  * - Creates verifiable contact records on user registration
  * - Checks if required contacts are verified before allowing login
  * - Automatically sends verification based on configured strategy and policies
- * - Provides a service for managing verification status and tokens
+ * - Provides services for managing verification status and tokens
  *
  * Priority: 50 - runs after lockout checks but before normal hooks.
  */
 public class VerificationExtension internal constructor(
-    internal val verificationService: VerificationService,
+    public val verificationService: VerificationService,
+    public val tokenCleanupService: TokenCleanupService,
     private val config: VerificationConfig,
     private val timeZone: TimeZone
-) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider {
+) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider, ServiceProvider {
 
     override val priority: Int = 50
 
@@ -63,7 +66,12 @@ public class VerificationExtension internal constructor(
         customAttributes: Map<String, String>
     ): Map<String, String> = customAttributes
 
-    override suspend fun afterLoginFailure(identifier: String, metadata: com.mustafadakhel.kodex.extension.LoginMetadata) {
+    override suspend fun afterLoginFailure(
+        identifier: String,
+        userId: UUID?,
+        identifierType: String,
+        metadata: com.mustafadakhel.kodex.extension.LoginMetadata
+    ) {
         // No action needed for verification
     }
 
@@ -93,7 +101,6 @@ public class VerificationExtension internal constructor(
                                 verificationService.sendVerification(event.userId, identifier)
                             } catch (e: Exception) {
                                 // Log but don't fail user creation if verification sending fails
-                                // TODO: Add proper logging
                             }
                         }
                     }
@@ -109,7 +116,6 @@ public class VerificationExtension internal constructor(
                                 verificationService.sendVerification(event.userId, identifier)
                             } catch (e: Exception) {
                                 // Log but don't fail user creation if verification sending fails
-                                // TODO: Add proper logging
                             }
                         }
                     }
@@ -141,5 +147,14 @@ public class VerificationExtension internal constructor(
                 }
             }
         )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any> getService(type: KClass<T>): T? {
+        return when (type) {
+            VerificationService::class -> verificationService as T
+            TokenCleanupService::class -> tokenCleanupService as T
+            else -> null
+        }
     }
 }

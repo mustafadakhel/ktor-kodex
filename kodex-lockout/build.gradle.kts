@@ -49,4 +49,5 @@ dependencies {
     // Test dependencies
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
+    testImplementation(libs.h2.database)
 }

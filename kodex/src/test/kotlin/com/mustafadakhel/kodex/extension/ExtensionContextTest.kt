@@ -1,7 +1,7 @@
 package com.mustafadakhel.kodex.extension
 
+import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.model.Realm
-import com.mustafadakhel.kodex.repository.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
@@ -9,7 +9,7 @@ import kotlinx.datetime.TimeZone
 
 class ExtensionContextTest : DescribeSpec({
 
-    val mockUserRepository = mockk<UserRepository>()
+    val mockEventBus = mockk<EventBus>()
 
     describe("ExtensionContext") {
         describe("extensionContext factory") {
@@ -17,7 +17,7 @@ class ExtensionContextTest : DescribeSpec({
                 val realm = Realm(owner = "test-realm")
                 val timeZone = TimeZone.of("America/New_York")
 
-                val context = extensionContext(realm, timeZone, mockUserRepository)
+                val context = extensionContext(realm, timeZone, mockEventBus)
 
                 context.realm shouldBe realm
                 context.timeZone shouldBe timeZone
@@ -27,7 +27,7 @@ class ExtensionContextTest : DescribeSpec({
                 val realm = Realm(owner = "utc-realm")
                 val timeZone = TimeZone.UTC
 
-                val context = extensionContext(realm, timeZone, mockUserRepository)
+                val context = extensionContext(realm, timeZone, mockEventBus)
 
                 context.realm shouldBe realm
                 context.timeZone shouldBe TimeZone.UTC
@@ -38,8 +38,8 @@ class ExtensionContextTest : DescribeSpec({
                 val realm2 = Realm(owner = "realm-2")
                 val timeZone = TimeZone.UTC
 
-                val context1 = extensionContext(realm1, timeZone, mockUserRepository)
-                val context2 = extensionContext(realm2, timeZone, mockUserRepository)
+                val context1 = extensionContext(realm1, timeZone, mockEventBus)
+                val context2 = extensionContext(realm2, timeZone, mockEventBus)
 
                 context1.realm.owner shouldBe "realm-1"
                 context2.realm.owner shouldBe "realm-2"
@@ -51,8 +51,8 @@ class ExtensionContextTest : DescribeSpec({
                 val realm = Realm(owner = "test-realm")
                 val timeZone = TimeZone.UTC
 
-                val context1 = extensionContext(realm, timeZone, mockUserRepository) as ExtensionContextImpl
-                val context2 = extensionContext(realm, timeZone, mockUserRepository) as ExtensionContextImpl
+                val context1 = extensionContext(realm, timeZone, mockEventBus) as ExtensionContextImpl
+                val context2 = extensionContext(realm, timeZone, mockEventBus) as ExtensionContextImpl
 
                 (context1.realm == context2.realm) shouldBe true
                 (context1.timeZone == context2.timeZone) shouldBe true
@@ -63,8 +63,8 @@ class ExtensionContextTest : DescribeSpec({
                 val realm2 = Realm(owner = "realm-2")
                 val timeZone = TimeZone.UTC
 
-                val context1 = extensionContext(realm1, timeZone, mockUserRepository)
-                val context2 = extensionContext(realm2, timeZone, mockUserRepository)
+                val context1 = extensionContext(realm1, timeZone, mockEventBus)
+                val context2 = extensionContext(realm2, timeZone, mockEventBus)
 
                 (context1.realm == context2.realm) shouldBe false
             }
@@ -74,15 +74,15 @@ class ExtensionContextTest : DescribeSpec({
                 val tz1 = TimeZone.UTC
                 val tz2 = TimeZone.of("America/Los_Angeles")
 
-                val context1 = extensionContext(realm, tz1, mockUserRepository)
-                val context2 = extensionContext(realm, tz2, mockUserRepository)
+                val context1 = extensionContext(realm, tz1, mockEventBus)
+                val context2 = extensionContext(realm, tz2, mockEventBus)
 
                 (context1.timeZone == context2.timeZone) shouldBe false
             }
 
             it("should provide access to realm properties") {
                 val realm = Realm(owner = "my-app")
-                val context = extensionContext(realm, TimeZone.UTC, mockUserRepository)
+                val context = extensionContext(realm, TimeZone.UTC, mockEventBus)
 
                 context.realm.owner shouldBe "my-app"
             }
@@ -90,7 +90,7 @@ class ExtensionContextTest : DescribeSpec({
             it("should provide access to timezone") {
                 val realm = Realm(owner = "test")
                 val timeZone = TimeZone.of("Europe/London")
-                val context = extensionContext(realm, timeZone, mockUserRepository)
+                val context = extensionContext(realm, timeZone, mockEventBus)
 
                 context.timeZone shouldBe timeZone
             }

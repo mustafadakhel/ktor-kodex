@@ -128,11 +128,112 @@ public class MetricsEventSubscriber internal constructor(
                     metrics.recordAccountLockout(locked = false, realmId = event.realmId)
                 }
 
-                is VerificationEvent.EmailVerificationSent -> {}
-                is VerificationEvent.EmailVerified -> {}
-                is VerificationEvent.PhoneVerificationSent -> {}
-                is VerificationEvent.PhoneVerified -> {}
-                is VerificationEvent.VerificationFailed -> {}
+                is VerificationEvent.EmailVerificationSent -> {
+                    metrics.recordVerificationSend(
+                        success = true,
+                        contactType = "email",
+                        reason = null
+                    )
+                }
+
+                is VerificationEvent.EmailVerified -> {
+                    metrics.recordVerificationAttempt(
+                        success = true,
+                        reason = null
+                    )
+                }
+
+                is VerificationEvent.PhoneVerificationSent -> {
+                    metrics.recordVerificationSend(
+                        success = true,
+                        contactType = "phone",
+                        reason = null
+                    )
+                }
+
+                is VerificationEvent.PhoneVerified -> {
+                    metrics.recordVerificationAttempt(
+                        success = true,
+                        reason = null
+                    )
+                }
+
+                is VerificationEvent.VerificationFailed -> {
+                    metrics.recordVerificationAttempt(
+                        success = false,
+                        reason = event.reason
+                    )
+                }
+
+                is PasswordResetEvent.PasswordResetInitiated -> {
+                    metrics.recordPasswordResetInitiate(
+                        success = true,
+                        contactType = event.contactType,
+                        reason = null
+                    )
+                }
+
+                is PasswordResetEvent.PasswordResetInitiationFailed -> {
+                    metrics.recordPasswordResetInitiate(
+                        success = false,
+                        contactType = event.contactType,
+                        reason = event.reason
+                    )
+                }
+
+                is PasswordResetEvent.PasswordResetTokenVerified -> {
+                    metrics.recordPasswordResetVerify(
+                        success = true,
+                        reason = null
+                    )
+                }
+
+                is PasswordResetEvent.PasswordResetTokenVerificationFailed -> {
+                    metrics.recordPasswordResetVerify(
+                        success = false,
+                        reason = event.reason
+                    )
+                }
+
+                is PasswordResetEvent.PasswordResetCompleted -> {
+                    metrics.recordPasswordResetConsume(
+                        success = true,
+                        reason = null
+                    )
+                }
+
+                is PasswordResetEvent.PasswordResetCompletionFailed -> {
+                    metrics.recordPasswordResetConsume(
+                        success = false,
+                        reason = event.reason
+                    )
+                }
+
+                is RateLimitEvent.RateLimitChecked -> {
+                    metrics.recordRateLimitCheck(
+                        allowed = event.allowed,
+                        key = event.key
+                    )
+                }
+
+                is RateLimitEvent.RateLimitSizeChanged -> {
+                    metrics.recordRateLimitSize(event.size)
+                }
+
+                is RateLimitEvent.RateLimitCleanupPerformed -> {
+                    metrics.recordRateLimitCleanup(event.entriesRemoved)
+                }
+
+                is RateLimitEvent.RateLimitEvictionPerformed -> {
+                    metrics.recordRateLimitEviction(event.entriesEvicted)
+                }
+
+                is TokenCleanupEvent.TokensCleanedUp -> {
+                    metrics.recordTokenCleanup(
+                        tokenType = event.tokenType,
+                        tokensRemoved = event.tokensRemoved
+                    )
+                }
 
                 else -> {}
             }

@@ -24,6 +24,8 @@ Kodex features a flexible extension system that allows you to customize and exte
 - **Account Lockout** (`kodex-lockout`) – Brute force protection via failed attempt tracking
 - **Input Validation** (`kodex-validation`) – Email, phone, password validation and XSS protection
 - **Audit Logging** (`kodex-audit`) – Comprehensive event tracking for compliance
+- **Email/Phone Verification** (`kodex-verification`) – Email and phone number verification with token generation
+- **Password Reset** (`kodex-password-reset`) – Self-service password reset with rate limiting
 
 **Two extension patterns:**
 

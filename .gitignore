@@ -40,3 +40,6 @@ bin/
 .DS_Store
 /combine.bat
 /combining-script.ps1
+
+### Logs ###
+*.log

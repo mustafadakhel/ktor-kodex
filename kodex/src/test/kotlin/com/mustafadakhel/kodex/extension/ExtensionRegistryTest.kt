@@ -28,6 +28,28 @@ private class PersistentTestExtension : PersistentExtension {
     override fun tables(): List<Table> = listOf(TestTable, AnotherTestTable)
 }
 
+// Test service for ServiceProvider testing
+private interface TestService {
+    fun doSomething(): String
+}
+
+private class TestServiceImpl : TestService {
+    override fun doSomething(): String = "test"
+}
+
+// ServiceProvider extension for testing
+private class ServiceProviderExtension(
+    private val service: TestService
+) : ServiceProvider {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any> getService(type: kotlin.reflect.KClass<T>): T? {
+        return when (type) {
+            TestService::class -> service as T
+            else -> null
+        }
+    }
+}
+
 class ExtensionRegistryTest : DescribeSpec({
 
     describe("ExtensionRegistry") {
@@ -302,6 +324,59 @@ class ExtensionRegistryTest : DescribeSpec({
                 extension.priority shouldBe 50
             }
         }
+
+        describe("ServiceProvider") {
+            it("should register ServiceProvider extensions") {
+                val service = TestServiceImpl()
+                val extension = ServiceProviderExtension(service)
+                val registry = ExtensionRegistry.from(
+                    mapOf(ServiceProvider::class to extension)
+                )
+
+                registry.has(ServiceProvider::class) shouldBe true
+                val provider = registry.get(ServiceProvider::class)
+                provider.shouldNotBeNull()
+            }
+
+            it("should retrieve service from ServiceProvider") {
+                val service = TestServiceImpl()
+                val extension = ServiceProviderExtension(service)
+                val registry = ExtensionRegistry.from(
+                    mapOf(ServiceProvider::class to extension)
+                )
+
+                val provider = registry.get(ServiceProvider::class)
+                val retrievedService = provider?.getService(TestService::class)
+                retrievedService.shouldNotBeNull()
+                retrievedService.doSomething() shouldBe "test"
+            }
+
+            it("should return null for unregistered service type") {
+                val service = TestServiceImpl()
+                val extension = ServiceProviderExtension(service)
+                val registry = ExtensionRegistry.from(
+                    mapOf(ServiceProvider::class to extension)
+                )
+
+                val provider = registry.get(ServiceProvider::class)
+                val nonExistentService = provider?.getService(String::class)
+                nonExistentService.shouldBeNull()
+            }
+
+            it("should support multiple ServiceProvider extensions") {
+                val service1 = TestServiceImpl()
+                val service2 = TestServiceImpl()
+                val ext1 = ServiceProviderExtension(service1)
+                val ext2 = ServiceProviderExtension(service2)
+
+                val registry = ExtensionRegistry.fromLists(
+                    mapOf(ServiceProvider::class to listOf(ext1, ext2))
+                )
+
+                val providers = registry.getAllOfType(ServiceProvider::class)
+                providers.size shouldBe 2
+            }
+        }
     }
 
     describe("ExtensionConfig") {
@@ -319,11 +394,11 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "custom"
 
-            val mockUserRepository = mockk<UserRepository>()
+            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
                 timeZone = kotlinx.datetime.TimeZone.UTC,
-                userRepository = mockUserRepository
+                eventBus = mockEventBus
             )
 
             val extension = config.build(context)
@@ -334,11 +409,11 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "configured"
 
-            val mockUserRepository = mockk<UserRepository>()
+            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
                 timeZone = kotlinx.datetime.TimeZone.UTC,
-                userRepository = mockUserRepository
+                eventBus = mockEventBus
             )
 
             val extension = config.build(context) as? RealmExtension
@@ -356,11 +431,11 @@ class ExtensionRegistryTest : DescribeSpec({
             }
 
             val config = ContextAwareConfig()
-            val mockUserRepository = mockk<UserRepository>()
+            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("my-realm"),
                 timeZone = kotlinx.datetime.TimeZone.of("America/New_York"),
-                userRepository = mockUserRepository
+                eventBus = mockEventBus
             )
 
             val extension = config.build(context)
