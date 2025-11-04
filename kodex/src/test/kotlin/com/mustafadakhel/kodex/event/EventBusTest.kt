@@ -449,11 +449,12 @@ class EventBusTest : FunSpec({
             runBlocking {
                 eventBus.publish(userEvent)
                 eventBus.publish(securityEvent)
-                delay(300)
-            }
 
-            allEvents.size shouldBe 2
-            allEvents shouldContainExactlyInAnyOrder listOf(userEvent, securityEvent)
+                eventually(5.seconds) {
+                    allEvents.size shouldBe 2
+                    allEvents shouldContainExactlyInAnyOrder listOf(userEvent, securityEvent)
+                }
+            }
         }
 
         test("should handle publishing KodexEvent base class directly") {
