@@ -28,6 +28,7 @@ import com.zaxxer.hikari.HikariDataSource
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.nulls.shouldBeNull
+import io.mockk.mockk
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
@@ -100,7 +101,7 @@ class DefaultTokenManagerTest : FunSpec({
             timeZone = TimeZone.UTC,
             realm = realm,
             tokenRotationPolicy = rotationPolicy,
-            extensions = ExtensionRegistry.empty()
+            eventBus = mockk(relaxed = true)
         )
     }
 

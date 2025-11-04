@@ -1,10 +1,12 @@
 package com.mustafadakhel.kodex.routes.auth
 
+import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.RealmExtension
+import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.extensionContext
 import com.mustafadakhel.kodex.model.Realm
@@ -23,7 +25,8 @@ internal data class RealmConfig(
     internal val tokenRotationConfig: TokenRotationConfig,
     internal val extensions: ExtensionRegistry,
     val timeZone: TimeZone,
-    val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy
+    val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy,
+    internal val eventBus: EventBus
 )
 
 @KtorDsl
@@ -64,13 +67,13 @@ public class RealmConfigScope internal constructor(
 
     /**
      * Gets the extension context for this realm configuration.
-     * Used internally during build() to create extension context with userRepository.
+     * Used internally during build() to create extension context with eventBus.
      */
     @PublishedApi
     internal fun getExtensionContext(
-        userRepository: com.mustafadakhel.kodex.repository.UserRepository
+        eventBus: com.mustafadakhel.kodex.event.EventBus
     ): com.mustafadakhel.kodex.extension.ExtensionContext {
-        return extensionContext(realm, timeZone, userRepository)
+        return extensionContext(realm, timeZone, eventBus)
     }
 
     public fun secrets(block: SecretsConfigScope.() -> Unit) {
@@ -137,17 +140,19 @@ public class RealmConfigScope internal constructor(
 
     /**
      * Finalises this scope returning an immutable [RealmConfig].
-     * Called by the plugin during installation with userRepository for extension building.
+     * Called by the plugin during installation with eventBus for extension building.
      */
-    internal fun build(userRepository: com.mustafadakhel.kodex.repository.UserRepository): RealmConfig {
+    internal fun build(
+        eventBus: EventBus
+    ): RealmConfig {
         val secretsConfig = secretsConfigScope
         val claimConfig = claimsConfigScope
         val tokenValidity = tokenValidityConfig
         val passwordHashingConfig = passwordHashingConfigScope.build()
         val tokenRotationConfig = tokenRotationConfigScope.build()
 
-        // Build extensions from configs with userRepository access
-        val context = getExtensionContext(userRepository)
+        // Build extensions from configs with eventBus access
+        val context = getExtensionContext(eventBus)
         val extensionsMap = mutableMapOf<KClass<out RealmExtension>, MutableList<RealmExtension>>()
 
         extensionConfigs.forEach { (config, _) ->
@@ -162,6 +167,9 @@ public class RealmConfigScope internal constructor(
             }
             if (extension is EventSubscriberProvider) {
                 extensionsMap.getOrPut(EventSubscriberProvider::class) { mutableListOf() }.add(extension)
+            }
+            if (extension is ServiceProvider) {
+                extensionsMap.getOrPut(ServiceProvider::class) { mutableListOf() }.add(extension)
             }
         }
 
@@ -179,7 +187,8 @@ public class RealmConfigScope internal constructor(
             tokenRotationConfig = tokenRotationConfig,
             extensions = extensionRegistry,
             timeZone = timeZone,
-            hookFailureStrategy = hookFailureStrategy
+            hookFailureStrategy = hookFailureStrategy,
+            eventBus = eventBus
         )
     }
 }

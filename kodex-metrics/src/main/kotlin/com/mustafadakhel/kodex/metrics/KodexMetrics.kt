@@ -7,4 +7,22 @@ internal interface KodexMetrics {
     fun recordValidationFailure(field: String, reason: String, realmId: String)
     fun recordUserOperation(operation: String, success: Boolean, realmId: String)
     fun recordDatabaseQuery(operation: String, durationMs: Long)
+
+    // Rate limiting metrics
+    fun recordRateLimitCheck(allowed: Boolean, key: String)
+    fun recordRateLimitSize(size: Int)
+    fun recordRateLimitCleanup(entriesRemoved: Int)
+    fun recordRateLimitEviction(entriesEvicted: Int)
+
+    // Verification metrics
+    fun recordVerificationSend(success: Boolean, contactType: String, reason: String?)
+    fun recordVerificationAttempt(success: Boolean, reason: String?)
+
+    // Password reset metrics
+    fun recordPasswordResetInitiate(success: Boolean, contactType: String, reason: String?)
+    fun recordPasswordResetVerify(success: Boolean, reason: String?)
+    fun recordPasswordResetConsume(success: Boolean, reason: String?)
+
+    // Token cleanup metrics
+    fun recordTokenCleanup(tokenType: String, tokensRemoved: Int)
 }

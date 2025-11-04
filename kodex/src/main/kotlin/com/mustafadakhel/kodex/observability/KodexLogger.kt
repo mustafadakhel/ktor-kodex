@@ -96,12 +96,6 @@ public fun Logger.logTokenOperation(operation: String, tokenType: String, succes
     }
 }
 
-public fun Logger.logAccountLockout(userId: UUID, locked: Boolean, realmId: String) {
-    withLoggingContext(realmId = realmId, userId = userId, operation = if (locked) "lock_account" else "unlock_account") {
-        warn("Account ${if (locked) "locked" else "unlocked"} - userId: $userId")
-    }
-}
-
 public fun Logger.logValidationFailure(field: String, reason: String, realmId: String) {
     withLoggingContext(realmId = realmId, operation = "validate_input") {
         warn("Validation failed - field: $field, reason: $reason")

@@ -1,17 +1,14 @@
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
-import com.auth0.jwt.algorithms.Algorithm
 import com.mustafadakhel.kodex.model.Claim
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.token.formats.JwtTokenFormat
+import com.mustafadakhel.kodex.tokens.token.TokenGenerator
 import com.mustafadakhel.kodex.util.ClaimsConfig
-import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.SecretsConfig
-import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.plus
-import kotlinx.datetime.toJavaInstant
-import java.util.*
+import java.util.UUID
 
 internal class JwtTokenIssuer internal constructor(
     private val secretsConfig: SecretsConfig,
@@ -34,23 +31,26 @@ internal class JwtTokenIssuer internal constructor(
     ): GeneratedToken {
         val roles = rolesParam ?: userRepository.findRoles(userId).map { it.name }
         val (secret, kid) = secretsConfig.randomWithKid()
-        val algorithm = Algorithm.HMAC512(secret)
-        val validity = CurrentKotlinInstant.plus(validityMs, DateTimeUnit.MILLISECOND)
-        val id = UUID.randomUUID()
-        val token = JWT.create()
-            .withIssuer(claimsConfig.issuer)
-            .withAudience(claimsConfig.audience)
-            .withKeyId(kid)
-            .withJWTId(id.toString())
-            .withSubject(userId.toString())
-            .withClaim(Claim.Custom.Key, claimsConfig.additionalClaims)
-            .withClaim(Claim.TokenType.Key, tokenType.value)
-            .withArrayClaim(Claim.Roles.Key, roles.toTypedArray())
-            .withClaim(Claim.Realm.Key, realm.owner)
-            .withExpiresAt(validity.toJavaInstant())
-            .sign(algorithm)
+
+        val token = TokenGenerator.generate(
+            JwtTokenFormat(
+                issuer = claimsConfig.issuer!!,
+                audience = claimsConfig.audience!!,
+                subject = userId.toString(),
+                secret = secret,
+                validitySeconds = validityMs / 1000,
+                keyId = kid,
+                claims = buildMap {
+                    tokenType.value?.let { put(Claim.TokenType.Key, it) }
+                    put(Claim.Roles.Key, roles)
+                    put(Claim.Realm.Key, realm.owner)
+                    putAll(claimsConfig.additionalClaims)
+                }
+            )
+        )
+
         return GeneratedToken(
-            tokenId = id,
+            tokenId = UUID.fromString(JWT.decode(token).id),
             token = token
         )
     }

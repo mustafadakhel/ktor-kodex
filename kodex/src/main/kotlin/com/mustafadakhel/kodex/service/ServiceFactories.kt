@@ -15,6 +15,18 @@ import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import kotlinx.datetime.TimeZone
 
 /**
+ * Groups common service dependencies to reduce parameter repetition.
+ */
+internal data class ServiceContext(
+    val realm: Realm,
+    val eventBus: EventBus,
+    val timeZone: TimeZone,
+    val userRepository: UserRepository,
+    val passwordHasher: HashingService,
+    val hookExecutor: HookExecutor
+)
+
+/**
  * Factory functions for creating service instances.
  *
  * Encapsulates dependency injection logic for the three core services:
@@ -22,42 +34,32 @@ import kotlinx.datetime.TimeZone
  */
 
 internal fun userService(
-    userRepository: UserRepository,
-    hashingService: HashingService,
-    hookExecutor: HookExecutor,
-    eventBus: EventBus,
-    updateCommandProcessor: UpdateCommandProcessor,
-    timeZone: TimeZone,
-    realm: Realm
+    context: ServiceContext,
+    updateCommandProcessor: UpdateCommandProcessor
 ): UserService {
     return DefaultUserService(
-        userRepository,
-        hashingService,
-        hookExecutor,
-        eventBus,
+        context.userRepository,
+        context.passwordHasher,
+        context.hookExecutor,
+        context.eventBus,
         updateCommandProcessor,
-        timeZone,
-        realm
+        context.timeZone,
+        context.realm
     )
 }
 
 internal fun authService(
-    userRepository: UserRepository,
-    hashingService: HashingService,
-    tokenService: TokenService,
-    hookExecutor: HookExecutor,
-    eventBus: EventBus,
-    timeZone: TimeZone,
-    realm: Realm
+    context: ServiceContext,
+    tokenService: TokenService
 ): AuthService {
     return DefaultAuthService(
-        userRepository,
-        hashingService,
+        context.userRepository,
+        context.passwordHasher,
         tokenService,
-        hookExecutor,
-        eventBus,
-        timeZone,
-        realm
+        context.hookExecutor,
+        context.eventBus,
+        context.timeZone,
+        context.realm
     )
 }
 

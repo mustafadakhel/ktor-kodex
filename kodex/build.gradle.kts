@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.h2.database)
     api(libs.hikari)
     api(libs.kotlinx.datetime)
+    implementation(project(":kodex-tokens"))
     api(libs.slf4j.api)
     implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)

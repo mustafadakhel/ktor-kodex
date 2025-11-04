@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Email and phone verification extension (`kodex-verification`) with token generation and verification
+- Password reset extension (`kodex-password-reset`) with self-service password reset and rate limiting
+- Metrics extension (`kodex-metrics`) with Micrometer integration
+- Extension access via global `kodex()` function for service retrieval
+- 71 integration tests for verification, password reset, audit, and lockout services
 - Argon2id password hashing using BouncyCastle with configurable parameters and presets (Spring Security, Keycloak, OWASP minimum, balanced)
 - `passwordHashing` DSL configuration block for realm-specific password hashing settings
 - Account lockout mechanism against brute force attacks with configurable policies (strict, moderate, lenient, disabled)
@@ -21,6 +26,12 @@ All notable changes to this project will be documented in this file.
 - Authentication flow refactored to eliminate try-catch for control flow
 - `authenticateInternal()` now returns `Boolean` instead of throwing exceptions
 - Failed login attempts now recorded for non-existent users to prevent enumeration attacks
+
+### Fixed
+
+- SQL query syntax errors in verification service (Exposed ORM `.select()` → `.selectAll().where {}`)
+- Upsert reliability issues with nullable columns in composite unique indexes
+- Rate limit bypass vulnerability in password reset for non-existent users (OWASP A03:2021)
 
 ### Performance
 
