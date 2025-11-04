@@ -10,4 +10,5 @@ include(
     "kodex-metrics",
     "kodex-verification",
     "kodex-password-reset",
+    "kodex-mfa",
 )

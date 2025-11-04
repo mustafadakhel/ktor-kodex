@@ -16,6 +16,8 @@ flyway = "10.22.0"
 micrometer = "1.14.2"
 slf4j = "2.0.16"
 logback = "1.5.15"
+kotlin-otp = "2.4.1"
+qrcode-kotlin = "4.1.1"
 
 [libraries]
 exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
@@ -41,6 +43,8 @@ flyway-core = { group = "org.flywaydb", name = "flyway-core", version.ref = "fly
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
 slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
+kotlin-otp = { group = "dev.turingcomplete", name = "kotlin-onetimepassword", version.ref = "kotlin-otp" }
+qrcode-kotlin = { group = "io.github.g0dkar", name = "qrcode-kotlin-jvm", version.ref = "qrcode-kotlin" }
 
 [bundles]
 exposed = ["exposed-dao", "exposed-jdbc", "exposed-datetime", "exposed-json"]

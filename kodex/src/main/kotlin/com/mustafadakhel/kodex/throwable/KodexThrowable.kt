@@ -72,6 +72,11 @@ public sealed class KodexThrowable(
             val reason: String
         ) : Authorization("Account is locked until $lockedUntil. Reason: $reason")
 
+        public data class MfaRequired(
+            val sessionId: String,
+            val availableMethods: List<String>
+        ) : Authorization("MFA verification required")
+
         public data class TooManyAttempts(
             val reason: String
         ) : Authorization("Too many login attempts. $reason")
