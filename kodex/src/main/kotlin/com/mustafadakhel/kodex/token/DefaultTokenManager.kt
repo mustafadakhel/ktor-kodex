@@ -4,6 +4,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.interfaces.DecodedJWT
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SecurityEvent
+import com.mustafadakhel.kodex.tokens.ExpirationCalculator
 import com.mustafadakhel.kodex.model.Claim
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
@@ -85,9 +86,7 @@ internal class DefaultTokenManager(
                     type = tokenType,
                     revoked = false,
                     createdAt = now(timeZone),
-                    expiresAt = CurrentKotlinInstant
-                        .plus(validityMs)
-                        .toLocalDateTime(timeZone),
+                    expiresAt = ExpirationCalculator.calculateExpiration(validityMs, timeZone, CurrentKotlinInstant),
                     tokenFamily = tokenFamily,
                     parentTokenId = parentTokenId,
                     firstUsedAt = null,

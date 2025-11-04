@@ -35,7 +35,7 @@ public object VerificationTokens : UUIDTable("verification_tokens") {
     public val contactType: Column<ContactType> = enumeration("contact_type", ContactType::class)
     public val customAttributeKey: Column<String?> = varchar("custom_attribute_key", 128).nullable()
     public val token: Column<String> = varchar("token", 255).uniqueIndex()
-    public val expiresAt: Column<kotlinx.datetime.LocalDateTime> = datetime("expires_at")
-    public val createdAt: Column<kotlinx.datetime.LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
-    public val usedAt: Column<kotlinx.datetime.LocalDateTime?> = datetime("used_at").nullable()
+    public val expiresAt: Column<kotlinx.datetime.LocalDateTime> = datetime("expires_at").index()
+    public val createdAt: Column<kotlinx.datetime.LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime).index()
+    public val usedAt: Column<kotlinx.datetime.LocalDateTime?> = datetime("used_at").nullable().index()
 }

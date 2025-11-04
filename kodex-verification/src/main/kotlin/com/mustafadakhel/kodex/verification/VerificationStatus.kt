@@ -44,3 +44,44 @@ public data class UserVerificationStatus(
     public fun getUnverifiedContacts(): List<ContactVerification> =
         contacts.values.filter { !it.isVerified }
 }
+
+/**
+ * Result of sending a verification token.
+ */
+public sealed interface VerificationSendResult {
+    /**
+     * Token was successfully sent.
+     */
+    public data class Success(val token: String) : VerificationSendResult
+
+    /**
+     * Rate limit exceeded for sending verification tokens.
+     */
+    public data class RateLimitExceeded(val reason: String) : VerificationSendResult
+
+    /**
+     * Failed to send verification token (email/SMS provider failure).
+     * User should retry without being rate limited.
+     */
+    public data class SendFailed(val reason: String) : VerificationSendResult
+}
+
+/**
+ * Result of verifying a token.
+ */
+public sealed interface VerificationResult {
+    /**
+     * Token verified successfully, contact marked as verified.
+     */
+    public data object Success : VerificationResult
+
+    /**
+     * Token is invalid, expired, or already used.
+     */
+    public data class Invalid(val reason: String) : VerificationResult
+
+    /**
+     * Rate limit exceeded for verification attempts.
+     */
+    public data class RateLimitExceeded(val reason: String) : VerificationResult
+}

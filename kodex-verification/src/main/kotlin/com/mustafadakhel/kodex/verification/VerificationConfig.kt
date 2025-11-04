@@ -2,9 +2,13 @@ package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.validation.ValidatableConfig
+import com.mustafadakhel.kodex.validation.ValidationResult
+import com.mustafadakhel.kodex.validation.validate
 import io.ktor.utils.io.*
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Policy for a verifiable contact type.
@@ -91,7 +95,7 @@ public class ContactPolicyBuilder internal constructor(private val identifier: C
  * ```
  */
 @KtorDsl
-public class VerificationConfig : ExtensionConfig() {
+public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
 
     /**
      * Strategy for determining which contacts to verify.
@@ -127,6 +131,63 @@ public class VerificationConfig : ExtensionConfig() {
      * Default: 24 hours
      */
     public var defaultTokenExpiration: Duration = 24.hours
+
+    /**
+     * Maximum send attempts per user in the rate limit window.
+     * Prevents a single user from spamming verification requests.
+     * Default: 5
+     */
+    public var maxSendAttemptsPerUser: Int = 5
+
+    /**
+     * Maximum send attempts per contact value (email/phone) in the rate limit window.
+     * Prevents spamming a specific email/phone regardless of which user.
+     * Default: 5
+     */
+    public var maxSendAttemptsPerContact: Int = 5
+
+    /**
+     * Maximum send attempts per IP address in the rate limit window.
+     * Prevents distributed attacks from a single IP.
+     * Default: 10
+     */
+    public var maxSendAttemptsPerIp: Int = 10
+
+    /**
+     * Maximum verification attempts per user+IP combination.
+     * Prevents brute force attacks without revealing token existence.
+     * Default: 5
+     */
+    public var maxVerifyAttemptsPerUserIp: Int = 5
+
+    /**
+     * Minimum response time for verification operations (milliseconds).
+     * Adds constant-time delay to prevent timing attacks.
+     * Default: 100ms
+     */
+    public var minVerificationResponseTimeMs: Long = 100L
+
+    /**
+     * Time window for send rate limiting.
+     * Default: 15 minutes
+     */
+    public var sendRateLimitWindow: Duration = 15.minutes
+
+    /**
+     * Time window for verification attempt rate limiting.
+     * Default: 5 minutes
+     */
+    public var verifyRateLimitWindow: Duration = 5.minutes
+
+    /**
+     * Minimum time between send requests (cooldown period).
+     * Prevents users from spamming requests even within the rate limit.
+     * Set to null to disable cooldown.
+     * Default: null (no cooldown)
+     *
+     * Example: 30.seconds prevents more than 1 request per 30 seconds
+     */
+    public var sendCooldownPeriod: Duration? = null
 
     /**
      * Configure policy for EMAIL contact.
@@ -191,11 +252,84 @@ public class VerificationConfig : ExtensionConfig() {
         return getPolicy(identifier)?.sender
     }
 
+    override fun validate(): ValidationResult = validate {
+        // Validate token expiration
+        requirePositive(defaultTokenExpiration, "defaultTokenExpiration")
+
+        // Validate rate limits
+        requirePositive(maxSendAttemptsPerUser, "maxSendAttemptsPerUser")
+        requirePositive(maxSendAttemptsPerContact, "maxSendAttemptsPerContact")
+        requirePositive(maxSendAttemptsPerIp, "maxSendAttemptsPerIp")
+        requirePositive(maxVerifyAttemptsPerUserIp, "maxVerifyAttemptsPerUserIp")
+
+        // Validate minimum response time
+        requireNonNegative(minVerificationResponseTimeMs, "minVerificationResponseTimeMs")
+        require(minVerificationResponseTimeMs < 10000) {
+            "minVerificationResponseTimeMs should be less than 10 seconds to avoid request timeouts, got: ${minVerificationResponseTimeMs}ms"
+        }
+
+        // Validate rate limit windows
+        requirePositive(sendRateLimitWindow, "sendRateLimitWindow")
+        requirePositive(verifyRateLimitWindow, "verifyRateLimitWindow")
+
+        // Validate cooldown period (optional, but must be reasonable if provided)
+        sendCooldownPeriod?.let { cooldown ->
+            require(cooldown.isPositive()) {
+                "sendCooldownPeriod must be positive if provided, got: $cooldown"
+            }
+            require(cooldown.inWholeSeconds >= 1) {
+                "sendCooldownPeriod should be at least 1 second for practical use, got: $cooldown"
+            }
+            require(cooldown.inWholeMinutes <= 60) {
+                "sendCooldownPeriod should not exceed 1 hour to avoid locking users out, got: $cooldown"
+            }
+        }
+
+        // Validate policies
+        policies.values.forEach { policy ->
+            policy.tokenExpiration?.let { expiration ->
+                require(expiration.isPositive()) {
+                    "Token expiration for ${policy.identifier.key} must be positive, got: $expiration"
+                }
+            }
+
+            // Warn if autoSend is true but no sender configured
+            if (policy.autoSend && policy.sender == null) {
+                error("autoSend is true for ${policy.identifier.key} but no sender is configured")
+            }
+
+            // Warn if required but no sender configured
+            if (policy.required && policy.sender == null && strategy != VerificationStrategy.MANUAL) {
+                error("Contact ${policy.identifier.key} is required but no sender is configured (strategy is not MANUAL)")
+            }
+        }
+
+        // Validate required contacts exist when using VERIFY_REQUIRED_ONLY
+        if (strategy == VerificationStrategy.VERIFY_REQUIRED_ONLY) {
+            val requiredCount = policies.values.count { it.required }
+            require(requiredCount > 0) {
+                "Strategy is VERIFY_REQUIRED_ONLY but no contacts are marked as required"
+            }
+        }
+    }
+
     override fun build(context: ExtensionContext): VerificationExtension {
+        // Validate configuration before building
+        val validationResult = validate()
+        if (!validationResult.isValid()) {
+            throw IllegalStateException(
+                "VerificationConfig validation failed:\n" +
+                validationResult.errors().joinToString("\n") { "  - $it" }
+            )
+        }
+
         val service = DefaultVerificationService(
             config = this,
-            timeZone = context.timeZone
+            timeZone = context.timeZone,
+            eventBus = context.eventBus,
+            realm = context.realm.owner
         )
-        return VerificationExtension(service, this, context.timeZone)
+        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.owner)
+        return VerificationExtension(service, cleanupService, this, context.timeZone)
     }
 }

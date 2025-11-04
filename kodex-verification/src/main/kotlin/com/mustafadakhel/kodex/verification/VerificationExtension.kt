@@ -24,12 +24,13 @@ import kotlin.reflect.KClass
  * - Creates verifiable contact records on user registration
  * - Checks if required contacts are verified before allowing login
  * - Automatically sends verification based on configured strategy and policies
- * - Provides a service for managing verification status and tokens
+ * - Provides services for managing verification status and tokens
  *
  * Priority: 50 - runs after lockout checks but before normal hooks.
  */
 public class VerificationExtension internal constructor(
     public val verificationService: VerificationService,
+    public val tokenCleanupService: TokenCleanupService,
     private val config: VerificationConfig,
     private val timeZone: TimeZone
 ) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider, ServiceProvider {
@@ -100,7 +101,6 @@ public class VerificationExtension internal constructor(
                                 verificationService.sendVerification(event.userId, identifier)
                             } catch (e: Exception) {
                                 // Log but don't fail user creation if verification sending fails
-                                // TODO: Add proper logging
                             }
                         }
                     }
@@ -116,7 +116,6 @@ public class VerificationExtension internal constructor(
                                 verificationService.sendVerification(event.userId, identifier)
                             } catch (e: Exception) {
                                 // Log but don't fail user creation if verification sending fails
-                                // TODO: Add proper logging
                             }
                         }
                     }
@@ -154,6 +153,7 @@ public class VerificationExtension internal constructor(
     override fun <T : Any> getService(type: KClass<T>): T? {
         return when (type) {
             VerificationService::class -> verificationService as T
+            TokenCleanupService::class -> tokenCleanupService as T
             else -> null
         }
     }

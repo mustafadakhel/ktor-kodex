@@ -12,6 +12,8 @@ import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.validation.validation
 import com.mustafadakhel.kodex.verification.verification
 import com.mustafadakhel.kodex.verification.VerificationConfig
+import com.mustafadakhel.kodex.passwordreset.passwordReset
+import com.mustafadakhel.kodex.passwordreset.PasswordResetSender
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -59,13 +61,12 @@ private fun Application.setupAuthentication() {
                     raw("secret", "secret2", "secret3")
                 }
 
-                // Configure validation extension
                 validation {
                     email {
                         allowDisposable = false
                     }
                     phone {
-                        defaultRegion = "US"
+                        defaultRegion = "IQ"
                         requireE164 = true
                     }
                     password {
@@ -79,7 +80,6 @@ private fun Application.setupAuthentication() {
                     }
                 }
 
-                // Configure account lockout extension
                 accountLockout {
                     policy = AccountLockoutPolicy(
                         maxFailedAttempts = 5,
@@ -88,12 +88,10 @@ private fun Application.setupAuthentication() {
                     )
                 }
 
-                // Configure audit logging extension
                 audit {
                     provider = DatabaseAuditProvider()
                 }
 
-                // Configure metrics extension (uses SimpleMeterRegistry by default)
                 metrics {
                     // registry = SimpleMeterRegistry() // default
                 }
@@ -123,6 +121,20 @@ private fun Application.setupAuthentication() {
                     //     tokenExpiration = 30.minutes
                     //     sender = DiscordVerificationSender(discordBot)
                     // }
+                }
+
+                passwordReset(
+                    sender = object : PasswordResetSender {
+                        override suspend fun send(recipient: String, token: String, expiresAt: String) {
+                            println("Password reset token for $recipient: $token (expires: $expiresAt)")
+                        }
+                    }
+                ) {
+                    tokenValidity = 15.minutes
+                    maxAttemptsPerUser = 5
+                    maxAttemptsPerIdentifier = 5
+                    maxAttemptsPerIp = 20
+                    cooldownPeriod = 1.minutes
                 }
             }
         }
@@ -208,14 +220,11 @@ fun Application.setupAuthRouting() = routing {
                 }
             }
 
-            post("/verify") {
-                val params = call.receiveParameters()
-                val email =
-                    params["email"] ?: return@post call.respondText("Missing email", status = HttpStatusCode.BadRequest)
-                // Verification functionality moved to kodex-verification extension
-                // TODO: Update this endpoint once verification extension is implemented
-                call.respondText("Verification feature requires kodex-verification extension", status = HttpStatusCode.NotImplemented)
-            }
+            // TODO: Add verification and password reset routes
+            // Example usage:
+            // - call.extensionService<VerificationService>(realm)
+            // - call.extensionService<PasswordResetService>(realm)
+            // See extension documentation for complete API
         }
     }
 }

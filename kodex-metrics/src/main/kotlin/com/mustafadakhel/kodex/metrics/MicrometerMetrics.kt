@@ -86,4 +86,87 @@ public class MicrometerMetrics(
             .register(registry)
             .record(durationMs, TimeUnit.MILLISECONDS)
     }
+
+    override fun recordRateLimitCheck(allowed: Boolean, key: String) {
+        val keyType = key.substringBefore(":", "unknown")
+        Counter.builder("kodex.ratelimit.checks")
+            .tag("allowed", allowed.toString())
+            .tag("key_type", keyType)
+            .description("Rate limit check attempts")
+            .register(registry)
+            .increment()
+    }
+
+    override fun recordRateLimitSize(size: Int) {
+        registry.gauge("kodex.ratelimit.size", size)
+    }
+
+    override fun recordRateLimitCleanup(entriesRemoved: Int) {
+        Counter.builder("kodex.ratelimit.cleanup.entries")
+            .description("Entries removed during rate limit cleanup")
+            .register(registry)
+            .increment(entriesRemoved.toDouble())
+    }
+
+    override fun recordRateLimitEviction(entriesEvicted: Int) {
+        Counter.builder("kodex.ratelimit.eviction.entries")
+            .description("Entries evicted when rate limiter reached max size")
+            .register(registry)
+            .increment(entriesEvicted.toDouble())
+    }
+
+    override fun recordVerificationSend(success: Boolean, contactType: String, reason: String?) {
+        Counter.builder("kodex.verification.send")
+            .tag("success", success.toString())
+            .tag("contact_type", contactType)
+            .tag("reason", reason ?: "none")
+            .description("Verification token send attempts")
+            .register(registry)
+            .increment()
+    }
+
+    override fun recordVerificationAttempt(success: Boolean, reason: String?) {
+        Counter.builder("kodex.verification.attempts")
+            .tag("success", success.toString())
+            .tag("reason", reason ?: "none")
+            .description("Verification token validation attempts")
+            .register(registry)
+            .increment()
+    }
+
+    override fun recordPasswordResetInitiate(success: Boolean, contactType: String, reason: String?) {
+        Counter.builder("kodex.password_reset.initiate")
+            .tag("success", success.toString())
+            .tag("contact_type", contactType)
+            .tag("reason", reason ?: "none")
+            .description("Password reset initiation attempts")
+            .register(registry)
+            .increment()
+    }
+
+    override fun recordPasswordResetVerify(success: Boolean, reason: String?) {
+        Counter.builder("kodex.password_reset.verify")
+            .tag("success", success.toString())
+            .tag("reason", reason ?: "none")
+            .description("Password reset token verification attempts")
+            .register(registry)
+            .increment()
+    }
+
+    override fun recordPasswordResetConsume(success: Boolean, reason: String?) {
+        Counter.builder("kodex.password_reset.consume")
+            .tag("success", success.toString())
+            .tag("reason", reason ?: "none")
+            .description("Password reset token consumption attempts")
+            .register(registry)
+            .increment()
+    }
+
+    override fun recordTokenCleanup(tokenType: String, tokensRemoved: Int) {
+        Counter.builder("kodex.token.cleanup.removed")
+            .tag("token_type", tokenType)
+            .description("Tokens removed during cleanup")
+            .register(registry)
+            .increment(tokensRemoved.toDouble())
+    }
 }

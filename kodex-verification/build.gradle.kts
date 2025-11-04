@@ -37,6 +37,7 @@ tasks {
 dependencies {
     // Depend on core kodex module
     api(project(":kodex"))
+    implementation(project(":kodex-tokens"))
 
     // Database dependencies (Exposed)
     implementation(libs.exposed.dao)
