@@ -13,6 +13,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.upsert
 import kotlin.reflect.KClass
 
 /**
@@ -44,14 +45,12 @@ public class PasswordResetExtension internal constructor(
                 override val eventType = UserEvent.Created::class
 
                 override suspend fun onEvent(event: UserEvent.Created) {
-                    // Store contacts for password reset
-                    // Note: Only handles UserEvent.Created. Contact updates via UserEvent.Updated
-                    // are not yet implemented - users must reset password using their original contact.
                     kodexTransaction {
                         val now = Clock.System.now().toLocalDateTime(timeZone)
 
                         event.email?.let { email ->
                             PasswordResetContacts.insert {
+                                it[PasswordResetContacts.realmId] = event.realmId
                                 it[PasswordResetContacts.userId] = event.userId
                                 it[PasswordResetContacts.contactType] = "EMAIL"
                                 it[PasswordResetContacts.contactValue] = email
@@ -62,11 +61,62 @@ public class PasswordResetExtension internal constructor(
 
                         event.phone?.let { phone ->
                             PasswordResetContacts.insert {
+                                it[PasswordResetContacts.realmId] = event.realmId
                                 it[PasswordResetContacts.userId] = event.userId
                                 it[PasswordResetContacts.contactType] = "PHONE"
                                 it[PasswordResetContacts.contactValue] = phone
                                 it[PasswordResetContacts.createdAt] = now
                                 it[PasswordResetContacts.updatedAt] = now
+                            }
+                        }
+                    }
+                }
+            },
+            object : EventSubscriber<UserEvent.Updated> {
+                override val eventType = UserEvent.Updated::class
+
+                override suspend fun onEvent(event: UserEvent.Updated) {
+                    kodexTransaction {
+                        val now = Clock.System.now().toLocalDateTime(timeZone)
+
+                        event.fieldChanges.forEach { change ->
+                            when (change.fieldName) {
+                                "email" -> {
+                                    val newEmail = change.newValue as? String
+                                    if (newEmail != null) {
+                                        PasswordResetContacts.upsert(
+                                            keys = arrayOf(
+                                                PasswordResetContacts.realmId,
+                                                PasswordResetContacts.userId,
+                                                PasswordResetContacts.contactType
+                                            )
+                                        ) {
+                                            it[PasswordResetContacts.realmId] = event.realmId
+                                            it[PasswordResetContacts.userId] = event.userId
+                                            it[PasswordResetContacts.contactType] = "EMAIL"
+                                            it[PasswordResetContacts.contactValue] = newEmail
+                                            it[PasswordResetContacts.updatedAt] = now
+                                        }
+                                    }
+                                }
+                                "phone" -> {
+                                    val newPhone = change.newValue as? String
+                                    if (newPhone != null) {
+                                        PasswordResetContacts.upsert(
+                                            keys = arrayOf(
+                                                PasswordResetContacts.realmId,
+                                                PasswordResetContacts.userId,
+                                                PasswordResetContacts.contactType
+                                            )
+                                        ) {
+                                            it[PasswordResetContacts.realmId] = event.realmId
+                                            it[PasswordResetContacts.userId] = event.userId
+                                            it[PasswordResetContacts.contactType] = "PHONE"
+                                            it[PasswordResetContacts.contactValue] = newPhone
+                                            it[PasswordResetContacts.updatedAt] = now
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
