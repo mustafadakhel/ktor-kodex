@@ -4,7 +4,7 @@ package com.mustafadakhel.kodex.throwable
 
 import java.util.UUID
 
-public sealed class KodexThrowable(
+public open class KodexThrowable(
     message: String? = null,
     cause: Throwable? = null
 ) : Throwable(message, cause) {
@@ -34,7 +34,7 @@ public sealed class KodexThrowable(
         private val userId: UUID,
     ) : KodexThrowable("Profile not found for user with ID: $userId")
 
-    public sealed class Database(
+    public open class Database(
         message: String? = null,
         cause: Throwable? = null
     ) : KodexThrowable(message, cause) {
@@ -44,7 +44,7 @@ public sealed class KodexThrowable(
         ) : Database(message, cause)
     }
 
-    public sealed class Authorization(
+    public open class Authorization(
         message: String? = null,
     ) : KodexThrowable(message) {
         public data class SuspiciousToken(
@@ -63,24 +63,6 @@ public sealed class KodexThrowable(
             private fun readResolve(): Any = UserHasNoRoles
         }
 
-        public data object UnverifiedAccount : Authorization("Account not verified") {
-            private fun readResolve(): Any = UnverifiedAccount
-        }
-
-        public data class AccountLocked(
-            val lockedUntil: kotlinx.datetime.LocalDateTime,
-            val reason: String
-        ) : Authorization("Account is locked until $lockedUntil. Reason: $reason")
-
-        public data class MfaRequired(
-            val sessionId: String,
-            val availableMethods: List<String>
-        ) : Authorization("MFA verification required")
-
-        public data class TooManyAttempts(
-            val reason: String
-        ) : Authorization("Too many login attempts. $reason")
-
         public data class InvalidToken(
             val additionalInfo: String? = null
         ) : Authorization("Invalid token: $additionalInfo")
@@ -89,6 +71,11 @@ public sealed class KodexThrowable(
             val tokenFamily: UUID,
             val originalTokenId: UUID
         ) : Authorization("Refresh token replay attack detected. Token family $tokenFamily has been revoked.")
+
+        public data class InsufficientPermissions(
+            val requiredRole: String,
+            val userId: UUID
+        ) : Authorization("User $userId does not have the required '$requiredRole' role")
     }
 
     public data class RoleNotFound(
@@ -96,37 +83,8 @@ public sealed class KodexThrowable(
         override val cause: Throwable? = null,
     ) : KodexThrowable("Role not found: $roleName", cause)
 
-    public sealed class Validation(
+    public open class Validation(
         message: String? = null,
         cause: Throwable? = null
-    ) : KodexThrowable(message, cause) {
-        public data class ValidationFailed(
-            override val message: String
-        ) : Validation(message)
-
-        public data class InvalidEmail(
-            val email: String,
-            val errors: List<String>
-        ) : Validation("Invalid email '$email': ${errors.joinToString(", ")}")
-
-        public data class InvalidPhone(
-            val phone: String,
-            val errors: List<String>
-        ) : Validation("Invalid phone '$phone': ${errors.joinToString(", ")}")
-
-        public data class WeakPassword(
-            val score: Int,
-            val feedback: List<String>
-        ) : Validation("Password too weak (score: $score). ${feedback.joinToString(". ")}")
-
-        public data class InvalidCustomAttribute(
-            val key: String,
-            val errors: List<String>
-        ) : Validation("Invalid custom attribute '$key': ${errors.joinToString(", ")}")
-
-        public data class InvalidInput(
-            val field: String,
-            val errors: List<String>
-        ) : Validation("Invalid input for field '$field': ${errors.joinToString(", ")}")
-    }
+    ) : KodexThrowable(message, cause)
 }

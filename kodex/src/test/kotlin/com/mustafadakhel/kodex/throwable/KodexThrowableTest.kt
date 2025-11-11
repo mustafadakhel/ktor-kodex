@@ -144,26 +144,6 @@ class KodexThrowableTest : DescribeSpec({
             }
         }
 
-        describe("UnverifiedAccount") {
-            it("should have correct message") {
-                val exception = KodexThrowable.Authorization.UnverifiedAccount
-                exception.message shouldBe "Account not verified"
-            }
-        }
-
-        describe("AccountLocked") {
-            it("should include locked until and reason in message") {
-                val lockedUntil = now(TimeZone.UTC)
-                val exception = KodexThrowable.Authorization.AccountLocked(
-                    lockedUntil = lockedUntil,
-                    reason = "Too many failed login attempts"
-                )
-                exception.message shouldContain lockedUntil.toString()
-                exception.message shouldContain "Too many failed login attempts"
-                exception.message shouldContain "Account is locked"
-            }
-        }
-
         describe("InvalidToken") {
             it("should have base message without additional info") {
                 val exception = KodexThrowable.Authorization.InvalidToken()
@@ -199,82 +179,6 @@ class KodexThrowableTest : DescribeSpec({
                 exception.message shouldContain tokenFamily.toString()
                 exception.message shouldContain "replay attack detected"
                 exception.message shouldContain "revoked"
-            }
-        }
-    }
-
-    describe("Validation exceptions") {
-        describe("ValidationFailed") {
-            it("should use provided message") {
-                val exception = KodexThrowable.Validation.ValidationFailed("Field is required")
-                exception.message shouldBe "Field is required"
-            }
-        }
-
-        describe("InvalidEmail") {
-            it("should include email and errors in message") {
-                val exception = KodexThrowable.Validation.InvalidEmail(
-                    email = "invalid@",
-                    errors = listOf("Missing domain", "Invalid format")
-                )
-                exception.message shouldContain "invalid@"
-                exception.message shouldContain "Missing domain"
-                exception.message shouldContain "Invalid format"
-                exception.email shouldBe "invalid@"
-                exception.errors shouldBe listOf("Missing domain", "Invalid format")
-            }
-        }
-
-        describe("InvalidPhone") {
-            it("should include phone and errors in message") {
-                val exception = KodexThrowable.Validation.InvalidPhone(
-                    phone = "123",
-                    errors = listOf("Too short", "Invalid country code")
-                )
-                exception.message shouldContain "123"
-                exception.message shouldContain "Too short"
-                exception.message shouldContain "Invalid country code"
-                exception.phone shouldBe "123"
-            }
-        }
-
-        describe("WeakPassword") {
-            it("should include score and feedback in message") {
-                val exception = KodexThrowable.Validation.WeakPassword(
-                    score = 2,
-                    feedback = listOf("Add uppercase", "Add numbers", "Increase length")
-                )
-                exception.message shouldContain "score: 2"
-                exception.message shouldContain "Add uppercase"
-                exception.message shouldContain "Add numbers"
-                exception.message shouldContain "Increase length"
-                exception.score shouldBe 2
-            }
-        }
-
-        describe("InvalidCustomAttribute") {
-            it("should include key and errors in message") {
-                val exception = KodexThrowable.Validation.InvalidCustomAttribute(
-                    key = "department",
-                    errors = listOf("Invalid value", "Must be one of: IT, HR, Sales")
-                )
-                exception.message shouldContain "department"
-                exception.message shouldContain "Invalid value"
-                exception.message shouldContain "Must be one of"
-                exception.key shouldBe "department"
-            }
-        }
-
-        describe("InvalidInput") {
-            it("should include field and errors in message") {
-                val exception = KodexThrowable.Validation.InvalidInput(
-                    field = "age",
-                    errors = listOf("Must be positive", "Must be integer")
-                )
-                exception.message shouldContain "age"
-                exception.message shouldContain "Must be positive"
-                exception.message shouldContain "Must be integer"
-                exception.field shouldBe "age"
             }
         }
     }

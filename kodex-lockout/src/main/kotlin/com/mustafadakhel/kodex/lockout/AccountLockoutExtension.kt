@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.lockout
 
+import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
@@ -8,7 +9,6 @@ import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.lockout.database.AccountLocks
 import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
 import org.jetbrains.exposed.sql.Table
@@ -38,14 +38,14 @@ public class AccountLockoutExtension internal constructor(
         // Layer 1: Check throttling (identifier + IP based)
         val identifierThrottle = service.shouldThrottleIdentifier(identifier)
         if (identifierThrottle is ThrottleResult.Throttled) {
-            throw KodexThrowable.Authorization.TooManyAttempts(
+            throw LockoutThrowable.TooManyAttempts(
                 reason = identifierThrottle.reason
             )
         }
 
         val ipThrottle = service.shouldThrottleIp(metadata.ipAddress)
         if (ipThrottle is ThrottleResult.Throttled) {
-            throw KodexThrowable.Authorization.TooManyAttempts(
+            throw LockoutThrowable.TooManyAttempts(
                 reason = ipThrottle.reason
             )
         }
@@ -53,28 +53,27 @@ public class AccountLockoutExtension internal constructor(
         return identifier
     }
 
-    override suspend fun afterAuthentication(userId: UUID) {
+    override suspend fun afterAuthentication(user: AuthenticatedUser) {
         // Layer 2: Check if account is locked or should be locked
         val nowLocal = now(timeZone)
 
         // First check if account is already locked
-        if (service.isAccountLocked(userId, nowLocal)) {
+        if (service.isAccountLocked(user.userId, nowLocal)) {
             // Account is already locked - block login
-            throw KodexThrowable.Authorization.AccountLocked(
+            throw LockoutThrowable.AccountLocked(
                 lockedUntil = nowLocal,  // We don't have exact time but nowLocal is safe
                 reason = "Account is locked due to too many failed login attempts"
             )
         }
 
-        // Check if account should be locked based on recent failures
-        val lockResult = service.shouldLockAccount(userId)
+        val lockResult = service.shouldLockAccount(user.userId)
         if (lockResult is LockAccountResult.ShouldLock) {
             service.lockAccount(
-                userId = userId,
+                userId = user.userId,
                 lockedUntil = lockResult.lockedUntil,
                 reason = "Account locked due to ${lockResult.attemptCount} failed login attempts"
             )
-            throw KodexThrowable.Authorization.AccountLocked(
+            throw LockoutThrowable.AccountLocked(
                 lockedUntil = lockResult.lockedUntil,
                 reason = "Account locked due to ${lockResult.attemptCount} failed login attempts"
             )

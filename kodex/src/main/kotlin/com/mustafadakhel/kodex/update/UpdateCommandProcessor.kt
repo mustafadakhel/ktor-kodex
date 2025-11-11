@@ -55,27 +55,12 @@ internal class UpdateCommandProcessor(
     }
 
     private fun convertValidationExceptionToResult(e: KodexThrowable.Validation): UpdateResult.Failure.ValidationFailed {
-        val errors = when (e) {
-            is KodexThrowable.Validation.ValidationFailed -> listOf(
-                ValidationError(field = "unknown", message = e.message ?: "Validation failed", code = "VALIDATION_FAILED")
-            )
-            is KodexThrowable.Validation.InvalidEmail -> listOf(
-                ValidationError(field = "email", message = e.errors.joinToString(", "), code = "INVALID_EMAIL")
-            )
-            is KodexThrowable.Validation.InvalidPhone -> listOf(
-                ValidationError(field = "phone", message = e.errors.joinToString(", "), code = "INVALID_PHONE")
-            )
-            is KodexThrowable.Validation.WeakPassword -> listOf(
-                ValidationError(field = "password", message = e.feedback.joinToString(". "), code = "WEAK_PASSWORD")
-            )
-            is KodexThrowable.Validation.InvalidCustomAttribute -> listOf(
-                ValidationError(field = "customAttributes.${e.key}", message = e.errors.joinToString(", "), code = "INVALID_ATTRIBUTE")
-            )
-            is KodexThrowable.Validation.InvalidInput -> listOf(
-                ValidationError(field = e.field, message = e.errors.joinToString(", "), code = "INVALID_INPUT")
-            )
-        }
-        return UpdateResult.Failure.ValidationFailed(errors)
+        val error = ValidationError(
+            field = "unknown",
+            message = e.message ?: "Validation failed",
+            code = "VALIDATION_FAILED"
+        )
+        return UpdateResult.Failure.ValidationFailed(listOf(error))
     }
 
     private suspend fun executeUserFieldHooks(command: UpdateUserFields): UpdateUserFields {

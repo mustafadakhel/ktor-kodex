@@ -1,15 +1,17 @@
 package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventSubscriber
+import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.UserEvent
+import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
+import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.verification.database.VerifiableContacts
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import kotlinx.datetime.TimeZone
@@ -42,7 +44,7 @@ public class VerificationExtension internal constructor(
         VerificationTokens
     )
 
-    override suspend fun beforeLogin(identifier: String, metadata: com.mustafadakhel.kodex.extension.LoginMetadata): String {
+    override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
         // Verification check is performed after user authentication in afterAuthentication()
         return identifier
     }
@@ -70,19 +72,18 @@ public class VerificationExtension internal constructor(
         identifier: String,
         userId: UUID?,
         identifierType: String,
-        metadata: com.mustafadakhel.kodex.extension.LoginMetadata
+        metadata: LoginMetadata
     ) {
         // No action needed for verification
     }
 
-    override suspend fun afterAuthentication(userId: UUID) {
-        // Check if user satisfies verification policy
-        if (!verificationService.canLogin(userId)) {
-            throw KodexThrowable.Authorization.UnverifiedAccount
+    override suspend fun afterAuthentication(user: AuthenticatedUser) {
+        if (!verificationService.canLogin(user.userId)) {
+            throw VerificationThrowable.UnverifiedAccount
         }
     }
 
-    override fun getEventSubscribers(): List<EventSubscriber<out com.mustafadakhel.kodex.event.KodexEvent>> {
+    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
         return listOf(
             object : EventSubscriber<UserEvent.Created> {
                 override val eventType = UserEvent.Created::class
