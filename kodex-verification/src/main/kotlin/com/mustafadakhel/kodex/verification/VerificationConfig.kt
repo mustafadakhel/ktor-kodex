@@ -10,9 +10,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/**
- * Policy for a verifiable contact type.
- */
+/** Policy for a verifiable contact type */
 public data class ContactVerificationPolicy(
     val identifier: ContactIdentifier,
     val required: Boolean = false,
@@ -21,33 +19,18 @@ public data class ContactVerificationPolicy(
     val sender: VerificationSender? = null
 )
 
-/**
- * Builder for contact verification policies.
- */
+/** Builder for contact verification policies */
 public class ContactPolicyBuilder internal constructor(private val identifier: ContactIdentifier) {
-    /**
-     * Whether verification of this contact is required before login.
-     * Default: false
-     */
+    /** Whether verification of this contact is required before login (default: false) */
     public var required: Boolean = false
 
-    /**
-     * Whether to automatically send verification when the contact is added.
-     * Default: true
-     */
+    /** Whether to automatically send verification when the contact is added (default: true) */
     public var autoSend: Boolean = true
 
-    /**
-     * How long verification tokens remain valid for this contact type.
-     * If not specified, uses the global defaultTokenExpiration.
-     * Example: 24.hours, 10.minutes
-     */
+    /** How long verification tokens remain valid for this contact type (default: uses global defaultTokenExpiration) */
     public var tokenExpiration: Duration? = null
 
-    /**
-     * The sender implementation for this contact type.
-     * Required for auto-send to work.
-     */
+    /** The sender implementation for this contact type (required for auto-send to work) */
     public var sender: VerificationSender? = null
 
     internal fun build(): ContactVerificationPolicy = ContactVerificationPolicy(
@@ -97,101 +80,51 @@ public class ContactPolicyBuilder internal constructor(private val identifier: C
 @KtorDsl
 public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
 
-    /**
-     * Strategy for determining which contacts to verify.
-     */
+    /** Strategy for determining which contacts to verify */
     public enum class VerificationStrategy {
-        /**
-         * Verify all contacts the user provided (email, phone, custom attributes).
-         */
+        /** Verify all contacts the user provided (email, phone, custom attributes) */
         VERIFY_ALL_PROVIDED,
 
-        /**
-         * Only verify contacts marked as required in policies.
-         */
+        /** Only verify contacts marked as required in policies */
         VERIFY_REQUIRED_ONLY,
 
-        /**
-         * Manual control - library user decides what to send.
-         */
+        /** Manual control - library user decides what to send */
         MANUAL
     }
 
     private val policies = mutableMapOf<String, ContactVerificationPolicy>()
 
-    /**
-     * Strategy for determining which contacts to verify.
-     * Default: VERIFY_ALL_PROVIDED
-     */
+    /** Strategy for determining which contacts to verify (default: VERIFY_ALL_PROVIDED) */
     public var strategy: VerificationStrategy = VerificationStrategy.VERIFY_ALL_PROVIDED
 
-    /**
-     * Default token expiration for all contact types.
-     * Individual contact policies can override this.
-     * Default: 24 hours
-     */
+    /** Default token expiration for all contact types, can be overridden per-policy (default: 24 hours) */
     public var defaultTokenExpiration: Duration = 24.hours
 
-    /**
-     * Maximum send attempts per user in the rate limit window.
-     * Prevents a single user from spamming verification requests.
-     * Default: 5
-     */
+    /** Maximum send attempts per user in the rate limit window (default: 5) */
     public var maxSendAttemptsPerUser: Int = 5
 
-    /**
-     * Maximum send attempts per contact value (email/phone) in the rate limit window.
-     * Prevents spamming a specific email/phone regardless of which user.
-     * Default: 5
-     */
+    /** Maximum send attempts per contact value in the rate limit window (default: 5) */
     public var maxSendAttemptsPerContact: Int = 5
 
-    /**
-     * Maximum send attempts per IP address in the rate limit window.
-     * Prevents distributed attacks from a single IP.
-     * Default: 10
-     */
+    /** Maximum send attempts per IP address in the rate limit window (default: 10) */
     public var maxSendAttemptsPerIp: Int = 10
 
-    /**
-     * Maximum verification attempts per user+IP combination.
-     * Prevents brute force attacks without revealing token existence.
-     * Default: 5
-     */
+    /** Maximum verification attempts per user+IP combination to prevent brute force (default: 5) */
     public var maxVerifyAttemptsPerUserIp: Int = 5
 
-    /**
-     * Minimum response time for verification operations (milliseconds).
-     * Adds constant-time delay to prevent timing attacks.
-     * Default: 100ms
-     */
+    /** Minimum response time for verification operations in milliseconds to prevent timing attacks (default: 100ms) */
     public var minVerificationResponseTimeMs: Long = 100L
 
-    /**
-     * Time window for send rate limiting.
-     * Default: 15 minutes
-     */
+    /** Time window for send rate limiting (default: 15 minutes) */
     public var sendRateLimitWindow: Duration = 15.minutes
 
-    /**
-     * Time window for verification attempt rate limiting.
-     * Default: 5 minutes
-     */
+    /** Time window for verification attempt rate limiting (default: 5 minutes) */
     public var verifyRateLimitWindow: Duration = 5.minutes
 
-    /**
-     * Minimum time between send requests (cooldown period).
-     * Prevents users from spamming requests even within the rate limit.
-     * Set to null to disable cooldown.
-     * Default: null (no cooldown)
-     *
-     * Example: 30.seconds prevents more than 1 request per 30 seconds
-     */
+    /** Minimum time between send requests, null to disable cooldown (default: null) */
     public var sendCooldownPeriod: Duration? = null
 
-    /**
-     * Configure policy for EMAIL contact.
-     */
+    /** Configure policy for EMAIL contact */
     public fun email(block: ContactPolicyBuilder.() -> Unit) {
         val identifier = ContactIdentifier(ContactType.EMAIL)
         val builder = ContactPolicyBuilder(identifier)
@@ -199,9 +132,7 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         policies[identifier.key] = builder.build()
     }
 
-    /**
-     * Configure policy for PHONE contact.
-     */
+    /** Configure policy for PHONE contact */
     public fun phone(block: ContactPolicyBuilder.() -> Unit) {
         val identifier = ContactIdentifier(ContactType.PHONE)
         val builder = ContactPolicyBuilder(identifier)
@@ -209,10 +140,7 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         policies[identifier.key] = builder.build()
     }
 
-    /**
-     * Configure policy for a CUSTOM_ATTRIBUTE contact.
-     * @param attributeKey The custom attribute key (e.g., "discord", "twitter")
-     */
+    /** Configure policy for a CUSTOM_ATTRIBUTE contact (e.g., "discord", "twitter") */
     public fun customAttribute(attributeKey: String, block: ContactPolicyBuilder.() -> Unit) {
         val identifier = ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, attributeKey)
         val builder = ContactPolicyBuilder(identifier)
@@ -220,34 +148,23 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         policies[identifier.key] = builder.build()
     }
 
-    /**
-     * Get the policy for a specific contact identifier.
-     */
+    /** Get the policy for a specific contact identifier */
     public fun getPolicy(identifier: ContactIdentifier): ContactVerificationPolicy? = policies[identifier.key]
 
-    /**
-     * Get all contact identifiers that are marked as required.
-     */
+    /** Get all contact identifiers that are marked as required */
     public fun getRequiredContacts(): List<ContactIdentifier> =
         policies.values.filter { it.required }.map { it.identifier }
 
-    /**
-     * Get all configured policies.
-     */
+    /** Get all configured policies */
     public fun getAllPolicies(): Map<String, ContactVerificationPolicy> = policies.toMap()
 
-    /**
-     * Get the effective token expiration for a contact.
-     * Returns policy-specific expiration if set, otherwise falls back to default.
-     */
+    /** Get the effective token expiration for a contact (policy-specific or default) */
     public fun getTokenExpiration(identifier: ContactIdentifier): Duration {
         val policy = getPolicy(identifier)
         return policy?.tokenExpiration ?: defaultTokenExpiration
     }
 
-    /**
-     * Get the sender for a contact type.
-     */
+    /** Get the sender for a contact type */
     public fun getSender(identifier: ContactIdentifier): VerificationSender? {
         return getPolicy(identifier)?.sender
     }

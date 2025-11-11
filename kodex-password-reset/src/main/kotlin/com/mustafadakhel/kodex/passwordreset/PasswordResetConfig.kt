@@ -10,54 +10,28 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/**
- * Configuration for password reset functionality.
- */
+/** Configuration for password reset functionality */
 public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
 
-    /**
-     * How long reset tokens remain valid.
-     * Default: 1 hour
-     */
+    /** How long reset tokens remain valid (default: 1 hour) */
     public var tokenValidity: Duration = 1.hours
 
-    /**
-     * Maximum reset attempts per user in the rate limit window.
-     * Default: 3
-     */
+    /** Maximum reset attempts per user in the rate limit window (default: 3) */
     public var maxAttemptsPerUser: Int = 3
 
-    /**
-     * Maximum reset attempts per identifier (email/phone) in the rate limit window.
-     * Default: 5
-     */
+    /** Maximum reset attempts per identifier in the rate limit window (default: 5) */
     public var maxAttemptsPerIdentifier: Int = 5
 
-    /**
-     * Maximum reset attempts per IP address in the rate limit window.
-     * Default: 10
-     */
+    /** Maximum reset attempts per IP address in the rate limit window (default: 10) */
     public var maxAttemptsPerIp: Int = 10
 
-    /**
-     * Time window for rate limiting.
-     * Default: 15 minutes
-     */
+    /** Time window for rate limiting (default: 15 minutes) */
     public var rateLimitWindow: Duration = 15.minutes
 
-    /**
-     * Minimum time between password reset requests (cooldown period).
-     * Prevents users from spamming requests even within the rate limit.
-     * Set to null to disable cooldown.
-     * Default: null (no cooldown)
-     *
-     * Example: 30.seconds prevents more than 1 request per 30 seconds
-     */
+    /** Minimum time between password reset requests, null to disable cooldown (default: null) */
     public var cooldownPeriod: Duration? = null
 
-    /**
-     * Sender for password reset notifications (email, SMS, etc.).
-     */
+    /** Sender for password reset notifications */
     public var passwordResetSender: PasswordResetSender? = null
 
     override fun validate(): ValidationResult = validate {
@@ -132,17 +106,13 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
     }
 }
 
-/**
- * Immutable configuration data for password reset.
- */
+/** Immutable configuration data for password reset */
 internal data class PasswordResetConfigData(
     val tokenValidity: Duration,
     val rateLimit: RateLimitConfigData
 )
 
-/**
- * Immutable rate limit configuration data.
- */
+/** Immutable rate limit configuration data */
 internal data class RateLimitConfigData(
     val maxAttemptsPerUser: Int,
     val maxAttemptsPerIdentifier: Int,

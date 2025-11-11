@@ -12,6 +12,8 @@ import com.mustafadakhel.kodex.validation.ValidationResult
 import com.mustafadakhel.kodex.validation.validate
 import io.ktor.utils.io.*
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -19,18 +21,28 @@ import kotlin.time.Duration.Companion.seconds
 public class MfaConfig : ExtensionConfig(), ValidatableConfig {
 
     public var requireMfa: Boolean = false
+    public var requiredRolesForMfa: Set<String> = emptySet()
 
     public var codeLength: Int = 6
     public var codeExpiration: Duration = 10.minutes
 
+    public var automaticCleanup: Boolean = true
+    public var cleanupInterval: Duration = 1.hours
+    public var defaultTrustedDeviceExpiry: Duration? = 30.days
+
     public var maxEnrollAttemptsPerUser: Int = 3
     public var maxEnrollAttemptsPerContact: Int = 3
     public var maxEnrollAttemptsPerIp: Int = 5
+    public var maxChallengeAttemptsPerUser: Int = 5
+    public var maxChallengeAttemptsPerContact: Int = 3
+    public var maxChallengeAttemptsPerIp: Int = 10
     public var maxVerifyAttempts: Int = 5
 
     public var enrollRateLimitWindow: Duration = 15.minutes
+    public var challengeRateLimitWindow: Duration = 15.minutes
     public var verifyRateLimitWindow: Duration = 5.minutes
     public var enrollCooldownPeriod: Duration = 30.seconds
+    public var challengeCooldownPeriod: Duration = 30.seconds
 
     public var sessionExpiration: Duration = 5.minutes
     public var maxActiveSessions: Int = 3
@@ -49,6 +61,12 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
 
     public var secretEncryption: SecretEncryption? = null
     public var hashingService: HashingService? = null
+
+    /** Function to check if a user has a specific role (required for admin operations) */
+    public var userHasRole: (suspend (userId: java.util.UUID, role: String) -> Boolean)? = null
+
+    /** Function to get the total number of users (used for MFA statistics) */
+    public var getTotalUsers: (suspend () -> Long)? = null
 
     public fun emailMfa(block: EmailMfaConfig.() -> Unit) {
         val config = EmailMfaConfig().apply(block)
@@ -76,6 +94,10 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
         secretEncryption = config.secretEncryption
     }
 
+    public fun requireMfaForRoles(vararg roles: String) {
+        requiredRolesForMfa = roles.toSet()
+    }
+
     override fun validate(): ValidationResult = validate {
         require(codeLength in 4..10) { "codeLength must be between 4 and 10" }
         require(codeExpiration.inWholeMinutes in 1..30) { "codeExpiration must be 1-30 minutes" }
@@ -88,6 +110,10 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
         require(backupCodeLength in 6..12) { "backupCodeLength must be 6-12" }
         require(secretEncryption != null) { "secretEncryption must be configured" }
         require(hashingService != null) { "hashingService must be configured" }
+        require(cleanupInterval.inWholeMinutes >= 1) { "cleanupInterval must be at least 1 minute" }
+        defaultTrustedDeviceExpiry?.let { expiry ->
+            require(expiry.inWholeHours >= 1) { "defaultTrustedDeviceExpiry must be at least 1 hour if specified" }
+        }
     }
 
     override fun build(context: ExtensionContext): MfaExtension {
@@ -103,7 +129,9 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
             config = this,
             timeZone = context.timeZone,
             hashingService = hashingService!!,
-            secretEncryption = secretEncryption!!
+            secretEncryption = secretEncryption!!,
+            eventBus = context.eventBus,
+            realmId = context.realm.owner
         )
     }
 }

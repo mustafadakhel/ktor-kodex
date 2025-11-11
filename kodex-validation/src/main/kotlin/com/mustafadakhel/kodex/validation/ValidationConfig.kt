@@ -87,14 +87,7 @@ public class ValidationConfig : ExtensionConfig() {
 @KtorDsl
 public class EmailConfigScope internal constructor() {
 
-    /**
-     * Whether to allow disposable email addresses (e.g., tempmail.com).
-     *
-     * Default: false
-     *
-     * Set to true if you want to allow temporary email addresses.
-     * Blocking disposable emails helps prevent spam and fake accounts.
-     */
+    /** Allow disposable email addresses (default: false) */
     public var allowDisposable: Boolean = false
 
     internal fun build(): EmailValidationConfig = EmailValidationConfig(
@@ -108,25 +101,10 @@ public class EmailConfigScope internal constructor() {
 @KtorDsl
 public class PhoneConfigScope internal constructor() {
 
-    /**
-     * Default region code for parsing phone numbers without country code.
-     *
-     * Default: "ZZ" (unknown region)
-     *
-     * Use ISO 3166-1 alpha-2 country codes (e.g., "US", "GB", "FR").
-     * When set to "ZZ", no default region is assumed, and international format is required.
-     * This is used when parsing numbers that don't start with +.
-     */
+    /** Default region for phone parsing, ISO 3166-1 alpha-2 (default: "ZZ") */
     public var defaultRegion: String = "ZZ"
 
-    /**
-     * Whether to require E.164 international format (+[country code][number]).
-     *
-     * Default: true
-     *
-     * When true, all phone numbers must start with + and country code.
-     * Set to false to allow local format numbers (parsed using defaultRegion).
-     */
+    /** Require E.164 international format with + prefix (default: true) */
     public var requireE164: Boolean = true
 
     internal fun build(): PhoneValidationConfig = PhoneValidationConfig(
@@ -141,38 +119,14 @@ public class PhoneConfigScope internal constructor() {
 @KtorDsl
 public class PasswordConfigScope internal constructor() {
 
-    /**
-     * Minimum password length in characters.
-     *
-     * Default: 8
-     *
-     * NIST recommends minimum 8 characters. Consider 12+ for sensitive systems.
-     */
+    /** Minimum password length (default: 8) */
     public var minLength: Int = 8
 
-    /**
-     * Minimum password strength score (0-4).
-     *
-     * Default: 2 (moderate)
-     *
-     * Score levels:
-     * - 0: Very weak (common passwords, simple patterns)
-     * - 1: Weak (predictable, low entropy)
-     * - 2: Moderate (acceptable for most systems)
-     * - 3: Strong (good entropy, no common patterns)
-     * - 4: Very strong (excellent entropy, complex)
-     */
+    /** Minimum strength score, 0-4 scale (default: 2) */
     public var minScore: Int = 2
 
-    /**
-     * Set of common passwords to reject.
-     *
-     * Default: ~120 most common passwords from breach data
-     *
-     * You can provide a custom set to extend or replace the default dictionary.
-     * For stricter security, consider using a larger dictionary (e.g., top 10k from SecLists).
-     */
-    public var commonPasswords: Set<String> = CommonPasswords.top10k
+    /** Common passwords to reject (default: ~170 from breach data) */
+    public var commonPasswords: Set<String> = CommonPasswords.default
 
     internal fun build(): PasswordValidationConfig = PasswordValidationConfig(
         minLength = minLength,
@@ -187,47 +141,91 @@ public class PasswordConfigScope internal constructor() {
 @KtorDsl
 public class CustomAttributesConfigScope internal constructor() {
 
-    /**
-     * Maximum length for attribute keys.
-     *
-     * Default: 128
-     *
-     * Keys are restricted to alphanumeric characters, underscore, hyphen, and dot.
-     */
+    /** Maximum length for attribute keys (default: 128) */
     public var maxKeyLength: Int = 128
 
-    /**
-     * Maximum length for attribute values.
-     *
-     * Default: 4096
-     *
-     * Values are sanitized for XSS and have control characters removed.
-     */
+    /** Maximum length for attribute values (default: 4096) */
     public var maxValueLength: Int = 4096
 
-    /**
-     * Maximum number of custom attributes per user.
-     *
-     * Default: 50
-     *
-     * Prevents abuse and resource exhaustion from excessive attributes.
-     */
+    /** Maximum number of custom attributes per user (default: 50) */
     public var maxAttributes: Int = 50
 
-    /**
-     * Optional allowlist of permitted attribute keys.
-     *
-     * Default: null (all keys allowed)
-     *
-     * When set, only keys in this set are allowed. Useful for strict schemas.
-     * Example: setOf("department", "employee_id", "location")
-     */
+    /** Optional allowlist of permitted keys (default: null, allows all) */
     public var allowedKeys: Set<String>? = null
+
+    /**
+     * Per-attribute validation rules.
+     */
+    private val attributeRules = mutableMapOf<String, AttributeRule>()
+
+    /**
+     * Configure validation rules for a specific custom attribute.
+     *
+     * Example:
+     * ```kotlin
+     * attribute("department") {
+     *     required = true
+     *     pattern = "^(Engineering|Sales|Marketing)$"
+     *     maxLength = 50
+     * }
+     *
+     * attribute("employee_id") {
+     *     required = true
+     *     pattern = "^EMP\\d{6}$"
+     * }
+     *
+     * attribute("location") {
+     *     allowedValues = setOf("US", "UK", "FR", "DE")
+     * }
+     * ```
+     */
+    public fun attribute(key: String, block: AttributeRuleScope.() -> Unit) {
+        val scope = AttributeRuleScope(key)
+        scope.apply(block)
+        attributeRules[key] = scope.build()
+    }
 
     internal fun build(): CustomAttributeValidationConfig = CustomAttributeValidationConfig(
         maxKeyLength = maxKeyLength,
         maxValueLength = maxValueLength,
         maxAttributes = maxAttributes,
-        allowedKeys = allowedKeys
+        allowedKeys = allowedKeys,
+        attributeRules = attributeRules
+    )
+}
+
+/**
+ * DSL scope for configuring validation rules for a specific custom attribute.
+ */
+@KtorDsl
+public class AttributeRuleScope internal constructor(
+    private val key: String
+) {
+    /** Whether this attribute is required (default: false) */
+    public var required: Boolean = false
+
+    /** Regex pattern the value must match (default: null) */
+    public var pattern: String? = null
+
+    /** Maximum value length, overrides global setting (default: null) */
+    public var maxLength: Int? = null
+
+    /** Minimum value length (default: null) */
+    public var minLength: Int? = null
+
+    /** Allowed values for this attribute (default: null, allows all) */
+    public var allowedValues: Set<String>? = null
+
+    /** Custom validator returning ValidationResult (default: null) */
+    public var customValidator: ((String) -> ValidationResult)? = null
+
+    internal fun build(): AttributeRule = AttributeRule(
+        key = key,
+        required = required,
+        pattern = pattern,
+        maxLength = maxLength,
+        minLength = minLength,
+        allowedValues = allowedValues,
+        customValidator = customValidator
     )
 }
