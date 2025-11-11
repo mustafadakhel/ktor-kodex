@@ -20,7 +20,6 @@ internal class EmailValidator(
             "^[a-zA-Z0-9.!#\$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\$"
         )
 
-        // Common disposable email domains - limited set for basic protection
         val DISPOSABLE_DOMAINS = setOf(
             "tempmail.com", "guerrillamail.com", "10minutemail.com", "mailinator.com",
             "throwaway.email", "temp-mail.org", "yopmail.com", "maildrop.cc",

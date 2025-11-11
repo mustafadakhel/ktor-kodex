@@ -41,14 +41,36 @@ internal data class PhoneValidationConfig(
 internal data class PasswordValidationConfig(
     val minLength: Int = 8,
     val minScore: Int = 2,
-    val commonPasswords: Set<String> = CommonPasswords.top10k
+    val commonPasswords: Set<String> = CommonPasswords.default
 )
 
 internal data class CustomAttributeValidationConfig(
     val maxKeyLength: Int = 128,
     val maxValueLength: Int = 4096,
     val maxAttributes: Int = 50,
-    val allowedKeys: Set<String>? = null
+    val allowedKeys: Set<String>? = null,
+    val attributeRules: Map<String, AttributeRule> = emptyMap()
+)
+
+/**
+ * Validation rule for a specific custom attribute.
+ *
+ * @property key Attribute key this rule applies to
+ * @property required Whether this attribute is required
+ * @property pattern Regex pattern the value must match
+ * @property maxLength Maximum length for this attribute's value
+ * @property minLength Minimum length for this attribute's value
+ * @property allowedValues Set of allowed values for this attribute
+ * @property customValidator Custom validation function
+ */
+internal data class AttributeRule(
+    val key: String,
+    val required: Boolean = false,
+    val pattern: String? = null,
+    val maxLength: Int? = null,
+    val minLength: Int? = null,
+    val allowedValues: Set<String>? = null,
+    val customValidator: ((String) -> ValidationResult)? = null
 )
 
 /**
@@ -86,7 +108,8 @@ internal class DefaultValidationService(
         maxKeyLength = config.customAttributes.maxKeyLength,
         maxValueLength = config.customAttributes.maxValueLength,
         maxAttributes = config.customAttributes.maxAttributes,
-        allowedKeys = config.customAttributes.allowedKeys
+        allowedKeys = config.customAttributes.allowedKeys,
+        attributeRules = config.customAttributes.attributeRules
     )
 
     private val sanitizer = InputSanitizer(

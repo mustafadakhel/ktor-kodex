@@ -11,6 +11,7 @@ internal class CustomAttributeValidator(
     private val maxValueLength: Int = 4096,
     private val maxAttributes: Int = 50,
     private val allowedKeys: Set<String>? = null,
+    private val attributeRules: Map<String, AttributeRule> = emptyMap(),
     private val sanitizer: InputSanitizer = InputSanitizer(maxKeyLength, maxValueLength)
 ) {
     private companion object {
@@ -30,6 +31,20 @@ internal class CustomAttributeValidator(
     public fun validate(attributes: Map<String, String>, field: String = "customAttributes"): ValidationResult {
         val errors = mutableListOf<ValidationError>()
         val sanitized = mutableMapOf<String, String>()
+
+        // Check for required attributes
+        for ((key, rule) in attributeRules) {
+            if (rule.required && (key !in attributes || attributes[key].isNullOrBlank())) {
+                errors.add(
+                    ValidationError.of(
+                        field = "$field.$key",
+                        code = "attribute.required",
+                        message = "Required attribute is missing or empty",
+                        "key" to key
+                    )
+                )
+            }
+        }
 
         // Check attribute count limit
         if (attributes.size > maxAttributes) {
@@ -157,9 +172,13 @@ internal class CustomAttributeValidator(
 
     private fun validateValue(value: String, field: String, key: String): List<ValidationError> {
         val errors = mutableListOf<ValidationError>()
+        val rule = attributeRules[key]
 
-        // Length check
-        if (value.length > maxValueLength) {
+        // Determine effective max length (per-attribute rule overrides global)
+        val effectiveMaxLength = rule?.maxLength ?: maxValueLength
+
+        // Length check (maximum)
+        if (value.length > effectiveMaxLength) {
             errors.add(
                 ValidationError.of(
                     field = "$field.$key",
@@ -167,7 +186,21 @@ internal class CustomAttributeValidator(
                     message = "Attribute value exceeds maximum length",
                     "key" to key,
                     "actual" to value.length,
-                    "max" to maxValueLength
+                    "max" to effectiveMaxLength
+                )
+            )
+        }
+
+        // Length check (minimum) - only if rule specifies it
+        if (rule?.minLength != null && value.length < rule.minLength) {
+            errors.add(
+                ValidationError.of(
+                    field = "$field.$key",
+                    code = "attribute.value.too_short",
+                    message = "Attribute value is below minimum length",
+                    "key" to key,
+                    "actual" to value.length,
+                    "min" to rule.minLength
                 )
             )
         }
@@ -182,6 +215,57 @@ internal class CustomAttributeValidator(
                     "key" to key
                 )
             )
+        }
+
+        // Pattern validation - only if rule specifies it
+        if (rule?.pattern != null) {
+            try {
+                val regex = Regex(rule.pattern)
+                if (!regex.matches(value)) {
+                    errors.add(
+                        ValidationError.of(
+                            field = "$field.$key",
+                            code = "attribute.value.pattern_mismatch",
+                            message = "Attribute value does not match required pattern",
+                            "key" to key,
+                            "pattern" to rule.pattern
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                // Invalid regex pattern - treat as configuration error
+                errors.add(
+                    ValidationError.of(
+                        field = "$field.$key",
+                        code = "attribute.value.invalid_pattern",
+                        message = "Invalid validation pattern configured",
+                        "key" to key,
+                        "error" to (e.message ?: "Unknown error")
+                    )
+                )
+            }
+        }
+
+        // Allowed values - only if rule specifies it
+        if (rule?.allowedValues != null && value !in rule.allowedValues) {
+            errors.add(
+                ValidationError.of(
+                    field = "$field.$key",
+                    code = "attribute.value.not_allowed",
+                    message = "Attribute value is not in the allowed set",
+                    "key" to key,
+                    "value" to value,
+                    "allowed" to rule.allowedValues.toList()
+                )
+            )
+        }
+
+        // Custom validator - only if rule specifies it
+        if (rule?.customValidator != null) {
+            val customResult = rule.customValidator.invoke(value)
+            if (!customResult.isValid) {
+                errors.addAll(customResult.errors)
+            }
         }
 
         return errors

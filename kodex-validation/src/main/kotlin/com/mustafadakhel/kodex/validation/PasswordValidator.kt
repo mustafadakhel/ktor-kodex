@@ -13,7 +13,7 @@ import kotlin.time.Duration.Companion.seconds
 internal class PasswordValidator(
     private val minLength: Int = 8,
     private val minScore: Int = 2,
-    private val commonPasswords: Set<String> = CommonPasswords.top10k
+    private val commonPasswords: Set<String> = CommonPasswords.default
 ) {
     private companion object {
         const val MAX_PASSWORD_LENGTH = 256  // Prevent DoS from extremely long passwords
@@ -232,15 +232,13 @@ internal class PasswordValidator(
 }
 
 /**
- * Common passwords compiled from breach data.
- * Currently contains ~120 of the most frequently used passwords.
- * Used for dictionary attack detection to reject trivially weak passwords.
+ * Default set of common passwords compiled from breach data.
+ * Contains approximately 170 frequently-used passwords for dictionary attack detection.
  *
- * For production systems requiring stricter security, consider extending
- * this set with a larger dictionary (e.g., top 10k from SecLists).
+ * Users can provide custom password dictionaries via ValidationConfig.
  */
 internal object CommonPasswords {
-    val top10k: Set<String> = setOf(
+    val default: Set<String> = setOf(
         "password", "123456", "123456789", "12345678", "12345", "1234567", "password1",
         "1234567890", "qwerty", "abc123", "111111", "123123", "1234", "password123",
         "000000", "iloveyou", "1q2w3e4r", "qwertyuiop", "123321", "monkey", "dragon",
