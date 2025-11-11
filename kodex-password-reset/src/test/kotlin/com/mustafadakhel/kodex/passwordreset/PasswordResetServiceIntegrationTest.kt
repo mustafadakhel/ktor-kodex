@@ -5,6 +5,8 @@ import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
 import io.kotest.core.spec.style.FunSpec
@@ -21,7 +23,6 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -50,7 +51,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
     }
 
     val testContext = object : ExtensionContext {
-        override val realm = Realm(owner = "test")
+        override val realm = Realm(owner = "test-realm")
         override val timeZone = timeZone
         override val eventBus = mockEventBus
     }
@@ -76,8 +77,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
     val mockSender = MockPasswordResetSender()
 
     beforeTest {
+        TestDatabaseSetup.setupTestEngine(database)
         // Create tables
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.create(PasswordResetContacts, PasswordResetTokens)
         }
         mockSender.reset()
@@ -85,7 +87,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
 
     afterTest {
         // Drop tables
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.drop(PasswordResetContacts, PasswordResetTokens)
         }
     }
@@ -107,8 +109,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             // Setup: Register user contact
             val userId = UUID.randomUUID()
             val email = "user@example.com"
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetContacts.insert {
+                    it[PasswordResetContacts.realmId] = "test-realm"
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
@@ -132,7 +135,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             token.shouldNotBeNull()
 
             // Verify token is stored in database
-            val tokenCount = transaction(database) {
+            val tokenCount = kodexTransaction {
                 PasswordResetTokens.selectAll().count()
             }
             tokenCount shouldBe 1
@@ -187,8 +190,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             val now = Clock.System.now()
             val expiredTime = now.minus(2.hours).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[PasswordResetTokens.userId] = userId
                     it[token] = expiredToken
                     it[contactValue] = "user@example.com"
@@ -233,7 +237,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             mockSender.sentTokens.size shouldBe 0
 
             // And no token should be created
-            val tokenCount = transaction(database) {
+            val tokenCount = kodexTransaction {
                 PasswordResetTokens.selectAll().count()
             }
             tokenCount shouldBe 0
@@ -254,8 +258,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
             val email = "user@example.com"
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetContacts.insert {
+                    it[PasswordResetContacts.realmId] = "test-realm"
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
@@ -354,8 +359,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
             val email = "user@example.com"
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetContacts.insert {
+                    it[PasswordResetContacts.realmId] = "test-realm"
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
@@ -372,7 +378,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             firstResult.shouldBeInstanceOf<PasswordResetResult.Success>()
 
             // Verify no token was created (send failed)
-            val tokenCount1 = transaction(database) {
+            val tokenCount1 = kodexTransaction {
                 PasswordResetTokens.selectAll().count()
             }
             tokenCount1 shouldBe 0
@@ -389,7 +395,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             thirdResult.shouldBeInstanceOf<PasswordResetResult.Success>()
 
             // Verify token WAS created this time
-            val tokenCount2 = transaction(database) {
+            val tokenCount2 = kodexTransaction {
                 PasswordResetTokens.selectAll().count()
             }
             tokenCount2 shouldBe 1
@@ -408,8 +414,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
             val email = "user@example.com"
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetContacts.insert {
+                    it[PasswordResetContacts.realmId] = "test-realm"
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
@@ -448,8 +455,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
             val email = "user@example.com"
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetContacts.insert {
+                    it[PasswordResetContacts.realmId] = "test-realm"
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email

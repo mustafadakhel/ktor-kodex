@@ -16,7 +16,6 @@ class RateLimitReleaseTest : FunSpec({
             val rateLimiter = RateLimiter()
             val limit = 3
 
-            // Reserve 3 slots
             val res1 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res1.isAllowed() shouldBe true
 
@@ -30,7 +29,6 @@ class RateLimitReleaseTest : FunSpec({
             val res4 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res4.isAllowed() shouldBe false
 
-            // Release first 3 reservations (simulating failures)
             rateLimiter.releaseReservation(res1.reservationId)
             rateLimiter.releaseReservation(res2.reservationId)
             rateLimiter.releaseReservation(res3.reservationId)
@@ -54,32 +52,22 @@ class RateLimitReleaseTest : FunSpec({
             val rateLimiter = RateLimiter()
             val limit = 4
 
-            // Success 1
             val res1 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res1.isAllowed() shouldBe true
-            // Keep this reservation (success)
 
-            // Success 2
             val res2 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res2.isAllowed() shouldBe true
-            // Keep this reservation (success)
 
-            // Failure - release
             val res3 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res3.isAllowed() shouldBe true
             rateLimiter.releaseReservation(res3.reservationId)
 
-            // Success 3
             val res4 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res4.isAllowed() shouldBe true
-            // Keep this reservation (success)
 
-            // Success 4
             val res5 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res5.isAllowed() shouldBe true
-            // Keep this reservation (success)
 
-            // Should be rate limited now (4 successes kept)
             val res6 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res6.isAllowed() shouldBe false
         }
@@ -88,7 +76,6 @@ class RateLimitReleaseTest : FunSpec({
             val rateLimiter = RateLimiter()
             val limit = 3
 
-            // Simulate 10 failed attempts (all released)
             for (i in 1..10) {
                 val res = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
                 res.isAllowed() shouldBe true
@@ -105,7 +92,6 @@ class RateLimitReleaseTest : FunSpec({
             val res3 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res3.isAllowed() shouldBe true
 
-            // 4th should be limited
             val res4 = rateLimiter.checkAndReserve("test-key", limit, 15.minutes)
             res4.isAllowed() shouldBe false
         }
@@ -113,7 +99,6 @@ class RateLimitReleaseTest : FunSpec({
         test("releasing null reservationId is safe (no-op)") {
             val rateLimiter = RateLimiter()
 
-            // Should not throw
             rateLimiter.releaseReservation(null)
         }
     }

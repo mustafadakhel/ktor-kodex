@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.lockout
 
+import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.lockout.database.AccountLocks
 import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
 import io.kotest.core.spec.style.FunSpec
@@ -12,7 +14,6 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -29,13 +30,14 @@ class LockoutIntegrationTest : FunSpec({
     )
 
     beforeTest {
-        transaction(database) {
+        TestDatabaseSetup.setupTestEngine(database)
+        kodexTransaction {
             SchemaUtils.create(FailedLoginAttempts, AccountLocks)
         }
     }
 
     afterTest {
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.drop(FailedLoginAttempts, AccountLocks)
         }
     }
@@ -48,13 +50,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
             val ipAddress = "192.168.1.1"
 
-            // Record 3 failed attempts
             repeat(3) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -72,13 +73,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
             val ipAddress = "192.168.1.1"
 
-            // Record 2 failed attempts (below threshold of 5)
             repeat(2) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -93,24 +93,22 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 5.minutes,  // Short window
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
             val ipAddress = "192.168.1.1"
 
-            // Record 3 attempts
             repeat(3) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
 
-            // Should be throttled now
             service.shouldThrottleIdentifier(identifier)
                 .shouldBeInstanceOf<ThrottleResult.Throttled>()
 
             // Wait for window to pass (simulate by clearing old attempts)
             // In real scenario, we'd wait 5 minutes - here we manually clean
-            transaction(database) {
+            kodexTransaction {
                 val clockNow = Clock.System.now()
                 val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
@@ -122,9 +120,7 @@ class LockoutIntegrationTest : FunSpec({
                 count shouldBe 3
             }
 
-            // After clearing, should not be throttled
-            transaction(database) {
-                // Simulate old attempts by deleting them
+            kodexTransaction {
                 FailedLoginAttempts.deleteWhere { FailedLoginAttempts.identifier eq identifier }
             }
 
@@ -141,11 +137,10 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val ipAddress = "192.168.1.1"
 
-            // Record 12 failed attempts from same IP (threshold = 3 * 4 = 12)
             repeat(12) { index ->
                 service.recordFailedAttempt(
                     identifier = "user$index@example.com",
@@ -168,11 +163,10 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val ipAddress = "192.168.1.1"
 
-            // Record 10 failed attempts (below threshold of 20)
             repeat(10) { index ->
                 service.recordFailedAttempt(
                     identifier = "user$index@example.com",
@@ -195,13 +189,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record 3 failed attempts for the same userId
             repeat(3) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -219,13 +212,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record 2 failed attempts (below threshold)
             repeat(2) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -240,19 +232,17 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId1 = UUID.randomUUID()
             val userId2 = UUID.randomUUID()
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record 2 attempts for userId1
             repeat(2) {
                 service.recordFailedAttempt(identifier, userId1, ipAddress, "Invalid credentials")
             }
 
-            // Record 2 attempts for userId2
             repeat(2) {
                 service.recordFailedAttempt(identifier, userId2, ipAddress, "Invalid credentials")
             }
@@ -268,12 +258,11 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "nonexistent@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record 5 attempts with null userId (non-existent account)
             repeat(5) {
                 service.recordFailedAttempt(identifier, userId = null, ipAddress, "Invalid credentials")
             }
@@ -291,7 +280,7 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should lock account manually") {
             val policy = AccountLockoutPolicy.moderate()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val clockNow = Clock.System.now()
@@ -305,7 +294,7 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should unlock account") {
             val policy = AccountLockoutPolicy.moderate()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val clockNow = Clock.System.now()
@@ -315,14 +304,13 @@ class LockoutIntegrationTest : FunSpec({
             service.lockAccount(userId, lockedUntil, "Test lock")
             service.isAccountLocked(userId, clockNow.toLocalDateTime(TimeZone.UTC)) shouldBe true
 
-            // Unlock account
             service.unlockAccount(userId)
             service.isAccountLocked(userId, clockNow.toLocalDateTime(TimeZone.UTC)) shouldBe false
         }
 
         test("should respect lock expiry time") {
             val policy = AccountLockoutPolicy.moderate()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val clockNow = Clock.System.now()
@@ -338,13 +326,14 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should handle null lockedUntil as permanent lock") {
             val policy = AccountLockoutPolicy.moderate()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
 
             // Lock account with null expiry (permanent lock)
-            transaction(database) {
+            kodexTransaction {
                 AccountLocks.insert {
+                    it[AccountLocks.realmId] = "test-realm"
                     it[AccountLocks.userId] = userId
                     it[AccountLocks.lockedUntil] = null  // Permanent lock
                     it[AccountLocks.reason] = "Permanent ban"
@@ -366,13 +355,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
             val ipAddress = "192.168.1.1"
 
-            // Record 3 failed attempts (reaches threshold)
             repeat(3) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -381,10 +369,8 @@ class LockoutIntegrationTest : FunSpec({
             service.shouldThrottleIdentifier(identifier)
                 .shouldBeInstanceOf<ThrottleResult.Throttled>()
 
-            // Clear attempts
             service.clearFailedAttemptsForIdentifier(identifier)
 
-            // Should no longer be throttled
             service.shouldThrottleIdentifier(identifier)
                 .shouldBeInstanceOf<ThrottleResult.NotThrottled>()
         }
@@ -395,13 +381,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record 3 failed attempts
             repeat(3) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -410,10 +395,8 @@ class LockoutIntegrationTest : FunSpec({
             service.shouldLockAccount(userId)
                 .shouldBeInstanceOf<LockAccountResult.ShouldLock>()
 
-            // Clear attempts for user
             service.clearFailedAttemptsForUser(userId)
 
-            // Should no longer lock
             service.shouldLockAccount(userId)
                 .shouldBeInstanceOf<LockAccountResult.NoAction>()
         }
@@ -423,13 +406,12 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should respect disabled policy for throttling") {
             val policy = AccountLockoutPolicy.disabled()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
             val ipAddress = "192.168.1.1"
 
-            // Record many failed attempts
             repeat(100) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -443,13 +425,12 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should respect disabled policy for lockout") {
             val policy = AccountLockoutPolicy.disabled()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record many failed attempts
             repeat(100) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -465,13 +446,12 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 10.minutes,
                 lockoutDuration = 60.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val userId = UUID.randomUUID()
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
-            // Record exactly 2 attempts (custom threshold)
             repeat(2) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
@@ -488,7 +468,7 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should record all attempt metadata") {
             val policy = AccountLockoutPolicy.moderate()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
@@ -498,7 +478,7 @@ class LockoutIntegrationTest : FunSpec({
             service.recordFailedAttempt(identifier, userId, ipAddress, reason)
 
             // Verify data in database
-            transaction(database) {
+            kodexTransaction {
                 val attempt = FailedLoginAttempts.selectAll().where {
                     FailedLoginAttempts.identifier eq identifier
                 }.single()
@@ -516,23 +496,23 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 5.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
             val ipAddress = "192.168.1.1"
 
-            // Record 2 attempts
             repeat(2) {
                 service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials")
             }
 
             // Manually insert old attempt (outside window)
-            transaction(database) {
+            kodexTransaction {
                 val clockNow = Clock.System.now()
                 val oldTime = (clockNow - 10.minutes).toLocalDateTime(TimeZone.UTC)
 
                 FailedLoginAttempts.insert {
+                    it[FailedLoginAttempts.realmId] = "test-realm"
                     it[FailedLoginAttempts.identifier] = identifier
                     it[FailedLoginAttempts.userId] = userId
                     it[FailedLoginAttempts.ipAddress] = ipAddress
@@ -541,19 +521,17 @@ class LockoutIntegrationTest : FunSpec({
                 }
             }
 
-            // Verify 3 attempts exist
-            transaction(database) {
+            kodexTransaction {
                 val count = FailedLoginAttempts.selectAll().where {
                     FailedLoginAttempts.identifier eq identifier
                 }.count()
                 count shouldBe 3
             }
 
-            // Record new attempt - should clean old one
             service.recordFailedAttempt(identifier, userId, ipAddress, "New attempt")
 
             // Old attempt should be cleaned, 3 recent attempts remain
-            transaction(database) {
+            kodexTransaction {
                 val count = FailedLoginAttempts.selectAll().where {
                     FailedLoginAttempts.identifier eq identifier
                 }.count()
@@ -570,12 +548,11 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
             val userId = UUID.randomUUID()
 
-            // Record attempts from different IPs
             service.recordFailedAttempt(identifier, userId, "192.168.1.1", "Invalid credentials")
             service.recordFailedAttempt(identifier, userId, "192.168.1.2", "Invalid credentials")
             service.recordFailedAttempt(identifier, userId, "192.168.1.3", "Invalid credentials")
@@ -595,11 +572,10 @@ class LockoutIntegrationTest : FunSpec({
                 attemptWindow = 15.minutes,
                 lockoutDuration = 30.minutes
             )
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val ipAddress = "192.168.1.1"
 
-            // Record 2 attempts each from 6 different identifiers (total 12)
             repeat(6) { index ->
                 repeat(2) {
                     service.recordFailedAttempt(
@@ -622,11 +598,10 @@ class LockoutIntegrationTest : FunSpec({
 
         test("should handle non-existent user ID") {
             val policy = AccountLockoutPolicy.moderate()
-            val service = accountLockoutService(policy, TimeZone.UTC)
+            val service = accountLockoutService(policy, TimeZone.UTC, "test-realm")
 
             val nonExistentUserId = UUID.randomUUID()
 
-            // Check lockout for user that never had failed attempts
             val result = service.shouldLockAccount(nonExistentUserId)
             result.shouldBeInstanceOf<LockAccountResult.NoAction>()
 

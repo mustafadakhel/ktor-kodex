@@ -15,13 +15,18 @@ import java.util.UUID
  * Foreign key CASCADE will be set up via database migration.
  */
 internal object PasswordResetContacts : Table("password_reset_contacts") {
-    val userId: Column<UUID> = uuid("user_id").index()
+    val realmId: Column<String> = varchar("realm_id", 50)
+    val userId: Column<UUID> = uuid("user_id")
     val contactType: Column<String> = varchar("contact_type", 50)
-    val contactValue: Column<String> = varchar("contact_value", 255).index()
+    val contactValue: Column<String> = varchar("contact_value", 255)
     val createdAt: Column<LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
     val updatedAt: Column<LocalDateTime> = datetime("updated_at").defaultExpression(CurrentDateTime)
 
+    override val primaryKey = PrimaryKey(realmId, userId, contactType)
+
     init {
-        uniqueIndex(userId, contactType)
+        index(false, realmId)
+        index(false, userId)
+        index(false, contactValue)
     }
 }

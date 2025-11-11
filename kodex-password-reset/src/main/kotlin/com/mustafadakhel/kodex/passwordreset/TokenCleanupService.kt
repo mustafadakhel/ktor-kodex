@@ -1,11 +1,14 @@
 package com.mustafadakhel.kodex.passwordreset
 
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.TokenCleanupEvent
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
 import com.mustafadakhel.kodex.util.kodexTransaction
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.and
@@ -26,7 +29,7 @@ public interface TokenCleanupService {
  */
 internal class DefaultTokenCleanupService(
     private val timeZone: TimeZone,
-    private val eventBus: com.mustafadakhel.kodex.event.EventBus?,
+    private val eventBus: EventBus?,
     private val realm: String
 ) : TokenCleanupService {
 
@@ -41,8 +44,10 @@ internal class DefaultTokenCleanupService(
         do {
             val deletedInBatch = kodexTransaction {
                 PasswordResetTokens.deleteWhere(limit = batchSize) {
-                    (usedAt.isNotNull() and (usedAt less cutoff)) or
-                    ((expiresAt less now) and (createdAt less cutoff))
+                    (PasswordResetTokens.realmId eq realm) and (
+                        (usedAt.isNotNull() and (usedAt less cutoff)) or
+                        ((expiresAt less now) and (createdAt less cutoff))
+                    )
                 }
             }
 
@@ -54,7 +59,7 @@ internal class DefaultTokenCleanupService(
         } while (deletedInBatch == batchSize)
 
         if (totalDeleted > 0) {
-            eventBus?.publish(com.mustafadakhel.kodex.event.TokenCleanupEvent.TokensCleanedUp(
+            eventBus?.publish(TokenCleanupEvent.TokensCleanedUp(
                 eventId = java.util.UUID.randomUUID(),
                 timestamp = clockNow,
                 realmId = realm,

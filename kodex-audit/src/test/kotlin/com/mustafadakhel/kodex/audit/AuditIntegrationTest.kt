@@ -2,6 +2,8 @@ package com.mustafadakhel.kodex.audit
 
 import com.mustafadakhel.kodex.audit.database.AuditLogDao
 import com.mustafadakhel.kodex.audit.database.AuditLogs
+import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.kodexTransaction
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -17,7 +19,6 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -34,20 +35,18 @@ import kotlin.time.Duration.Companion.hours
  */
 class AuditIntegrationTest : FunSpec({
 
-    // Test database setup
     val database = Database.connect("jdbc:h2:mem:test_audit_integration;DB_CLOSE_DELAY=-1", driver = "org.h2.Driver")
     val timeZone = TimeZone.UTC
 
     beforeTest {
-        // Create audit log table
-        transaction(database) {
+        TestDatabaseSetup.setupTestEngine(database)
+        kodexTransaction {
             SchemaUtils.create(AuditLogs)
         }
     }
 
     afterTest {
-        // Drop audit log table
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.drop(AuditLogs)
         }
     }
@@ -73,13 +72,13 @@ class AuditIntegrationTest : FunSpec({
             provider.log(event)
 
             // Verify event was persisted
-            val count = transaction(database) {
+            val count = kodexTransaction {
                 AuditLogs.selectAll().count()
             }
             count shouldBe 1
 
             // Verify event fields
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -106,7 +105,7 @@ class AuditIntegrationTest : FunSpec({
                 provider.log(event)
             }
 
-            val count = transaction(database) {
+            val count = kodexTransaction {
                 AuditLogs.selectAll().count()
             }
             count shouldBe 5
@@ -129,7 +128,7 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -158,7 +157,7 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -190,7 +189,7 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -219,7 +218,7 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -253,7 +252,7 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -290,7 +289,7 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            val savedEvent = transaction(database) {
+            val savedEvent = kodexTransaction {
                 AuditLogDao.all().first()
             }
 
@@ -321,7 +320,7 @@ class AuditIntegrationTest : FunSpec({
             }
 
             // Query LOGIN events
-            val loginEvents = transaction(database) {
+            val loginEvents = kodexTransaction {
                 AuditLogDao.find { AuditLogs.eventType eq "USER_LOGIN" }.toList()
             }
 
@@ -356,7 +355,7 @@ class AuditIntegrationTest : FunSpec({
             }
 
             // Query events for actor1
-            val actor1Events = transaction(database) {
+            val actor1Events = kodexTransaction {
                 AuditLogDao.find { AuditLogs.actorId eq actor1 }.toList()
             }
 
@@ -378,7 +377,7 @@ class AuditIntegrationTest : FunSpec({
             }
 
             // Query realm1 events
-            val realm1Events = transaction(database) {
+            val realm1Events = kodexTransaction {
                 AuditLogDao.find { AuditLogs.realmId eq "realm1" }.toList()
             }
 
@@ -411,7 +410,7 @@ class AuditIntegrationTest : FunSpec({
             }
 
             // Query failed events
-            val failedEvents = transaction(database) {
+            val failedEvents = kodexTransaction {
                 AuditLogDao.find { AuditLogs.result eq EventResult.FAILURE }.toList()
             }
 
@@ -456,7 +455,7 @@ class AuditIntegrationTest : FunSpec({
             deletedCount shouldBe 1
 
             // Verify only recent event remains
-            val remaining = transaction(database) {
+            val remaining = kodexTransaction {
                 AuditLogDao.all().toList()
             }
             remaining shouldHaveSize 1
@@ -495,7 +494,7 @@ class AuditIntegrationTest : FunSpec({
             val deletedCount = retentionService.cleanupAuditLogsOlderThan(cutoffDate)
             deletedCount shouldBe 1
 
-            val remaining = transaction(database) {
+            val remaining = kodexTransaction {
                 AuditLogDao.all().toList()
             }
             remaining shouldHaveSize 1
@@ -518,7 +517,7 @@ class AuditIntegrationTest : FunSpec({
             val provider = DatabaseAuditProvider()
 
             // Close the database connection to simulate failure
-            transaction(database) {
+            kodexTransaction {
                 SchemaUtils.drop(AuditLogs)
             }
 
@@ -533,7 +532,7 @@ class AuditIntegrationTest : FunSpec({
             provider.log(event)
 
             // Recreate table for cleanup
-            transaction(database) {
+            kodexTransaction {
                 SchemaUtils.create(AuditLogs)
             }
         }
@@ -553,7 +552,7 @@ class AuditIntegrationTest : FunSpec({
                 ))
             }
 
-            val events = transaction(database) {
+            val events = kodexTransaction {
                 AuditLogDao.all().toList()
             }
 
@@ -584,7 +583,7 @@ class AuditIntegrationTest : FunSpec({
                 ))
             }
 
-            val events = transaction(database) {
+            val events = kodexTransaction {
                 AuditLogDao.all().toList()
             }
 

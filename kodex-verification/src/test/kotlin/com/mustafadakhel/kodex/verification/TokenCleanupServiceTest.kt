@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.verification
 
+import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -11,7 +13,6 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -28,15 +29,17 @@ class TokenCleanupServiceTest : FunSpec({
             driver = "org.h2.Driver"
         )
 
-        transaction(database) {
+        TestDatabaseSetup.setupTestEngine(database)
+
+        kodexTransaction {
             SchemaUtils.create(VerificationTokens)
         }
 
-        cleanupService = DefaultTokenCleanupService(timeZone, null, "test")
+        cleanupService = DefaultTokenCleanupService(timeZone, null, "test-realm")
     }
 
     afterEach {
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.drop(VerificationTokens)
         }
     }
@@ -47,9 +50,9 @@ class TokenCleanupServiceTest : FunSpec({
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
             val recentDate = now.minus(29.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
-                // Old used token - should be deleted
+            kodexTransaction {
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -59,8 +62,8 @@ class TokenCleanupServiceTest : FunSpec({
                     it[usedAt] = oldDate
                 }
 
-                // Recent used token - should NOT be deleted
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -75,7 +78,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 1
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = VerificationTokens.selectAll().map { it[VerificationTokens.token] }
                 remainingTokens shouldBe listOf("recent-used-token")
             }
@@ -86,9 +89,9 @@ class TokenCleanupServiceTest : FunSpec({
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
             val expiredOldDate = now.minus(2.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
-                // Expired token with old creation date - should be deleted
+            kodexTransaction {
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -98,8 +101,8 @@ class TokenCleanupServiceTest : FunSpec({
                     it[usedAt] = null
                 }
 
-                // Expired token with recent creation - should NOT be deleted
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -114,7 +117,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 1
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = VerificationTokens.selectAll().map { it[VerificationTokens.token] }
                 remainingTokens shouldBe listOf("expired-recent-token")
             }
@@ -124,9 +127,9 @@ class TokenCleanupServiceTest : FunSpec({
             val now = Clock.System.now()
             val recentDate = now.minus(1.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
-                // Active token (not expired, not used)
+            kodexTransaction {
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -141,7 +144,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 0
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = VerificationTokens.selectAll().map { it[VerificationTokens.token] }
                 remainingTokens shouldBe listOf("active-token")
             }
@@ -152,9 +155,9 @@ class TokenCleanupServiceTest : FunSpec({
             val tenDaysOld = now.minus(10.days).toLocalDateTime(timeZone)
             val sixDaysOld = now.minus(6.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
-                // Token used 10 days ago
+            kodexTransaction {
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -164,8 +167,8 @@ class TokenCleanupServiceTest : FunSpec({
                     it[usedAt] = tenDaysOld
                 }
 
-                // Token used 6 days ago
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -176,12 +179,11 @@ class TokenCleanupServiceTest : FunSpec({
                 }
             }
 
-            // With 7 day retention, only 10-day-old token should be deleted
             val deletedCount = cleanupService.purgeExpiredTokens(retentionPeriod = 7.days)
 
             deletedCount shouldBe 1
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = VerificationTokens.selectAll().map { it[VerificationTokens.token] }
                 remainingTokens shouldBe listOf("token-6d")
             }
@@ -197,9 +199,9 @@ class TokenCleanupServiceTest : FunSpec({
             val now = Clock.System.now()
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
-                // Old used email token
+            kodexTransaction {
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -209,8 +211,8 @@ class TokenCleanupServiceTest : FunSpec({
                     it[usedAt] = oldDate
                 }
 
-                // Old used phone token
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.PHONE
                     it[customAttributeKey] = null
@@ -220,8 +222,8 @@ class TokenCleanupServiceTest : FunSpec({
                     it[usedAt] = oldDate
                 }
 
-                // Old used custom attribute token
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[contactType] = ContactType.CUSTOM_ATTRIBUTE
                     it[customAttributeKey] = "discord"
@@ -236,7 +238,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 3
 
-            transaction(database) {
+            kodexTransaction {
                 VerificationTokens.selectAll().count() shouldBe 0
             }
         }
@@ -245,10 +247,10 @@ class TokenCleanupServiceTest : FunSpec({
             val now = Clock.System.now()
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
 
-            // Create 2500 expired tokens (simulating high volume)
-            transaction(database) {
+            kodexTransaction {
                 repeat(2500) { index ->
                     VerificationTokens.insert {
+                        it[VerificationTokens.realmId] = "test-realm"
                         it[userId] = UUID.randomUUID()
                         it[contactType] = ContactType.EMAIL
                         it[customAttributeKey] = null
@@ -260,18 +262,15 @@ class TokenCleanupServiceTest : FunSpec({
                 }
             }
 
-            // Verify we created 2500 tokens
-            transaction(database) {
+            kodexTransaction {
                 VerificationTokens.selectAll().count() shouldBe 2500
             }
 
-            // Run cleanup - should delete all 2500 in batches of 1000
             val deletedCount = cleanupService.purgeExpiredTokens(retentionPeriod = 30.days)
 
-            // Verify all tokens were deleted
             deletedCount shouldBe 2500
 
-            transaction(database) {
+            kodexTransaction {
                 VerificationTokens.selectAll().count() shouldBe 0
             }
 

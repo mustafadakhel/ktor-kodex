@@ -298,7 +298,7 @@ internal class HookExecutor(
         }
     }
 
-    suspend fun executeAfterAuthentication(userId: UUID) {
+    suspend fun executeAfterAuthentication(user: AuthenticatedUser) {
         val failures = mutableListOf<HookFailure>()
 
         registry.getAllOfType(UserLifecycleHooks::class)
@@ -306,18 +306,18 @@ internal class HookExecutor(
             .forEach { hook ->
                 when (failureStrategy) {
                     HookFailureStrategy.FAIL_FAST -> {
-                        hook.afterAuthentication(userId)
+                        hook.afterAuthentication(user)
                     }
                     HookFailureStrategy.COLLECT_ERRORS -> {
                         try {
-                            hook.afterAuthentication(userId)
+                            hook.afterAuthentication(user)
                         } catch (e: Throwable) {
                             failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
                         }
                     }
                     HookFailureStrategy.SKIP_FAILED -> {
                         try {
-                            hook.afterAuthentication(userId)
+                            hook.afterAuthentication(user)
                         } catch (e: Throwable) {
                             logger.warn("Hook ${hook::class.simpleName} failed in afterAuthentication", e)
                         }

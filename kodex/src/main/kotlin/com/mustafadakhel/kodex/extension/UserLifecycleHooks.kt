@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.extension
 
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.UserStatus
 import java.util.UUID
 
 /** Hook interface for user lifecycle events. */
@@ -60,7 +61,7 @@ public interface UserLifecycleHooks : RealmExtension {
     }
 
     /** Called after successful authentication, before token generation. Extensions can check user state and throw to block login. */
-    public suspend fun afterAuthentication(userId: UUID) {
+    public suspend fun afterAuthentication(user: AuthenticatedUser) {
     }
 
     /** Called before user deletion. Extensions can perform cleanup (e.g., anonymize audit logs). */
@@ -90,4 +91,12 @@ public data class UserProfileUpdateData(
 public data class LoginMetadata(
     val ipAddress: String,
     val userAgent: String?
+)
+
+public data class AuthenticatedUser(
+    val userId: UUID,
+    val email: String?,
+    val phone: String?,
+    val roles: List<String>,
+    val status: UserStatus
 )

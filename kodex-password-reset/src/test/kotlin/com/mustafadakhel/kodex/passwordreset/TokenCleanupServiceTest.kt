@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.passwordreset
 
+import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -11,7 +13,6 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -28,15 +29,17 @@ class TokenCleanupServiceTest : FunSpec({
             driver = "org.h2.Driver"
         )
 
-        transaction(database) {
+        TestDatabaseSetup.setupTestEngine(database)
+
+        kodexTransaction {
             SchemaUtils.create(PasswordResetTokens)
         }
 
-        cleanupService = DefaultTokenCleanupService(timeZone, null, "test")
+        cleanupService = DefaultTokenCleanupService(timeZone, null, "test-realm")
     }
 
     afterEach {
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.drop(PasswordResetTokens)
         }
     }
@@ -47,9 +50,10 @@ class TokenCleanupServiceTest : FunSpec({
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
             val recentDate = now.minus(29.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 // Old used token - should be deleted
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "old-used-token"
                     it[contactValue] = "test@example.com"
@@ -61,6 +65,7 @@ class TokenCleanupServiceTest : FunSpec({
 
                 // Recent used token - should NOT be deleted
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "recent-used-token"
                     it[contactValue] = "test2@example.com"
@@ -75,7 +80,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 1
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = PasswordResetTokens.selectAll().map { it[PasswordResetTokens.token] }
                 remainingTokens shouldBe listOf("recent-used-token")
             }
@@ -86,9 +91,10 @@ class TokenCleanupServiceTest : FunSpec({
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
             val expiredOldDate = now.minus(2.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 // Expired token with old creation date - should be deleted
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "expired-old-token"
                     it[contactValue] = "test@example.com"
@@ -100,6 +106,7 @@ class TokenCleanupServiceTest : FunSpec({
 
                 // Expired token with recent creation - should NOT be deleted
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "expired-recent-token"
                     it[contactValue] = "test2@example.com"
@@ -114,7 +121,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 1
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = PasswordResetTokens.selectAll().map { it[PasswordResetTokens.token] }
                 remainingTokens shouldBe listOf("expired-recent-token")
             }
@@ -124,9 +131,10 @@ class TokenCleanupServiceTest : FunSpec({
             val now = Clock.System.now()
             val recentDate = now.minus(1.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 // Active token (not expired, not used)
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "active-token"
                     it[contactValue] = "test@example.com"
@@ -141,7 +149,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 0
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = PasswordResetTokens.selectAll().map { it[PasswordResetTokens.token] }
                 remainingTokens shouldBe listOf("active-token")
             }
@@ -152,9 +160,10 @@ class TokenCleanupServiceTest : FunSpec({
             val tenDaysOld = now.minus(10.days).toLocalDateTime(timeZone)
             val sixDaysOld = now.minus(6.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 // Token used 10 days ago
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "token-10d"
                     it[contactValue] = "test@example.com"
@@ -166,6 +175,7 @@ class TokenCleanupServiceTest : FunSpec({
 
                 // Token used 6 days ago
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "token-6d"
                     it[contactValue] = "test2@example.com"
@@ -181,7 +191,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 1
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = PasswordResetTokens.selectAll().map { it[PasswordResetTokens.token] }
                 remainingTokens shouldBe listOf("token-6d")
             }
@@ -197,9 +207,10 @@ class TokenCleanupServiceTest : FunSpec({
             val now = Clock.System.now()
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 // Old used token with IP
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "old-token-with-ip"
                     it[contactValue] = "test@example.com"
@@ -211,6 +222,7 @@ class TokenCleanupServiceTest : FunSpec({
 
                 // Old used token without IP
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = UUID.randomUUID()
                     it[token] = "old-token-no-ip"
                     it[contactValue] = "test2@example.com"
@@ -225,7 +237,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 2
 
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetTokens.selectAll().count() shouldBe 0
             }
         }
@@ -236,9 +248,10 @@ class TokenCleanupServiceTest : FunSpec({
             val user1 = UUID.randomUUID()
             val user2 = UUID.randomUUID()
 
-            transaction(database) {
+            kodexTransaction {
                 // Old token for user 1
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = user1
                     it[token] = "user1-old-token"
                     it[contactValue] = "user1@example.com"
@@ -250,6 +263,7 @@ class TokenCleanupServiceTest : FunSpec({
 
                 // Old token for user 2
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = user2
                     it[token] = "user2-old-token"
                     it[contactValue] = "user2@example.com"
@@ -261,6 +275,7 @@ class TokenCleanupServiceTest : FunSpec({
 
                 // Active token for user 1
                 PasswordResetTokens.insert {
+                    it[PasswordResetTokens.realmId] = "test-realm"
                     it[userId] = user1
                     it[token] = "user1-active-token"
                     it[contactValue] = "user1@example.com"
@@ -275,7 +290,7 @@ class TokenCleanupServiceTest : FunSpec({
 
             deletedCount shouldBe 2
 
-            transaction(database) {
+            kodexTransaction {
                 val remainingTokens = PasswordResetTokens.selectAll().map { it[PasswordResetTokens.token] }
                 remainingTokens shouldBe listOf("user1-active-token")
             }
@@ -286,9 +301,10 @@ class TokenCleanupServiceTest : FunSpec({
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
 
             // Create 2500 expired tokens (simulating high volume)
-            transaction(database) {
+            kodexTransaction {
                 repeat(2500) { index ->
                     PasswordResetTokens.insert {
+                        it[PasswordResetTokens.realmId] = "test-realm"
                         it[userId] = UUID.randomUUID()
                         it[token] = "expired-token-$index"
                         it[contactValue] = "test$index@example.com"
@@ -301,7 +317,7 @@ class TokenCleanupServiceTest : FunSpec({
             }
 
             // Verify we created 2500 tokens
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetTokens.selectAll().count() shouldBe 2500
             }
 
@@ -311,7 +327,7 @@ class TokenCleanupServiceTest : FunSpec({
             // Verify all tokens were deleted
             deletedCount shouldBe 2500
 
-            transaction(database) {
+            kodexTransaction {
                 PasswordResetTokens.selectAll().count() shouldBe 0
             }
 

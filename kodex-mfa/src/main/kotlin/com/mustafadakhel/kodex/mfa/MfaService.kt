@@ -62,6 +62,37 @@ public interface MfaService {
     public fun hasAnyMethod(userId: UUID): Boolean
 
     public fun isMfaRequired(userId: UUID): Boolean
+
+    // Trusted Devices
+    public suspend fun trustDevice(
+        userId: UUID,
+        deviceFingerprint: String,
+        deviceName: String?,
+        ipAddress: String?,
+        userAgent: String?,
+        expiresInDays: Int? = null
+    ): UUID
+
+    public suspend fun isDeviceTrusted(
+        userId: UUID,
+        deviceFingerprint: String
+    ): Boolean
+
+    public suspend fun getTrustedDevices(userId: UUID): List<TrustedDeviceInfo>
+
+    public suspend fun removeTrustedDevice(userId: UUID, deviceId: UUID)
+
+    public suspend fun removeAllTrustedDevices(userId: UUID)
+
+    // Admin Management
+    public suspend fun forceRemoveMfaMethod(adminId: UUID, userId: UUID, methodId: UUID)
+
+    public suspend fun disableMfaForUser(adminId: UUID, userId: UUID)
+
+    public suspend fun listUserMethods(adminId: UUID, userId: UUID): List<MfaMethodInfo>
+
+    // Statistics
+    public suspend fun getMfaStatistics(): MfaStatistics
 }
 
 public sealed interface EnrollmentResult {
@@ -105,4 +136,23 @@ public data class MfaMethodInfo(
     val identifier: String?,
     val isPrimary: Boolean,
     val lastUsedAt: Instant?
+)
+
+public data class TrustedDeviceInfo(
+    val id: UUID,
+    val deviceFingerprint: String,
+    val deviceName: String?,
+    val ipAddress: String?,
+    val userAgent: String?,
+    val trustedAt: Instant,
+    val lastUsedAt: Instant?,
+    val expiresAt: Instant?
+)
+
+public data class MfaStatistics(
+    val totalUsers: Long,
+    val usersWithMfa: Long,
+    val adoptionRate: Double,
+    val methodDistribution: Map<MfaMethodType, Long>,
+    val trustedDevices: Long
 )

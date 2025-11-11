@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.service.auth
 
 import com.mustafadakhel.kodex.event.AuthEvent
 import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.model.Realm
@@ -68,7 +69,7 @@ internal class DefaultAuthService(
         )
 
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
-        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
+        val timestamp = CurrentKotlinInstant
 
         val user = userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
@@ -106,7 +107,7 @@ internal class DefaultAuthService(
     }
 
     override suspend fun resetPassword(userId: UUID, newPassword: String) {
-        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
+        val timestamp = CurrentKotlinInstant
 
         val user = userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
@@ -175,7 +176,15 @@ internal class DefaultAuthService(
             throw KodexThrowable.Authorization.InvalidCredentials
         }
 
-        hookExecutor.executeAfterAuthentication(user!!.id)
+        val userRoles = userRepository.findRoles(user!!.id)
+        val authenticatedUser = AuthenticatedUser(
+            userId = user.id,
+            email = user.email,
+            phone = user.phoneNumber,
+            roles = userRoles.map { it.name },
+            status = user.status
+        )
+        hookExecutor.executeAfterAuthentication(authenticatedUser)
 
         userRepository.updateLastLogin(user.id, nowLocal(timeZone))
 

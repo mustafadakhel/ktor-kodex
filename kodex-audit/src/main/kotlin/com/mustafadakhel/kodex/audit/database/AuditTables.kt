@@ -21,7 +21,7 @@ import java.util.*
  * - JSONB metadata: Flexible storage for event-specific data
  * - Supports both PostgreSQL (JSONB) and H2/other databases (JSON)
  */
-public object AuditLogs : UUIDTable("audit_events") {
+internal object AuditLogs : UUIDTable("audit_events") {
 
     // Event identification
     public val eventType: org.jetbrains.exposed.sql.Column<String> = varchar("event_type", 100).index()
@@ -52,7 +52,7 @@ public object AuditLogs : UUIDTable("audit_events") {
  *
  * Provides object-relational mapping for audit events.
  */
-public class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
+internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
     public companion object : UUIDEntityClass<AuditLogDao>(AuditLogs) {
         private val json = Json { ignoreUnknownKeys = true }
     }

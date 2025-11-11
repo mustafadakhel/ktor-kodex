@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.verification
 
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.VerificationEvent
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
 import com.mustafadakhel.kodex.tokens.security.RateLimitReservation
 import com.mustafadakhel.kodex.tokens.security.RateLimitResult
@@ -28,7 +30,7 @@ import java.util.UUID
 internal class DefaultVerificationService(
     private val config: VerificationConfig,
     private val timeZone: TimeZone,
-    private val eventBus: com.mustafadakhel.kodex.event.EventBus?,
+    private val eventBus: EventBus?,
     private val realm: String
 ) : VerificationService {
 
@@ -41,6 +43,7 @@ internal class DefaultVerificationService(
             val existing = VerifiableContacts
                 .selectAll()
                 .where {
+                    (VerifiableContacts.realmId eq realm) and
                     (VerifiableContacts.userId eq userId) and
                     (VerifiableContacts.contactType eq identifier.type) and
                     (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
@@ -52,6 +55,7 @@ internal class DefaultVerificationService(
                 val resetVerification = existingValue != value
 
                 VerifiableContacts.update({
+                    (VerifiableContacts.realmId eq realm) and
                     (VerifiableContacts.userId eq userId) and
                     (VerifiableContacts.contactType eq identifier.type) and
                     (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
@@ -63,6 +67,7 @@ internal class DefaultVerificationService(
                 }
             } else {
                 VerifiableContacts.insert {
+                    it[VerifiableContacts.realmId] = realm
                     it[VerifiableContacts.userId] = userId
                     it[VerifiableContacts.contactType] = identifier.type
                     it[VerifiableContacts.customAttributeKey] = identifier.customAttributeKey
@@ -78,12 +83,14 @@ internal class DefaultVerificationService(
     override suspend fun removeContact(userId: UUID, identifier: ContactIdentifier) {
         kodexTransaction {
             VerifiableContacts.deleteWhere {
+                (VerifiableContacts.realmId eq realm) and
                 (VerifiableContacts.userId eq userId) and
                 (contactType eq identifier.type) and
                 (customAttributeKey eq identifier.customAttributeKey)
             }
 
             VerificationTokens.deleteWhere {
+                (VerificationTokens.realmId eq realm) and
                 (VerificationTokens.userId eq userId) and
                 (contactType eq identifier.type) and
                 (customAttributeKey eq identifier.customAttributeKey)
@@ -96,6 +103,7 @@ internal class DefaultVerificationService(
             VerifiableContacts
                 .selectAll()
                 .where {
+                    (VerifiableContacts.realmId eq realm) and
                     (VerifiableContacts.userId eq userId) and
                     (VerifiableContacts.contactType eq identifier.type) and
                     (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
@@ -116,7 +124,9 @@ internal class DefaultVerificationService(
         return kodexTransaction {
             VerifiableContacts
                 .selectAll()
-                .where { VerifiableContacts.userId eq userId }
+                .where {
+                    (VerifiableContacts.realmId eq realm) and (VerifiableContacts.userId eq userId)
+                }
                 .map {
                     val type = it[VerifiableContacts.contactType]
                     val attrKey = it[VerifiableContacts.customAttributeKey]
@@ -232,7 +242,7 @@ internal class DefaultVerificationService(
             rateLimiter.releaseReservation(contactReservation.reservationId)
             rateLimiter.releaseReservation(ipReservation?.reservationId)
 
-            eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.VerificationFailed(
+            eventBus?.publish(VerificationEvent.VerificationFailed(
                 eventId = UUID.randomUUID(),
                 timestamp = kotlinx.datetime.Clock.System.now(),
                 realmId = realm,
@@ -283,6 +293,7 @@ internal class DefaultVerificationService(
             val tokenRecord = VerificationTokens
                 .selectAll()
                 .where {
+                    (VerificationTokens.realmId eq realm) and
                     (VerificationTokens.userId eq userId) and
                     (VerificationTokens.token eq token) and
                     (VerificationTokens.contactType eq identifier.type) and
@@ -304,7 +315,9 @@ internal class DefaultVerificationService(
                 return@kodexTransaction VerificationResult.Invalid(validation.reason!!)
             }
 
-            VerificationTokens.update({ VerificationTokens.token eq token }) {
+            VerificationTokens.update({
+                (VerificationTokens.realmId eq realm) and (VerificationTokens.token eq token)
+            }) {
                 it[VerificationTokens.usedAt] = now
             }
 
@@ -321,7 +334,7 @@ internal class DefaultVerificationService(
                 val contactValue = getContact(userId, identifier)?.contactValue ?: ""
                 when (identifier.type) {
                     ContactType.EMAIL -> {
-                        eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.EmailVerified(
+                        eventBus?.publish(VerificationEvent.EmailVerified(
                             eventId = UUID.randomUUID(),
                             timestamp = kotlinx.datetime.Clock.System.now(),
                             realmId = realm,
@@ -330,7 +343,7 @@ internal class DefaultVerificationService(
                         ))
                     }
                     ContactType.PHONE -> {
-                        eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.PhoneVerified(
+                        eventBus?.publish(VerificationEvent.PhoneVerified(
                             eventId = UUID.randomUUID(),
                             timestamp = kotlinx.datetime.Clock.System.now(),
                             realmId = realm,
@@ -345,7 +358,7 @@ internal class DefaultVerificationService(
                 }
             }
             is VerificationResult.Invalid -> {
-                eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.VerificationFailed(
+                eventBus?.publish(VerificationEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = kotlinx.datetime.Clock.System.now(),
                     realmId = realm,
@@ -379,6 +392,7 @@ internal class DefaultVerificationService(
     ): VerificationSendResult {
         kodexTransaction {
             VerificationTokens.deleteWhere {
+                (VerificationTokens.realmId eq realm) and
                 (VerificationTokens.userId eq userId) and
                 (contactType eq identifier.type) and
                 (customAttributeKey eq identifier.customAttributeKey)
@@ -393,6 +407,7 @@ internal class DefaultVerificationService(
             val now = Clock.System.now().toLocalDateTime(timeZone)
 
             VerifiableContacts.update({
+                (VerifiableContacts.realmId eq realm) and
                 (VerifiableContacts.userId eq userId) and
                 (VerifiableContacts.contactType eq identifier.type) and
                 (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
@@ -413,6 +428,7 @@ internal class DefaultVerificationService(
             val expiresAt = ExpirationCalculator.calculateExpiration(expiration, timeZone, now)
 
             VerificationTokens.insert {
+                it[VerificationTokens.realmId] = realm
                 it[VerificationTokens.userId] = userId
                 it[contactType] = identifier.type
                 it[customAttributeKey] = identifier.customAttributeKey

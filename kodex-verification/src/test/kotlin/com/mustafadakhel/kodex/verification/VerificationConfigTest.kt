@@ -1,6 +1,8 @@
 package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.EventSubscriber
+import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.validation.ValidationResult
@@ -19,9 +21,9 @@ import kotlin.time.Duration.Companion.seconds
 class VerificationConfigTest : FunSpec({
 
     val mockEventBus = object : EventBus {
-        override suspend fun publish(event: com.mustafadakhel.kodex.event.KodexEvent) {}
-        override fun <T : com.mustafadakhel.kodex.event.KodexEvent> subscribe(subscriber: com.mustafadakhel.kodex.event.EventSubscriber<T>) {}
-        override fun <T : com.mustafadakhel.kodex.event.KodexEvent> unsubscribe(subscriber: com.mustafadakhel.kodex.event.EventSubscriber<T>) {}
+        override suspend fun publish(event: KodexEvent) {}
+        override fun <T : KodexEvent> subscribe(subscriber: EventSubscriber<T>) {}
+        override fun <T : KodexEvent> unsubscribe(subscriber: EventSubscriber<T>) {}
         override fun shutdown() {}
     }
 

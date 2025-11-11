@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.mfa.encryption.AesGcmSecretEncryption
+import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.mfa.totp.TotpAlgorithm
 import com.mustafadakhel.kodex.service.HashingService
 import io.kotest.core.spec.style.FunSpec
@@ -97,7 +98,7 @@ class MfaConfigTest : FunSpec({
 
         config.emailMfa {
             enabled = true
-            sender = object : com.mustafadakhel.kodex.mfa.sender.MfaCodeSender {
+            sender = object : MfaCodeSender {
                 override suspend fun send(contactValue: String, code: String) {}
             }
         }
@@ -135,5 +136,36 @@ class MfaConfigTest : FunSpec({
 
         config.backupCodesCount shouldBe 15
         config.backupCodeLength shouldBe 10
+    }
+
+    test("should have empty requiredRolesForMfa by default") {
+        val config = MfaConfig()
+
+        config.requiredRolesForMfa shouldBe emptySet()
+    }
+
+    test("should support role-based MFA enforcement configuration") {
+        val config = MfaConfig()
+
+        config.requireMfaForRoles("admin", "finance", "executive")
+
+        config.requiredRolesForMfa shouldBe setOf("admin", "finance", "executive")
+    }
+
+    test("should allow setting requiredRolesForMfa directly") {
+        val config = MfaConfig()
+
+        config.requiredRolesForMfa = setOf("admin", "moderator")
+
+        config.requiredRolesForMfa shouldBe setOf("admin", "moderator")
+    }
+
+    test("should overwrite requiredRolesForMfa when called multiple times") {
+        val config = MfaConfig()
+
+        config.requireMfaForRoles("admin")
+        config.requireMfaForRoles("finance", "executive")
+
+        config.requiredRolesForMfa shouldBe setOf("finance", "executive")
     }
 })

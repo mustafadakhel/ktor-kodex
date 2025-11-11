@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.passwordreset
 
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.PasswordResetEvent
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
 import com.mustafadakhel.kodex.tokens.security.RateLimitReservation
 import com.mustafadakhel.kodex.tokens.security.RateLimitResult
@@ -27,7 +29,7 @@ internal class DefaultPasswordResetService(
     private val config: PasswordResetConfigData,
     private val passwordResetSender: PasswordResetSender,
     private val timeZone: TimeZone,
-    private val eventBus: com.mustafadakhel.kodex.event.EventBus?,
+    private val eventBus: EventBus?,
     private val realm: String
 ) : PasswordResetService {
 
@@ -82,6 +84,7 @@ internal class DefaultPasswordResetService(
             val contact = PasswordResetContacts
                 .selectAll()
                 .where {
+                    (PasswordResetContacts.realmId eq realm) and
                     (PasswordResetContacts.contactType eq contactType.name) and
                     (PasswordResetContacts.contactValue eq identifier)
                 }
@@ -123,7 +126,7 @@ internal class DefaultPasswordResetService(
             rateLimiter.releaseReservation(ipReservation?.reservationId)
             rateLimiter.releaseReservation(userReservationId)
 
-            eventBus?.publish(com.mustafadakhel.kodex.event.PasswordResetEvent.PasswordResetInitiationFailed(
+            eventBus?.publish(PasswordResetEvent.PasswordResetInitiationFailed(
                 eventId = UUID.randomUUID(),
                 timestamp = clockNow,
                 realmId = realm,
@@ -137,6 +140,7 @@ internal class DefaultPasswordResetService(
 
         kodexTransaction {
             PasswordResetTokens.insert {
+                it[PasswordResetTokens.realmId] = realm
                 it[PasswordResetTokens.userId] = userId
                 it[PasswordResetTokens.token] = token
                 it[PasswordResetTokens.contactValue] = identifier
@@ -165,7 +169,9 @@ internal class DefaultPasswordResetService(
         val result = kodexTransaction {
             val resetToken = PasswordResetTokens
                 .selectAll()
-                .where { PasswordResetTokens.token eq token }
+                .where {
+                    (PasswordResetTokens.realmId eq realm) and (PasswordResetTokens.token eq token)
+                }
                 .singleOrNull() ?: return@kodexTransaction TokenVerificationResult.Invalid("Token not found")
 
             val validation = TokenValidator.validate(
@@ -183,7 +189,7 @@ internal class DefaultPasswordResetService(
 
         when (result) {
             is TokenVerificationResult.Valid -> {
-                eventBus?.publish(com.mustafadakhel.kodex.event.PasswordResetEvent.PasswordResetTokenVerified(
+                eventBus?.publish(PasswordResetEvent.PasswordResetTokenVerified(
                     eventId = UUID.randomUUID(),
                     timestamp = Clock.System.now(),
                     realmId = realm,
@@ -191,7 +197,7 @@ internal class DefaultPasswordResetService(
                 ))
             }
             is TokenVerificationResult.Invalid -> {
-                eventBus?.publish(com.mustafadakhel.kodex.event.PasswordResetEvent.PasswordResetTokenVerificationFailed(
+                eventBus?.publish(PasswordResetEvent.PasswordResetTokenVerificationFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = Clock.System.now(),
                     realmId = realm,
@@ -209,7 +215,9 @@ internal class DefaultPasswordResetService(
         val result = kodexTransaction {
             val resetToken = PasswordResetTokens
                 .selectAll()
-                .where { PasswordResetTokens.token eq token }
+                .where {
+                    (PasswordResetTokens.realmId eq realm) and (PasswordResetTokens.token eq token)
+                }
                 .singleOrNull() ?: return@kodexTransaction TokenConsumptionResult.Invalid("Token not found")
 
             val validation = TokenValidator.validate(
@@ -224,11 +232,14 @@ internal class DefaultPasswordResetService(
 
             val userId = resetToken[PasswordResetTokens.userId]
 
-            PasswordResetTokens.update({ PasswordResetTokens.token eq token }) {
+            PasswordResetTokens.update({
+                (PasswordResetTokens.realmId eq realm) and (PasswordResetTokens.token eq token)
+            }) {
                 it[PasswordResetTokens.usedAt] = now
             }
 
             PasswordResetTokens.update({
+                (PasswordResetTokens.realmId eq realm) and
                 (PasswordResetTokens.userId eq userId) and
                 (PasswordResetTokens.token neq token) and
                 (PasswordResetTokens.usedAt.isNull())
@@ -243,7 +254,7 @@ internal class DefaultPasswordResetService(
             is TokenConsumptionResult.Success -> {
                 rateLimiter.clear("reset:user:${result.userId}")
 
-                eventBus?.publish(com.mustafadakhel.kodex.event.PasswordResetEvent.PasswordResetCompleted(
+                eventBus?.publish(PasswordResetEvent.PasswordResetCompleted(
                     eventId = UUID.randomUUID(),
                     timestamp = Clock.System.now(),
                     realmId = realm,
@@ -251,7 +262,7 @@ internal class DefaultPasswordResetService(
                 ))
             }
             is TokenConsumptionResult.Invalid -> {
-                eventBus?.publish(com.mustafadakhel.kodex.event.PasswordResetEvent.PasswordResetCompletionFailed(
+                eventBus?.publish(PasswordResetEvent.PasswordResetCompletionFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = Clock.System.now(),
                     realmId = realm,
@@ -268,6 +279,7 @@ internal class DefaultPasswordResetService(
 
         kodexTransaction {
             PasswordResetTokens.update({
+                (PasswordResetTokens.realmId eq realm) and
                 (PasswordResetTokens.userId eq userId) and
                 (PasswordResetTokens.usedAt.isNull())
             }) {

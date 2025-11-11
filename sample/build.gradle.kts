@@ -22,4 +22,5 @@ dependencies {
     implementation(project(":kodex-metrics"))
     implementation(project(":kodex-verification"))
     implementation(project(":kodex-password-reset"))
+    implementation(project(":kodex-mfa"))
 }

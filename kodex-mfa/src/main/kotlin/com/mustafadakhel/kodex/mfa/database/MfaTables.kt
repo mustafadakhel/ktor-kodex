@@ -11,8 +11,9 @@ public enum class MfaMethodType {
     TOTP
 }
 
-public object MfaMethods : UUIDTable("mfa_methods") {
-    public val userId: Column<UUID> = uuid("user_id").index()
+internal object MfaMethods : UUIDTable("mfa_methods") {
+    public val realmId: Column<String> = varchar("realm_id", 50)
+    public val userId: Column<UUID> = uuid("user_id")
     public val methodType: Column<MfaMethodType> = enumeration("method_type", MfaMethodType::class)
     public val identifier: Column<String?> = varchar("identifier", 255).nullable()
     public val encryptedSecret: Column<String?> = text("encrypted_secret").nullable()
@@ -23,30 +24,43 @@ public object MfaMethods : UUIDTable("mfa_methods") {
     public val lastUsedAt: Column<kotlinx.datetime.LocalDateTime?> = datetime("last_used_at").nullable()
 
     init {
-        uniqueIndex(userId, methodType, identifier)
-        index(false, userId, isActive)
-        index(false, userId, isPrimary)
+        uniqueIndex(realmId, userId, methodType, identifier)
+        index(false, realmId, userId, isActive)
+        index(false, realmId, userId, isPrimary)
+        index(false, realmId)
     }
 }
 
-public object MfaChallenges : UUIDTable("mfa_challenges") {
-    public val userId: Column<UUID> = uuid("user_id").index()
-    public val methodId: Column<UUID> = uuid("method_id").index()
+internal object MfaChallenges : UUIDTable("mfa_challenges") {
+    public val realmId: Column<String> = varchar("realm_id", 50)
+    public val userId: Column<UUID> = uuid("user_id")
+    public val methodId: Column<UUID> = uuid("method_id")
     public val codeHash: Column<String> = varchar("code_hash", 255)
-    public val expiresAt: Column<kotlinx.datetime.LocalDateTime> = datetime("expires_at").index()
+    public val expiresAt: Column<kotlinx.datetime.LocalDateTime> = datetime("expires_at")
     public val createdAt: Column<kotlinx.datetime.LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
     public val attempts: Column<Int> = integer("attempts").default(0)
     public val maxAttempts: Column<Int> = integer("max_attempts").default(5)
-    public val verifiedAt: Column<kotlinx.datetime.LocalDateTime?> = datetime("verified_at").nullable().index()
+    public val verifiedAt: Column<kotlinx.datetime.LocalDateTime?> = datetime("verified_at").nullable()
+
+    init {
+        index(false, realmId)
+        index(false, userId)
+        index(false, methodId)
+        index(false, realmId, expiresAt)
+        index(false, verifiedAt)
+    }
 }
 
-public object MfaBackupCodes : UUIDTable("mfa_backup_codes") {
-    public val userId: Column<UUID> = uuid("user_id").index()
+internal object MfaBackupCodes : UUIDTable("mfa_backup_codes") {
+    public val realmId: Column<String> = varchar("realm_id", 50)
+    public val userId: Column<UUID> = uuid("user_id")
     public val codeHash: Column<String> = varchar("code_hash", 255)
     public val usedAt: Column<kotlinx.datetime.LocalDateTime?> = datetime("used_at").nullable()
     public val createdAt: Column<kotlinx.datetime.LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
 
     init {
-        index(false, userId, usedAt)
+        index(false, realmId)
+        index(false, userId)
+        index(false, realmId, userId, usedAt)
     }
 }

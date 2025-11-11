@@ -74,12 +74,13 @@ public class MfaSessionStore(
         }
     }
 
-    private fun cleanupExpiredSessions() {
+    public fun cleanupExpiredSessions(): Int {
         val expiredSessionIds = sessions.entries
             .filter { (_, session) -> session.isExpired() }
             .map { it.key }
 
         expiredSessionIds.forEach { removeSession(it) }
+        return expiredSessionIds.size
     }
 
     private fun PendingMfaSession.isExpired(): Boolean =

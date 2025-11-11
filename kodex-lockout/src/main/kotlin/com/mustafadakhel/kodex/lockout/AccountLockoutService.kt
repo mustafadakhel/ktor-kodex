@@ -59,7 +59,8 @@ internal interface AccountLockoutService {
  */
 internal class DefaultAccountLockoutService(
     private val policy: AccountLockoutPolicy,
-    private val timeZone: TimeZone
+    private val timeZone: TimeZone,
+    private val realmId: String
 ) : AccountLockoutService {
 
     override fun shouldThrottleIdentifier(identifier: String): ThrottleResult {
@@ -71,6 +72,7 @@ internal class DefaultAccountLockoutService(
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
             val recentAttempts = FailedLoginAttempts.selectAll().where {
+                (FailedLoginAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
                 (FailedLoginAttempts.identifier eq identifier) and
                 (FailedLoginAttempts.attemptedAt greater windowStart)
             }.count()
@@ -95,6 +97,7 @@ internal class DefaultAccountLockoutService(
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
             val recentAttempts = FailedLoginAttempts.selectAll().where {
+                (FailedLoginAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
                 (FailedLoginAttempts.ipAddress eq ipAddress) and
                 (FailedLoginAttempts.attemptedAt greater windowStart)
             }.count()
@@ -127,12 +130,14 @@ internal class DefaultAccountLockoutService(
 
             // Clean old attempts for this identifier
             FailedLoginAttempts.deleteWhere {
+                (FailedLoginAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
                 (FailedLoginAttempts.identifier eq identifier) and
                 (FailedLoginAttempts.attemptedAt less windowStart)
             }
 
             // Record the new failed attempt with all metadata
             FailedLoginAttempts.insert {
+                it[FailedLoginAttempts.realmId] = this@DefaultAccountLockoutService.realmId
                 it[FailedLoginAttempts.identifier] = identifier
                 it[FailedLoginAttempts.userId] = userId
                 it[FailedLoginAttempts.ipAddress] = ipAddress
@@ -152,6 +157,7 @@ internal class DefaultAccountLockoutService(
 
             // Count failed attempts for this REAL account only
             val accountAttempts = FailedLoginAttempts.selectAll().where {
+                (FailedLoginAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
                 (FailedLoginAttempts.userId eq userId) and
                 (FailedLoginAttempts.attemptedAt greater windowStart)
             }.count()
@@ -170,13 +176,17 @@ internal class DefaultAccountLockoutService(
 
     override fun clearFailedAttemptsForIdentifier(identifier: String) {
         kodexTransaction {
-            FailedLoginAttempts.deleteWhere { FailedLoginAttempts.identifier eq identifier }
+            FailedLoginAttempts.deleteWhere {
+                (FailedLoginAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and (FailedLoginAttempts.identifier eq identifier)
+            }
         }
     }
 
     override fun clearFailedAttemptsForUser(userId: UUID) {
         kodexTransaction {
-            FailedLoginAttempts.deleteWhere { FailedLoginAttempts.userId eq userId }
+            FailedLoginAttempts.deleteWhere {
+                (FailedLoginAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and (FailedLoginAttempts.userId eq userId)
+            }
         }
     }
 
@@ -186,8 +196,11 @@ internal class DefaultAccountLockoutService(
             val nowLocal = clockNow.toLocalDateTime(TimeZone.UTC)
 
             // Insert or update lock record
-            AccountLocks.deleteWhere { AccountLocks.userId eq userId }
+            AccountLocks.deleteWhere {
+                (AccountLocks.realmId eq this@DefaultAccountLockoutService.realmId) and (AccountLocks.userId eq userId)
+            }
             AccountLocks.insert {
+                it[AccountLocks.realmId] = this@DefaultAccountLockoutService.realmId
                 it[AccountLocks.userId] = userId
                 it[AccountLocks.lockedUntil] = lockedUntil
                 it[AccountLocks.reason] = reason
@@ -198,13 +211,17 @@ internal class DefaultAccountLockoutService(
 
     override fun unlockAccount(userId: UUID) {
         kodexTransaction {
-            AccountLocks.deleteWhere { AccountLocks.userId eq userId }
+            AccountLocks.deleteWhere {
+                (AccountLocks.realmId eq this@DefaultAccountLockoutService.realmId) and (AccountLocks.userId eq userId)
+            }
         }
     }
 
     override fun isAccountLocked(userId: UUID, currentTime: LocalDateTime): Boolean {
         return kodexTransaction {
-            AccountLocks.selectAll().where { AccountLocks.userId eq userId }
+            AccountLocks.selectAll().where {
+                (AccountLocks.realmId eq this@DefaultAccountLockoutService.realmId) and (AccountLocks.userId eq userId)
+            }
                 .singleOrNull()
                 ?.let { row ->
                     val lockedUntil = row[AccountLocks.lockedUntil]
@@ -217,6 +234,7 @@ internal class DefaultAccountLockoutService(
 
 internal fun accountLockoutService(
     policy: AccountLockoutPolicy,
-    timeZone: TimeZone
+    timeZone: TimeZone,
+    realmId: String
 ): AccountLockoutService =
-    DefaultAccountLockoutService(policy, timeZone)
+    DefaultAccountLockoutService(policy, timeZone, realmId)

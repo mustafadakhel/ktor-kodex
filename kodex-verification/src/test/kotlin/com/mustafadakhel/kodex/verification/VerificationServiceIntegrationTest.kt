@@ -5,6 +5,8 @@ import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.verification.database.VerifiableContacts
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -23,7 +25,6 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 
@@ -39,7 +40,6 @@ import kotlin.time.Duration.Companion.hours
  */
 class VerificationServiceIntegrationTest : FunSpec({
 
-    // Test database setup
     val database = Database.connect("jdbc:h2:mem:test_verification_integration;DB_CLOSE_DELAY=-1", driver = "org.h2.Driver")
     val timeZone = TimeZone.UTC
 
@@ -51,7 +51,7 @@ class VerificationServiceIntegrationTest : FunSpec({
     }
 
     val testContext = object : ExtensionContext {
-        override val realm = Realm(owner = "test")
+        override val realm = Realm(owner = "test-realm")
         override val timeZone = timeZone
         override val eventBus = mockEventBus
     }
@@ -77,23 +77,21 @@ class VerificationServiceIntegrationTest : FunSpec({
     val mockSender = MockVerificationSender()
 
     beforeTest {
-        // Create tables
-        transaction(database) {
+        TestDatabaseSetup.setupTestEngine(database)
+        kodexTransaction {
             SchemaUtils.create(VerifiableContacts, VerificationTokens)
         }
         mockSender.reset()
     }
 
     afterTest {
-        // Drop tables
-        transaction(database) {
+        kodexTransaction {
             SchemaUtils.drop(VerifiableContacts, VerificationTokens)
         }
     }
 
     context("End-to-End Verification Flow") {
         test("complete verification flow: send → verify → verified") {
-            // Setup: Create verification service with email policy
             val config = VerificationConfig().apply {
                 strategy = VerificationConfig.VerificationStrategy.MANUAL
                 defaultTokenExpiration = 1.hours
@@ -111,10 +109,7 @@ class VerificationServiceIntegrationTest : FunSpec({
             val email = "user@example.com"
             val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
 
-            // Step 1: Set email contact
             verificationService.setEmail(userId, email)
-
-            // Verify contact exists but is not verified
             val contact = verificationService.getContact(userId, emailIdentifier)
             contact.shouldNotBeNull()
             contact.contactValue shouldBe email
@@ -123,18 +118,15 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeFalse()
 
-            // Step 2: Send verification token
             val sendResult = verificationService.sendVerification(userId, emailIdentifier)
             sendResult.shouldBeInstanceOf<VerificationSendResult.Success>()
 
-            // Verify token was sent
             mockSender.sentTokens shouldHaveSize 1
             val (sentDestination, sentToken) = mockSender.sentTokens.first()
             sentDestination shouldBe email
             sentToken.shouldNotBeNull()
 
-            // Verify token exists in database
-            val tokenInDb = transaction(database) {
+            val tokenInDb = kodexTransaction {
                 VerificationTokens
                     .selectAll()
                     .where { VerificationTokens.userId eq userId }
@@ -142,11 +134,9 @@ class VerificationServiceIntegrationTest : FunSpec({
             }
             tokenInDb.shouldNotBeNull()
 
-            // Step 3: Verify the token
             val verifyResult = verificationService.verifyToken(userId, emailIdentifier, sentToken)
             verifyResult.shouldBeInstanceOf<VerificationResult.Success>()
 
-            // Step 4: Verify contact is now marked as verified
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeTrue()
 
             val verifiedContact = verificationService.getContact(userId, emailIdentifier)
@@ -154,8 +144,7 @@ class VerificationServiceIntegrationTest : FunSpec({
             verifiedContact.isVerified.shouldBeTrue()
             verifiedContact.verifiedAt.shouldNotBeNull()
 
-            // Step 5: Verify token is marked as used
-            val usedToken = transaction(database) {
+            val usedToken = kodexTransaction {
                 VerificationTokens
                     .selectAll()
                     .where { VerificationTokens.userId eq userId }
@@ -179,10 +168,7 @@ class VerificationServiceIntegrationTest : FunSpec({
             val userId = UUID.randomUUID()
             verificationService.setEmail(userId, "user@example.com")
 
-            // Send verification
             verificationService.sendVerification(userId, ContactIdentifier(ContactType.EMAIL))
-
-            // Try to verify with wrong token
             val result = verificationService.verifyToken(
                 userId,
                 ContactIdentifier(ContactType.EMAIL),
@@ -209,13 +195,13 @@ class VerificationServiceIntegrationTest : FunSpec({
             val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
             verificationService.setEmail(userId, "user@example.com")
 
-            // Manually insert an expired token
             val expiredToken = "expired-token-12345"
             val now = kotlinx.datetime.Clock.System.now()
             val expiredTime = now.minus(2.hours).toLocalDateTime(timeZone)
 
-            transaction(database) {
+            kodexTransaction {
                 VerificationTokens.insert {
+                    it[VerificationTokens.realmId] = "test-realm"
                     it[VerificationTokens.userId] = userId
                     it[contactType] = ContactType.EMAIL
                     it[customAttributeKey] = null
@@ -226,7 +212,6 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            // Try to verify with expired token
             val result = verificationService.verifyToken(userId, emailIdentifier, expiredToken)
 
             result.shouldBeInstanceOf<VerificationResult.Invalid>()
@@ -273,10 +258,7 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeTrue()
 
-            // Change email to new value
             verificationService.setEmail(userId, "new@example.com")
-
-            // Verification status should be reset
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeFalse()
             val contact = verificationService.getContact(userId, emailIdentifier)
             contact.shouldNotBeNull()
@@ -297,22 +279,16 @@ class VerificationServiceIntegrationTest : FunSpec({
             val userId = UUID.randomUUID()
             val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
 
-            // Set email and send verification
             verificationService.setEmail(userId, "user@example.com")
             verificationService.sendVerification(userId, emailIdentifier)
-
-            // Verify contact and token exist
             verificationService.getContact(userId, emailIdentifier).shouldNotBeNull()
-            transaction(database) {
+            kodexTransaction {
                 VerificationTokens.selectAll().where { VerificationTokens.userId eq userId }.count()
             } shouldBe 1
 
-            // Remove contact
             verificationService.removeContact(userId, emailIdentifier)
-
-            // Verify contact and tokens are deleted
             verificationService.getContact(userId, emailIdentifier).shouldBeNull()
-            transaction(database) {
+            kodexTransaction {
                 VerificationTokens.selectAll().where { VerificationTokens.userId eq userId }.count()
             } shouldBe 0
         }
@@ -327,15 +303,12 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
 
-            // Initially no contacts
             verificationService.getUserContacts(userId).shouldBeEmpty()
 
-            // Add multiple contacts
             verificationService.setEmail(userId, "user@example.com")
             verificationService.setPhone(userId, "+1234567890")
             verificationService.setCustomAttribute(userId, "discord", "user#1234")
 
-            // Should return all 3 contacts
             val contacts = verificationService.getUserContacts(userId)
             contacts shouldHaveSize 3
 
@@ -359,17 +332,14 @@ class VerificationServiceIntegrationTest : FunSpec({
             val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
             verificationService.setEmail(userId, "user@example.com")
 
-            // First 3 attempts should succeed
             for (i in 1..3) {
                 val result = verificationService.sendVerification(userId, emailIdentifier)
                 result.shouldBeInstanceOf<VerificationSendResult.Success>()
             }
 
-            // 4th attempt should be rate limited
             val result = verificationService.sendVerification(userId, emailIdentifier)
             result.shouldBeInstanceOf<VerificationSendResult.RateLimitExceeded>()
 
-            // Only 3 tokens should have been sent
             mockSender.sentTokens shouldHaveSize 3
         }
 
@@ -387,30 +357,24 @@ class VerificationServiceIntegrationTest : FunSpec({
             val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
             verificationService.setEmail(userId, "user@example.com")
 
-            // Make sender fail
             mockSender.shouldFail = true
 
-            // 3 failed attempts (should not count against rate limit)
             for (i in 1..3) {
                 val result = verificationService.sendVerification(userId, emailIdentifier)
                 // Should return success even though sender failed (based on implementation)
                 // The rate limit reservation should be released
             }
 
-            // Disable failure
             mockSender.shouldFail = false
 
-            // Next 3 attempts should still succeed (failures didn't count)
             for (i in 1..3) {
                 val result = verificationService.sendVerification(userId, emailIdentifier)
                 result.shouldBeInstanceOf<VerificationSendResult.Success>()
             }
 
-            // 4th successful attempt should be rate limited
             val result = verificationService.sendVerification(userId, emailIdentifier)
             result.shouldBeInstanceOf<VerificationSendResult.RateLimitExceeded>()
 
-            // Only 3 tokens should have been successfully sent
             mockSender.sentTokens shouldHaveSize 3
         }
     }
@@ -434,19 +398,14 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
 
-            // Set both contacts
             verificationService.setEmail(userId, "user@example.com")
             verificationService.setPhone(userId, "+1234567890")
 
-            // Initially can't login (email not verified)
             verificationService.canLogin(userId).shouldBeFalse()
-
-            // Verify email (required)
             verificationService.sendVerification(userId, ContactIdentifier(ContactType.EMAIL))
             val emailToken = mockSender.sentTokens.first().second
             verificationService.verifyToken(userId, ContactIdentifier(ContactType.EMAIL), emailToken)
 
-            // Now can login (required contact verified, phone is optional)
             verificationService.canLogin(userId).shouldBeTrue()
         }
 
@@ -468,20 +427,15 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val userId = UUID.randomUUID()
 
-            // Set both contacts
             verificationService.setEmail(userId, "user@example.com")
             verificationService.setPhone(userId, "+1234567890")
 
-            // Both should be missing
             val missing = verificationService.getMissingVerifications(userId)
             missing shouldHaveSize 2
 
-            // Verify email
             verificationService.sendVerification(userId, ContactIdentifier(ContactType.EMAIL))
             val emailToken = mockSender.sentTokens.first().second
             verificationService.verifyToken(userId, ContactIdentifier(ContactType.EMAIL), emailToken)
-
-            // Only phone should be missing now
             val stillMissing = verificationService.getMissingVerifications(userId)
             stillMissing shouldHaveSize 1
             stillMissing.first().type shouldBe ContactType.PHONE
@@ -503,7 +457,6 @@ class VerificationServiceIntegrationTest : FunSpec({
             status.userId shouldBe userId
             status.contacts.size shouldBe 1
 
-            // Verify service methods work
             verificationService.canLogin(userId).shouldBeTrue() // MANUAL strategy
             verificationService.getMissingVerifications(userId).shouldBeEmpty()
         }
@@ -524,12 +477,9 @@ class VerificationServiceIntegrationTest : FunSpec({
             verificationService.setEmail(userId, "user@example.com")
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeFalse()
 
-            // Manually mark as verified (e.g., by admin)
             verificationService.setVerified(userId, emailIdentifier, true)
 
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeTrue()
-
-            // Can also manually unverify
             verificationService.setVerified(userId, emailIdentifier, false)
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeFalse()
         }

@@ -1,16 +1,21 @@
 package com.mustafadakhel.kodex.mfa
 
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.FailureReason
 import com.mustafadakhel.kodex.mfa.database.MfaBackupCodes
 import com.mustafadakhel.kodex.mfa.database.MfaChallenges
 import com.mustafadakhel.kodex.mfa.database.MfaMethodType
 import com.mustafadakhel.kodex.mfa.database.MfaMethods
+import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.encryption.EncryptedSecret
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
+import com.mustafadakhel.kodex.mfa.event.MfaEvent
 import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.mfa.totp.QrCodeGenerator
 import com.mustafadakhel.kodex.mfa.totp.TotpGenerator
 import com.mustafadakhel.kodex.mfa.totp.TotpValidator
 import com.mustafadakhel.kodex.service.HashingService
+import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
 import com.mustafadakhel.kodex.tokens.security.RateLimitResult
 import com.mustafadakhel.kodex.tokens.security.RateLimiter
@@ -27,10 +32,12 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
@@ -38,7 +45,9 @@ internal class DefaultMfaService(
     private val config: MfaConfig,
     private val timeZone: TimeZone,
     private val hashingService: HashingService,
-    private val secretEncryption: SecretEncryption
+    private val secretEncryption: SecretEncryption,
+    private val eventBus: EventBus,
+    private val realmId: String
 ) : MfaService {
 
     private val rateLimiter = RateLimiter()
@@ -50,11 +59,35 @@ internal class DefaultMfaService(
     private val totpValidator = TotpValidator(totpGenerator, config.totpTimeStepWindow)
     private val qrCodeGenerator = QrCodeGenerator()
 
+    /**
+     * Verifies that the given user has admin role.
+     * @throws KodexThrowable.Authorization.InsufficientPermissions if user doesn't have admin role
+     */
+    private suspend fun requireAdminRole(userId: UUID) {
+        val hasAdminRole = config.userHasRole?.invoke(userId, "admin") ?: false
+        if (!hasAdminRole) {
+            throw KodexThrowable.Authorization.InsufficientPermissions(
+                requiredRole = "admin",
+                userId = userId
+            )
+        }
+    }
+
     override suspend fun enrollEmail(
         userId: UUID,
         email: String,
         ipAddress: String?
     ): EnrollmentResult {
+        eventBus.publish(MfaEvent.EnrollmentStarted(
+            eventId = UUID.randomUUID(),
+            timestamp = Clock.System.now(),
+            realmId = realmId,
+            userId = userId,
+            methodType = MfaMethodType.EMAIL,
+            contactValue = email,
+            sourceIp = ipAddress
+        ))
+
         val userKey = "mfa:enroll:user:$userId"
         val emailKey = "mfa:enroll:email:$email"
         val ipKey = ipAddress?.let { "mfa:enroll:ip:$it" }
@@ -67,11 +100,27 @@ internal class DefaultMfaService(
         )
 
         if (!userReservation.isAllowed()) {
-            return when (val result = userReservation.result) {
-                is RateLimitResult.Exceeded -> EnrollmentResult.RateLimitExceeded(result.reason, null)
-                is RateLimitResult.Cooldown -> EnrollmentResult.Cooldown(result.reason, result.retryAfter!!)
+            val result = when (val rateLimitResult = userReservation.result) {
+                is RateLimitResult.Exceeded -> EnrollmentResult.RateLimitExceeded(rateLimitResult.reason, null)
+                is RateLimitResult.Cooldown -> EnrollmentResult.Cooldown(rateLimitResult.reason, rateLimitResult.retryAfter!!)
                 else -> EnrollmentResult.Failed("Rate limit check failed")
             }
+            eventBus.publish(MfaEvent.RateLimitExceeded(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                operation = "enrollment",
+                reason = when (val r = userReservation.result) {
+                    is RateLimitResult.Exceeded -> r.reason
+                    is RateLimitResult.Cooldown -> r.reason
+                    else -> "Rate limit check failed"
+                },
+                retryAfter = (userReservation.result as? RateLimitResult.Cooldown)?.retryAfter,
+                sourceIp = ipAddress
+            ))
+            return result
         }
 
         val emailReservation = rateLimiter.checkAndReserve(
@@ -82,10 +131,25 @@ internal class DefaultMfaService(
 
         if (!emailReservation.isAllowed()) {
             rateLimiter.releaseReservation(userReservation.reservationId)
-            return when (val result = emailReservation.result) {
-                is RateLimitResult.Exceeded -> EnrollmentResult.RateLimitExceeded(result.reason, null)
+            val result = when (val rateLimitResult = emailReservation.result) {
+                is RateLimitResult.Exceeded -> EnrollmentResult.RateLimitExceeded(rateLimitResult.reason, null)
                 else -> EnrollmentResult.Failed("Rate limit check failed")
             }
+            eventBus.publish(MfaEvent.RateLimitExceeded(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                operation = "enrollment",
+                reason = when (val r = emailReservation.result) {
+                    is RateLimitResult.Exceeded -> r.reason
+                    else -> "Rate limit check failed"
+                },
+                retryAfter = null,
+                sourceIp = ipAddress
+            ))
+            return result
         }
 
         val ipReservation = ipKey?.let {
@@ -99,10 +163,25 @@ internal class DefaultMfaService(
         if (ipReservation != null && !ipReservation.isAllowed()) {
             rateLimiter.releaseReservation(userReservation.reservationId)
             rateLimiter.releaseReservation(emailReservation.reservationId)
-            return when (val result = ipReservation.result) {
-                is RateLimitResult.Exceeded -> EnrollmentResult.RateLimitExceeded(result.reason, null)
+            val result = when (val rateLimitResult = ipReservation.result) {
+                is RateLimitResult.Exceeded -> EnrollmentResult.RateLimitExceeded(rateLimitResult.reason, null)
                 else -> EnrollmentResult.Failed("Rate limit check failed")
             }
+            eventBus.publish(MfaEvent.RateLimitExceeded(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                operation = "enrollment",
+                reason = when (val r = ipReservation.result) {
+                    is RateLimitResult.Exceeded -> r.reason
+                    else -> "Rate limit check failed"
+                },
+                retryAfter = null,
+                sourceIp = ipAddress
+            ))
+            return result
         }
 
         val code = TokenGenerator.generate(NumericFormat(config.codeLength))
@@ -113,6 +192,16 @@ internal class DefaultMfaService(
             rateLimiter.releaseReservation(userReservation.reservationId)
             rateLimiter.releaseReservation(emailReservation.reservationId)
             ipReservation?.let { rateLimiter.releaseReservation(it.reservationId) }
+            eventBus.publish(MfaEvent.EnrollmentFailed(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                reason = "Failed to send code: ${e.message}",
+                failureReason = FailureReason.UNKNOWN,
+                sourceIp = ipAddress
+            ))
             return EnrollmentResult.Failed("Failed to send code: ${e.message}")
         }
 
@@ -121,11 +210,23 @@ internal class DefaultMfaService(
             val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, Clock.System.now())
             val codeHash = hashingService.hash(code)
 
-            val tempMethodId = UUID.randomUUID()
+            // Create the MFA method record (inactive) to store the email
+            val methodId = MfaMethods.insertAndGetId {
+                it[MfaMethods.realmId] = this@DefaultMfaService.realmId
+                it[MfaMethods.userId] = userId
+                it[MfaMethods.methodType] = MfaMethodType.EMAIL
+                it[MfaMethods.identifier] = email
+                it[MfaMethods.encryptedSecret] = null
+                it[MfaMethods.encryptionNonce] = null
+                it[MfaMethods.isActive] = false  // Inactive until verification
+                it[MfaMethods.isPrimary] = false
+                it[MfaMethods.enrolledAt] = now
+            }.value
 
             MfaChallenges.insert {
+                it[MfaChallenges.realmId] = this@DefaultMfaService.realmId
                 it[MfaChallenges.userId] = userId
-                it[MfaChallenges.methodId] = tempMethodId
+                it[MfaChallenges.methodId] = methodId
                 it[MfaChallenges.codeHash] = codeHash
                 it[MfaChallenges.expiresAt] = expiresAt
                 it[MfaChallenges.createdAt] = now
@@ -146,7 +247,7 @@ internal class DefaultMfaService(
             val challenge = kodexTransaction {
                 MfaChallenges
                     .selectAll()
-                    .where { MfaChallenges.id eq challengeId }
+                    .where { (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId) }
                     .singleOrNull()
             } ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid challenge")
 
@@ -174,37 +275,70 @@ internal class DefaultMfaService(
 
             if (!isValid) {
                 kodexTransaction {
-                    MfaChallenges.update({ MfaChallenges.id eq challengeId }) {
+                    MfaChallenges.update({
+                        (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+                    }) {
                         it[MfaChallenges.attempts] = attempts + 1
                     }
                 }
+                eventBus.publish(MfaEvent.EnrollmentFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodType = MfaMethodType.EMAIL,
+                    reason = "Invalid code",
+                    failureReason = FailureReason.INVALID_CREDENTIALS
+                ))
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid code")
             }
 
-            kodexTransaction {
-                MfaChallenges.update({ MfaChallenges.id eq challengeId }) {
+            val methodId = kodexTransaction {
+                MfaChallenges.update({
+                    (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+                }) {
                     it[MfaChallenges.verifiedAt] = now
                 }
 
-                MfaMethods.insert {
-                    it[MfaMethods.userId] = userId
-                    it[MfaMethods.methodType] = MfaMethodType.EMAIL
-                    it[MfaMethods.identifier] = "email"
-                    it[MfaMethods.encryptedSecret] = null
-                    it[MfaMethods.encryptionNonce] = null
+                // Activate the method that was created during enrollment
+                val methodId = challenge[MfaChallenges.methodId]
+                val hadAnyMethod = hasAnyMethod(userId)
+                MfaMethods.update({
+                    (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
+                }) {
                     it[MfaMethods.isActive] = true
-                    it[MfaMethods.isPrimary] = !hasAnyMethod(userId)
-                    it[MfaMethods.enrolledAt] = now
+                    it[MfaMethods.isPrimary] = !hadAnyMethod
                 }
+
+                methodId
             }
 
             val backupCodes = generateBackupCodes(userId)
+
+            eventBus.publish(MfaEvent.EnrollmentCompleted(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodId = methodId,
+                methodType = MfaMethodType.EMAIL,
+                isPrimary = !hasAnyMethod(userId)
+            ))
 
             EnrollmentVerificationResult.Success(backupCodes)
         }
     }
 
     override suspend fun enrollTotp(userId: UUID, accountName: String): TotpEnrollmentResult {
+        eventBus.publish(MfaEvent.EnrollmentStarted(
+            eventId = UUID.randomUUID(),
+            timestamp = Clock.System.now(),
+            realmId = realmId,
+            userId = userId,
+            methodType = MfaMethodType.TOTP,
+            contactValue = accountName
+        ))
+
         val secret = totpGenerator.generateSecret()
         val qrCodeUri = totpGenerator.generateQrCodeUri(
             secret = secret,
@@ -219,6 +353,7 @@ internal class DefaultMfaService(
             val now = Clock.System.now().toLocalDateTime(timeZone)
 
             MfaMethods.insert {
+                it[MfaMethods.realmId] = this@DefaultMfaService.realmId
                 it[MfaMethods.userId] = userId
                 it[methodType] = MfaMethodType.TOTP
                 it[identifier] = "TOTP"
@@ -247,6 +382,7 @@ internal class DefaultMfaService(
                 MfaMethods
                     .selectAll()
                     .where {
+                        (MfaMethods.realmId eq realmId) and
                         (MfaMethods.userId eq userId) and
                         (MfaMethods.methodType eq MfaMethodType.TOTP) and
                         (MfaMethods.isActive eq false)
@@ -264,13 +400,25 @@ internal class DefaultMfaService(
             val isValid = totpValidator.validate(secret, code)
 
             if (!isValid) {
+                eventBus.publish(MfaEvent.EnrollmentFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodType = MfaMethodType.TOTP,
+                    reason = "Invalid code",
+                    failureReason = FailureReason.INVALID_CREDENTIALS
+                ))
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid code")
             }
+
+            val methodId = method[MfaMethods.id].value
 
             kodexTransaction {
                 val now = Clock.System.now().toLocalDateTime(timeZone)
 
                 MfaMethods.update({
+                    (MfaMethods.realmId eq realmId) and
                     (MfaMethods.userId eq userId) and
                     (MfaMethods.methodType eq MfaMethodType.TOTP) and
                     (MfaMethods.isActive eq false)
@@ -283,6 +431,16 @@ internal class DefaultMfaService(
 
             val backupCodes = generateBackupCodes(userId)
 
+            eventBus.publish(MfaEvent.EnrollmentCompleted(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodId = methodId,
+                methodType = MfaMethodType.TOTP,
+                isPrimary = !hasAnyMethod(userId)
+            ))
+
             EnrollmentVerificationResult.Success(backupCodes)
         }
     }
@@ -292,7 +450,162 @@ internal class DefaultMfaService(
         methodId: UUID,
         ipAddress: String?
     ): ChallengeResult {
-        TODO("Implement challengeEmail for authentication flow")
+        // Retrieve the MFA method to get the email address
+        val method = kodexTransaction {
+            MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.id eq methodId) and
+                    (MfaMethods.isActive eq true)
+                }
+                .singleOrNull()
+        } ?: return ChallengeResult.Failed("MFA method not found or inactive")
+
+        if (method[MfaMethods.methodType] != MfaMethodType.EMAIL) {
+            return ChallengeResult.Failed("Method is not an email MFA method")
+        }
+
+        val email = method[MfaMethods.identifier]
+            ?: return ChallengeResult.Failed("Email address not found for this MFA method")
+
+        val userKey = "mfa:challenge:user:$userId"
+        val emailKey = "mfa:challenge:email:$email"
+        val ipKey = ipAddress?.let { "mfa:challenge:ip:$it" }
+
+        val userReservation = rateLimiter.checkAndReserve(
+            userKey,
+            config.maxChallengeAttemptsPerUser,
+            config.challengeRateLimitWindow,
+            config.challengeCooldownPeriod
+        )
+
+        if (!userReservation.isAllowed()) {
+            val result = when (val rateLimitResult = userReservation.result) {
+                is RateLimitResult.Exceeded -> ChallengeResult.RateLimitExceeded(rateLimitResult.reason, null)
+                is RateLimitResult.Cooldown -> ChallengeResult.Cooldown(rateLimitResult.reason, rateLimitResult.retryAfter!!)
+                else -> ChallengeResult.Failed("Rate limit check failed")
+            }
+            eventBus.publish(MfaEvent.RateLimitExceeded(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                operation = "challenge",
+                reason = when (val r = userReservation.result) {
+                    is RateLimitResult.Exceeded -> r.reason
+                    is RateLimitResult.Cooldown -> r.reason
+                    else -> "Rate limit check failed"
+                },
+                retryAfter = (userReservation.result as? RateLimitResult.Cooldown)?.retryAfter,
+                sourceIp = ipAddress
+            ))
+            return result
+        }
+
+        val emailReservation = rateLimiter.checkAndReserve(
+            emailKey,
+            config.maxChallengeAttemptsPerContact,
+            config.challengeRateLimitWindow
+        )
+
+        if (!emailReservation.isAllowed()) {
+            rateLimiter.releaseReservation(userReservation.reservationId)
+            val result = when (val rateLimitResult = emailReservation.result) {
+                is RateLimitResult.Exceeded -> ChallengeResult.RateLimitExceeded(rateLimitResult.reason, null)
+                else -> ChallengeResult.Failed("Rate limit check failed")
+            }
+            eventBus.publish(MfaEvent.RateLimitExceeded(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                operation = "challenge",
+                reason = when (val r = emailReservation.result) {
+                    is RateLimitResult.Exceeded -> r.reason
+                    else -> "Rate limit check failed"
+                },
+                retryAfter = null,
+                sourceIp = ipAddress
+            ))
+            return result
+        }
+
+        val ipReservation = ipKey?.let {
+            rateLimiter.checkAndReserve(
+                it,
+                config.maxChallengeAttemptsPerIp,
+                config.challengeRateLimitWindow
+            )
+        }
+
+        if (ipReservation != null && !ipReservation.isAllowed()) {
+            rateLimiter.releaseReservation(userReservation.reservationId)
+            rateLimiter.releaseReservation(emailReservation.reservationId)
+            val result = when (val rateLimitResult = ipReservation.result) {
+                is RateLimitResult.Exceeded -> ChallengeResult.RateLimitExceeded(rateLimitResult.reason, null)
+                else -> ChallengeResult.Failed("Rate limit check failed")
+            }
+            eventBus.publish(MfaEvent.RateLimitExceeded(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodType = MfaMethodType.EMAIL,
+                operation = "challenge",
+                reason = when (val r = ipReservation.result) {
+                    is RateLimitResult.Exceeded -> r.reason
+                    else -> "Rate limit check failed"
+                },
+                retryAfter = null,
+                sourceIp = ipAddress
+            ))
+            return result
+        }
+
+        val code = TokenGenerator.generate(NumericFormat(config.codeLength))
+
+        try {
+            config.emailSender?.send(email, code)
+        } catch (e: Exception) {
+            rateLimiter.releaseReservation(userReservation.reservationId)
+            rateLimiter.releaseReservation(emailReservation.reservationId)
+            ipReservation?.let { rateLimiter.releaseReservation(it.reservationId) }
+            return ChallengeResult.Failed("Failed to send code: ${e.message}")
+        }
+
+        val challengeId = kodexTransaction {
+            val now = Clock.System.now().toLocalDateTime(timeZone)
+            val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, Clock.System.now())
+            val codeHash = hashingService.hash(code)
+
+            MfaChallenges.insert {
+                it[MfaChallenges.realmId] = this@DefaultMfaService.realmId
+                it[MfaChallenges.userId] = userId
+                it[MfaChallenges.methodId] = methodId
+                it[MfaChallenges.codeHash] = codeHash
+                it[MfaChallenges.expiresAt] = expiresAt
+                it[MfaChallenges.createdAt] = now
+                it[MfaChallenges.attempts] = 0
+                it[MfaChallenges.maxAttempts] = config.maxVerifyAttempts
+            }[MfaChallenges.id].value
+        }
+
+        eventBus.publish(MfaEvent.ChallengeSent(
+            eventId = UUID.randomUUID(),
+            timestamp = Clock.System.now(),
+            realmId = realmId,
+            userId = userId,
+            methodId = methodId,
+            challengeId = challengeId,
+            methodType = MfaMethodType.EMAIL,
+            sourceIp = ipAddress
+        ))
+
+        return ChallengeResult.Success(challengeId)
     }
 
     override suspend fun verifyChallenge(
@@ -301,7 +614,116 @@ internal class DefaultMfaService(
         code: String,
         ipAddress: String?
     ): VerificationResult {
-        TODO("Implement verifyChallenge for authentication flow")
+        return ensureMinimumResponseTime(100.milliseconds) {
+            val challenge = kodexTransaction {
+                MfaChallenges
+                    .selectAll()
+                    .where {
+                        (MfaChallenges.realmId eq realmId) and
+                        (MfaChallenges.id eq challengeId) and
+                        (MfaChallenges.userId eq userId)
+                    }
+                    .singleOrNull()
+            } ?: return@ensureMinimumResponseTime VerificationResult.Invalid("Invalid challenge")
+
+            val methodId = challenge[MfaChallenges.methodId]
+            val attempts = challenge[MfaChallenges.attempts]
+            val maxAttempts = challenge[MfaChallenges.maxAttempts]
+            val expiresAt = challenge[MfaChallenges.expiresAt]
+            val verifiedAt = challenge[MfaChallenges.verifiedAt]
+            val now = Clock.System.now().toLocalDateTime(timeZone)
+
+            if (verifiedAt != null) {
+                return@ensureMinimumResponseTime VerificationResult.Invalid("Challenge already verified")
+            }
+
+            if (now > expiresAt) {
+                eventBus.publish(MfaEvent.VerificationFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodId = methodId,
+                    challengeId = challengeId,
+                    methodType = MfaMethodType.EMAIL,
+                    reason = "Code has expired",
+                    failureReason = FailureReason.TOKEN_EXPIRED,
+                    attemptsRemaining = null,
+                    sourceIp = ipAddress
+                ))
+                return@ensureMinimumResponseTime VerificationResult.Expired("Code has expired")
+            }
+
+            if (attempts >= maxAttempts) {
+                eventBus.publish(MfaEvent.RateLimitExceeded(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodType = MfaMethodType.EMAIL,
+                    operation = "verification",
+                    reason = "Too many attempts",
+                    retryAfter = null,
+                    sourceIp = ipAddress
+                ))
+                return@ensureMinimumResponseTime VerificationResult.RateLimitExceeded("Too many attempts")
+            }
+
+            val codeHash = challenge[MfaChallenges.codeHash]
+            val isValid = hashingService.verify(code, codeHash)
+
+            if (!isValid) {
+                kodexTransaction {
+                    MfaChallenges.update({
+                        (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+                    }) {
+                        it[MfaChallenges.attempts] = attempts + 1
+                    }
+                }
+                val remainingAttempts = maxAttempts - (attempts + 1)
+                eventBus.publish(MfaEvent.VerificationFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodId = methodId,
+                    challengeId = challengeId,
+                    methodType = MfaMethodType.EMAIL,
+                    reason = "Invalid code",
+                    failureReason = FailureReason.INVALID_CREDENTIALS,
+                    attemptsRemaining = remainingAttempts,
+                    sourceIp = ipAddress
+                ))
+                return@ensureMinimumResponseTime VerificationResult.Invalid("Invalid code")
+            }
+
+            kodexTransaction {
+                MfaChallenges.update({
+                    (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+                }) {
+                    it[MfaChallenges.verifiedAt] = now
+                }
+
+                MfaMethods.update({
+                    (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
+                }) {
+                    it[MfaMethods.lastUsedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                }
+            }
+
+            eventBus.publish(MfaEvent.VerificationSuccess(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodId = methodId,
+                challengeId = challengeId,
+                methodType = MfaMethodType.EMAIL,
+                sourceIp = ipAddress
+            ))
+
+            VerificationResult.Success
+        }
     }
 
     override suspend fun verifyTotp(
@@ -310,14 +732,78 @@ internal class DefaultMfaService(
         code: String,
         ipAddress: String?
     ): VerificationResult {
-        TODO("Implement verifyTotp for authentication flow")
+        return ensureMinimumResponseTime(100.milliseconds) {
+            val method = kodexTransaction {
+                MfaMethods
+                    .selectAll()
+                    .where {
+                        (MfaMethods.realmId eq realmId) and
+                        (MfaMethods.userId eq userId) and
+                        (MfaMethods.id eq methodId) and
+                        (MfaMethods.methodType eq MfaMethodType.TOTP) and
+                        (MfaMethods.isActive eq true)
+                    }
+                    .singleOrNull()
+            } ?: return@ensureMinimumResponseTime VerificationResult.Invalid("TOTP method not found or inactive")
+
+            val encryptedSecret = method[MfaMethods.encryptedSecret]
+                ?: return@ensureMinimumResponseTime VerificationResult.Invalid("No secret found")
+            val nonce = method[MfaMethods.encryptionNonce]
+                ?: return@ensureMinimumResponseTime VerificationResult.Invalid("No nonce found")
+
+            val secret = secretEncryption.decrypt(EncryptedSecret(encryptedSecret, nonce))
+
+            val isValid = totpValidator.validate(secret, code)
+
+            if (!isValid) {
+                eventBus.publish(MfaEvent.VerificationFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodId = methodId,
+                    challengeId = null,
+                    methodType = MfaMethodType.TOTP,
+                    reason = "Invalid code",
+                    failureReason = FailureReason.INVALID_CREDENTIALS,
+                    attemptsRemaining = null,
+                    sourceIp = ipAddress
+                ))
+                return@ensureMinimumResponseTime VerificationResult.Invalid("Invalid code")
+            }
+
+            kodexTransaction {
+                MfaMethods.update({
+                    (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
+                }) {
+                    it[MfaMethods.lastUsedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                }
+            }
+
+            eventBus.publish(MfaEvent.VerificationSuccess(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodId = methodId,
+                challengeId = null,
+                methodType = MfaMethodType.TOTP,
+                sourceIp = ipAddress
+            ))
+
+            VerificationResult.Success
+        }
     }
 
     override fun getMethods(userId: UUID): List<MfaMethodInfo> {
         return kodexTransaction {
             MfaMethods
                 .selectAll()
-                .where { (MfaMethods.userId eq userId) and (MfaMethods.isActive eq true) }
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.isActive eq true)
+                }
                 .map {
                     MfaMethodInfo(
                         id = it[MfaMethods.id].value,
@@ -331,24 +817,91 @@ internal class DefaultMfaService(
     }
 
     override suspend fun removeMethod(userId: UUID, methodId: UUID) {
+        val methodInfo = kodexTransaction {
+            MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.id eq methodId)
+                }
+                .singleOrNull()
+                ?.let {
+                    it[MfaMethods.methodType]
+                }
+        }
+
         kodexTransaction {
             MfaMethods.deleteWhere {
-                (MfaMethods.userId eq userId) and (MfaMethods.id eq methodId)
+                (MfaMethods.realmId eq realmId) and
+                (MfaMethods.userId eq userId) and
+                (MfaMethods.id eq methodId)
             }
+        }
+
+        if (methodInfo != null) {
+            eventBus.publish(MfaEvent.MethodRemoved(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodId = methodId,
+                methodType = methodInfo,
+                actorId = userId
+            ))
         }
     }
 
     override suspend fun setPrimaryMethod(userId: UUID, methodId: UUID) {
+        val oldPrimaryId = kodexTransaction {
+            MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.isPrimary eq true)
+                }
+                .singleOrNull()
+                ?.let { it[MfaMethods.id].value }
+        }
+
+        val newMethodType = kodexTransaction {
+            MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.id eq methodId)
+                }
+                .singleOrNull()
+                ?.let { it[MfaMethods.methodType] }
+        }
+
         kodexTransaction {
-            MfaMethods.update({ MfaMethods.userId eq userId }) {
+            MfaMethods.update({
+                (MfaMethods.realmId eq realmId) and (MfaMethods.userId eq userId)
+            }) {
                 it[isPrimary] = false
             }
 
             MfaMethods.update({
-                (MfaMethods.userId eq userId) and (MfaMethods.id eq methodId)
+                (MfaMethods.realmId eq realmId) and (MfaMethods.userId eq userId) and (MfaMethods.id eq methodId)
             }) {
                 it[isPrimary] = true
             }
+        }
+
+        if (newMethodType != null) {
+            eventBus.publish(MfaEvent.PrimaryMethodChanged(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                oldPrimaryMethodId = oldPrimaryId,
+                newPrimaryMethodId = methodId,
+                methodType = newMethodType,
+                actorId = userId
+            ))
         }
     }
 
@@ -356,7 +909,9 @@ internal class DefaultMfaService(
         val codes = mutableListOf<String>()
 
         kodexTransaction {
-            MfaBackupCodes.deleteWhere { MfaBackupCodes.userId eq userId }
+            MfaBackupCodes.deleteWhere {
+                (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.userId eq userId)
+            }
 
             val now = Clock.System.now().toLocalDateTime(timeZone)
 
@@ -365,6 +920,7 @@ internal class DefaultMfaService(
                 val codeHash = hashingService.hash(code)
 
                 MfaBackupCodes.insert {
+                    it[MfaBackupCodes.realmId] = this@DefaultMfaService.realmId
                     it[MfaBackupCodes.userId] = userId
                     it[MfaBackupCodes.codeHash] = codeHash
                     it[usedAt] = null
@@ -374,6 +930,15 @@ internal class DefaultMfaService(
                 codes.add(code)
             }
         }
+
+        eventBus.publish(MfaEvent.BackupCodesGenerated(
+            eventId = UUID.randomUUID(),
+            timestamp = Clock.System.now(),
+            realmId = realmId,
+            userId = userId,
+            codeCount = config.backupCodesCount,
+            actorId = userId
+        ))
 
         return codes
     }
@@ -387,19 +952,49 @@ internal class DefaultMfaService(
             val backupCodes = kodexTransaction {
                 MfaBackupCodes
                     .selectAll()
-                    .where { (MfaBackupCodes.userId eq userId) and (MfaBackupCodes.usedAt.isNull()) }
+                    .where {
+                        (MfaBackupCodes.realmId eq realmId) and
+                        (MfaBackupCodes.userId eq userId) and
+                        (MfaBackupCodes.usedAt.isNull())
+                    }
                     .toList()
             }
 
             for (backupCode in backupCodes) {
                 val codeHash = backupCode[MfaBackupCodes.codeHash]
                 if (hashingService.verify(code, codeHash)) {
+                    val codeId = backupCode[MfaBackupCodes.id].value
                     kodexTransaction {
                         val now = Clock.System.now().toLocalDateTime(timeZone)
-                        MfaBackupCodes.update({ MfaBackupCodes.id eq backupCode[MfaBackupCodes.id] }) {
+                        MfaBackupCodes.update({
+                            (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.id eq codeId)
+                        }) {
                             it[usedAt] = now
                         }
                     }
+
+                    val remainingCodes = kodexTransaction {
+                        MfaBackupCodes
+                            .selectAll()
+                            .where {
+                                (MfaBackupCodes.realmId eq realmId) and
+                                (MfaBackupCodes.userId eq userId) and
+                                (MfaBackupCodes.usedAt.isNull())
+                            }
+                            .count()
+                            .toInt()
+                    }
+
+                    eventBus.publish(MfaEvent.BackupCodeUsed(
+                        eventId = UUID.randomUUID(),
+                        timestamp = Clock.System.now(),
+                        realmId = realmId,
+                        userId = userId,
+                        codeId = codeId,
+                        codesRemaining = remainingCodes,
+                        sourceIp = ipAddress
+                    ))
+
                     return@ensureMinimumResponseTime VerificationResult.Success
                 }
             }
@@ -412,13 +1007,275 @@ internal class DefaultMfaService(
         return kodexTransaction {
             MfaMethods
                 .selectAll()
-                .where { (MfaMethods.userId eq userId) and (MfaMethods.isActive eq true) }
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.isActive eq true)
+                }
                 .count() > 0
         }
     }
 
     override fun isMfaRequired(userId: UUID): Boolean {
         return config.requireMfa && hasAnyMethod(userId)
+    }
+
+    // Trusted Devices
+    override suspend fun trustDevice(
+        userId: UUID,
+        deviceFingerprint: String,
+        deviceName: String?,
+        ipAddress: String?,
+        userAgent: String?,
+        expiresInDays: Int?
+    ): UUID {
+        val now = Clock.System.now()
+        val deviceId = kodexTransaction {
+            val nowLocal = now.toLocalDateTime(timeZone)
+
+            val effectiveExpiresInDays = expiresInDays
+                ?: config.defaultTrustedDeviceExpiry?.inWholeDays?.toInt()
+
+            val expiresAt = effectiveExpiresInDays?.let {
+                now.plus(it.days).toLocalDateTime(timeZone)
+            }
+
+            MfaTrustedDevices.insert {
+                it[MfaTrustedDevices.realmId] = this@DefaultMfaService.realmId
+                it[MfaTrustedDevices.userId] = userId
+                it[MfaTrustedDevices.deviceFingerprint] = deviceFingerprint
+                it[MfaTrustedDevices.deviceName] = deviceName
+                it[MfaTrustedDevices.ipAddress] = ipAddress
+                it[MfaTrustedDevices.userAgent] = userAgent
+                it[MfaTrustedDevices.trustedAt] = nowLocal
+                it[MfaTrustedDevices.lastUsedAt] = null
+                it[MfaTrustedDevices.expiresAt] = expiresAt
+            }[MfaTrustedDevices.id].value
+        }
+
+        eventBus.publish(MfaEvent.DeviceTrusted(
+            eventId = UUID.randomUUID(),
+            timestamp = now,
+            realmId = realmId,
+            userId = userId,
+            deviceId = deviceId,
+            deviceFingerprint = deviceFingerprint,
+            deviceName = deviceName,
+            expiresAt = expiresInDays?.let { now.plus(it.days) }
+                ?: config.defaultTrustedDeviceExpiry?.let { now.plus(it) },
+            sourceIp = ipAddress,
+            userAgent = userAgent
+        ))
+
+        return deviceId
+    }
+
+    override suspend fun isDeviceTrusted(
+        userId: UUID,
+        deviceFingerprint: String
+    ): Boolean {
+        return kodexTransaction {
+            val now = Clock.System.now().toLocalDateTime(timeZone)
+
+            val device = MfaTrustedDevices
+                .selectAll()
+                .where {
+                    (MfaTrustedDevices.realmId eq realmId) and
+                    (MfaTrustedDevices.userId eq userId) and
+                    (MfaTrustedDevices.deviceFingerprint eq deviceFingerprint)
+                }
+                .singleOrNull()
+
+            if (device == null) {
+                return@kodexTransaction false
+            }
+
+            val expiresAt = device[MfaTrustedDevices.expiresAt]
+            if (expiresAt != null && now > expiresAt) {
+                return@kodexTransaction false
+            }
+
+            // Update last used timestamp
+            MfaTrustedDevices.update({
+                (MfaTrustedDevices.realmId eq realmId) and
+                (MfaTrustedDevices.userId eq userId) and
+                (MfaTrustedDevices.deviceFingerprint eq deviceFingerprint)
+            }) {
+                it[lastUsedAt] = now
+            }
+
+            true
+        }
+    }
+
+    override suspend fun getTrustedDevices(userId: UUID): List<TrustedDeviceInfo> {
+        return kodexTransaction {
+            MfaTrustedDevices
+                .selectAll()
+                .where {
+                    (MfaTrustedDevices.realmId eq realmId) and
+                    (MfaTrustedDevices.userId eq userId)
+                }
+                .map {
+                    TrustedDeviceInfo(
+                        id = it[MfaTrustedDevices.id].value,
+                        deviceFingerprint = it[MfaTrustedDevices.deviceFingerprint],
+                        deviceName = it[MfaTrustedDevices.deviceName],
+                        ipAddress = it[MfaTrustedDevices.ipAddress],
+                        userAgent = it[MfaTrustedDevices.userAgent],
+                        trustedAt = it[MfaTrustedDevices.trustedAt].toInstant(timeZone),
+                        lastUsedAt = it[MfaTrustedDevices.lastUsedAt]?.toInstant(timeZone),
+                        expiresAt = it[MfaTrustedDevices.expiresAt]?.toInstant(timeZone)
+                    )
+                }
+        }
+    }
+
+    override suspend fun removeTrustedDevice(userId: UUID, deviceId: UUID) {
+        val deviceInfo = kodexTransaction {
+            MfaTrustedDevices
+                .selectAll()
+                .where {
+                    (MfaTrustedDevices.realmId eq realmId) and
+                    (MfaTrustedDevices.userId eq userId) and
+                    (MfaTrustedDevices.id eq deviceId)
+                }
+                .singleOrNull()
+                ?.let { it[MfaTrustedDevices.deviceFingerprint] }
+        }
+
+        kodexTransaction {
+            MfaTrustedDevices.deleteWhere {
+                (MfaTrustedDevices.realmId eq realmId) and
+                (MfaTrustedDevices.userId eq userId) and
+                (MfaTrustedDevices.id eq deviceId)
+            }
+        }
+
+        if (deviceInfo != null) {
+            eventBus.publish(MfaEvent.DeviceUntrusted(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                deviceId = deviceId,
+                deviceFingerprint = deviceInfo,
+                actorId = userId
+            ))
+        }
+    }
+
+    override suspend fun removeAllTrustedDevices(userId: UUID) {
+        kodexTransaction {
+            MfaTrustedDevices.deleteWhere {
+                (MfaTrustedDevices.realmId eq realmId) and (MfaTrustedDevices.userId eq userId)
+            }
+        }
+    }
+
+    // Admin Management
+    override suspend fun forceRemoveMfaMethod(adminId: UUID, userId: UUID, methodId: UUID) {
+        requireAdminRole(adminId)
+
+        val methodInfo = kodexTransaction {
+            MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.userId eq userId) and
+                    (MfaMethods.id eq methodId)
+                }
+                .singleOrNull()
+                ?.let {
+                    it[MfaMethods.methodType]
+                }
+        }
+
+        kodexTransaction {
+            MfaMethods.deleteWhere {
+                (MfaMethods.realmId eq realmId) and
+                (MfaMethods.userId eq userId) and
+                (MfaMethods.id eq methodId)
+            }
+        }
+
+        if (methodInfo != null) {
+            eventBus.publish(MfaEvent.MethodRemoved(
+                eventId = UUID.randomUUID(),
+                timestamp = Clock.System.now(),
+                realmId = realmId,
+                userId = userId,
+                methodId = methodId,
+                methodType = methodInfo,
+                actorId = adminId
+            ))
+        }
+    }
+
+    override suspend fun disableMfaForUser(adminId: UUID, userId: UUID) {
+        requireAdminRole(adminId)
+
+        kodexTransaction {
+            MfaMethods.deleteWhere {
+                (MfaMethods.realmId eq realmId) and (MfaMethods.userId eq userId)
+            }
+            MfaBackupCodes.deleteWhere {
+                (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.userId eq userId)
+            }
+            MfaTrustedDevices.deleteWhere {
+                (MfaTrustedDevices.realmId eq realmId) and (MfaTrustedDevices.userId eq userId)
+            }
+        }
+    }
+
+    override suspend fun listUserMethods(adminId: UUID, userId: UUID): List<MfaMethodInfo> {
+        requireAdminRole(adminId)
+
+        return getMethods(userId)
+    }
+
+    // Statistics
+    override suspend fun getMfaStatistics(): MfaStatistics {
+        val totalUsers = config.getTotalUsers?.invoke() ?: 0L
+        return kodexTransaction {
+
+            val usersWithMfa = MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.isActive eq true)
+                }
+                .map { it[MfaMethods.userId] }
+                .distinct()
+                .count()
+                .toLong()
+
+            val adoptionRate = if (totalUsers > 0) {
+                (usersWithMfa.toDouble() / totalUsers.toDouble()) * 100.0
+            } else 0.0
+
+            val methodDistribution = MfaMethods
+                .selectAll()
+                .where {
+                    (MfaMethods.realmId eq realmId) and
+                    (MfaMethods.isActive eq true)
+                }
+                .groupBy { it[MfaMethods.methodType] }
+                .mapValues { it.value.size.toLong() }
+
+            val trustedDevices = MfaTrustedDevices
+                .selectAll()
+                .where { MfaTrustedDevices.realmId eq realmId }
+                .count()
+
+            MfaStatistics(
+                totalUsers = totalUsers,
+                usersWithMfa = usersWithMfa,
+                adoptionRate = adoptionRate,
+                methodDistribution = methodDistribution,
+                trustedDevices = trustedDevices
+            )
+        }
     }
 
     private suspend fun <T> ensureMinimumResponseTime(

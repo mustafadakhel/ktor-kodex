@@ -86,9 +86,10 @@ class AuthServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
         every { userRepository.findByEmail(testEmail) } returns testUserEntity
+        every { userRepository.findRoles(testUserId) } returns emptyList()
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
-        coEvery { hookExecutor.executeAfterAuthentication(testUserId) } returns Unit
+        coEvery { hookExecutor.executeAfterAuthentication(any()) } returns Unit
         every { userRepository.updateLastLogin(testUserId, any()) } returns true
         coEvery { tokenService.issue(testUserId) } returns testTokenPair
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
@@ -164,9 +165,10 @@ class AuthServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeLogin(testPhone, testLoginMetadata) } returns testPhone
         every { userRepository.findByPhone(testPhone) } returns testUserEntity
+        every { userRepository.findRoles(testUserId) } returns emptyList()
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
-        coEvery { hookExecutor.executeAfterAuthentication(testUserId) } returns Unit
+        coEvery { hookExecutor.executeAfterAuthentication(any()) } returns Unit
         every { userRepository.updateLastLogin(testUserId, any()) } returns true
         coEvery { tokenService.issue(testUserId) } returns testTokenPair
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
