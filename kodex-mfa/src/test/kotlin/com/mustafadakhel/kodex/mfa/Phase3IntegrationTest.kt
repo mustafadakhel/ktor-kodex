@@ -701,6 +701,7 @@ class Phase3IntegrationTest : FunSpec({
             // Enroll TOTP MFA first
             val enrollResult = mfaService.enrollTotp(testUserId, "test@example.com")
             val secret = enrollResult.secret
+            val methodId = enrollResult.methodId
 
             // Verify TOTP enrollment
             val totp = TotpGenerator(
@@ -709,14 +710,8 @@ class Phase3IntegrationTest : FunSpec({
                 period = 30.seconds
             )
             val enrollCode = totp.generateCode(secret, Clock.System.now())
-            val verifyResult = mfaService.verifyTotpEnrollment(testUserId, enrollCode)
+            val verifyResult = mfaService.verifyTotpEnrollment(testUserId, methodId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
-
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }
-                    .single()[MfaMethods.id].value
-            }
 
             // Generate valid TOTP code for authentication
             val authCode = totp.generateCode(secret, Clock.System.now())
@@ -731,6 +726,7 @@ class Phase3IntegrationTest : FunSpec({
             // Enroll TOTP MFA first
             val enrollResult = mfaService.enrollTotp(testUserId, "test@example.com")
             val secret = enrollResult.secret
+            val methodId = enrollResult.methodId
 
             // Verify TOTP enrollment
             val totp = TotpGenerator(
@@ -739,14 +735,8 @@ class Phase3IntegrationTest : FunSpec({
                 period = 30.seconds
             )
             val enrollCode = totp.generateCode(secret, Clock.System.now())
-            val verifyResult = mfaService.verifyTotpEnrollment(testUserId, enrollCode)
+            val verifyResult = mfaService.verifyTotpEnrollment(testUserId, methodId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
-
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }
-                    .single()[MfaMethods.id].value
-            }
 
             // Verify with invalid code
             val result = mfaService.verifyTotp(testUserId, methodId, "000000", null)
@@ -758,6 +748,7 @@ class Phase3IntegrationTest : FunSpec({
             // Enroll TOTP MFA first
             val enrollResult = mfaService.enrollTotp(testUserId, "test@example.com")
             val secret = enrollResult.secret
+            val methodId = enrollResult.methodId
 
             // Verify TOTP enrollment
             val totp = TotpGenerator(
@@ -766,14 +757,8 @@ class Phase3IntegrationTest : FunSpec({
                 period = 30.seconds
             )
             val enrollCode = totp.generateCode(secret, Clock.System.now())
-            val verifyResult = mfaService.verifyTotpEnrollment(testUserId, enrollCode)
+            val verifyResult = mfaService.verifyTotpEnrollment(testUserId, methodId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
-
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }
-                    .single()[MfaMethods.id].value
-            }
 
             // Exhaust rate limit attempts with wrong codes - try more attempts to trigger rate limit
             repeat(10) {

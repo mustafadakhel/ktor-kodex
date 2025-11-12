@@ -347,10 +347,10 @@ internal class DefaultMfaService(
 
         val encrypted = secretEncryption.encrypt(secret)
 
-        kodexTransaction {
+        val methodId = kodexTransaction {
             val now = Clock.System.now().toLocalDateTime(timeZone)
 
-            MfaMethods.insert {
+            MfaMethods.insertAndGetId {
                 it[MfaMethods.realmId] = this@DefaultMfaService.realmId
                 it[MfaMethods.userId] = userId
                 it[methodType] = MfaMethodType.TOTP
@@ -360,10 +360,11 @@ internal class DefaultMfaService(
                 it[isActive] = false
                 it[isPrimary] = false
                 it[enrolledAt] = now
-            }
+            }.value
         }
 
         return TotpEnrollmentResult(
+            methodId = methodId,
             secret = secret,
             qrCodeDataUri = qrCodeDataUri,
             issuer = config.totpIssuer,
@@ -373,6 +374,7 @@ internal class DefaultMfaService(
 
     override suspend fun verifyTotpEnrollment(
         userId: UUID,
+        methodId: UUID,
         code: String
     ): EnrollmentVerificationResult {
         return ensureMinimumResponseTime(100.milliseconds) {
@@ -382,11 +384,12 @@ internal class DefaultMfaService(
                     .where {
                         (MfaMethods.realmId eq realmId) and
                         (MfaMethods.userId eq userId) and
+                        (MfaMethods.id eq methodId) and
                         (MfaMethods.methodType eq MfaMethodType.TOTP) and
                         (MfaMethods.isActive eq false)
                     }
                     .singleOrNull()
-            } ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("No pending TOTP enrollment")
+            } ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("No pending TOTP enrollment for this method")
 
             val encryptedSecret = method[MfaMethods.encryptedSecret]
                 ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("No secret found")
@@ -410,16 +413,12 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid code")
             }
 
-            val methodId = method[MfaMethods.id].value
-
             kodexTransaction {
                 val now = Clock.System.now().toLocalDateTime(timeZone)
 
                 MfaMethods.update({
                     (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.methodType eq MfaMethodType.TOTP) and
-                    (MfaMethods.isActive eq false)
+                    (MfaMethods.id eq methodId)
                 }) {
                     it[isActive] = true
                     it[isPrimary] = !hasAnyMethod(userId)

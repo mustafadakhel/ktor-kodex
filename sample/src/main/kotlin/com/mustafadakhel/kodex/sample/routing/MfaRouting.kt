@@ -90,14 +90,21 @@ fun Application.setupMfaRouting() = routing {
                         ?: return@post call.respondText("MFA not configured", status = HttpStatusCode.InternalServerError)
 
                     val params = call.receiveParameters()
+                    val methodIdStr = params["methodId"] ?: return@post call.respondText(
+                        "Missing methodId",
+                        status = HttpStatusCode.BadRequest
+                    )
                     val code = params["code"] ?: return@post call.respondText(
                         "Missing code",
                         status = HttpStatusCode.BadRequest
                     )
 
                     try {
-                        val result = mfaService.verifyTotpEnrollment(userId, code)
+                        val methodId = UUID.fromString(methodIdStr)
+                        val result = mfaService.verifyTotpEnrollment(userId, methodId, code)
                         call.respond(result)
+                    } catch (e: IllegalArgumentException) {
+                        call.respondText("Invalid methodId format", status = HttpStatusCode.BadRequest)
                     } catch (e: Exception) {
                         call.respondText("Verification failed: ${e.message}", status = HttpStatusCode.InternalServerError)
                     }

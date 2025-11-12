@@ -22,6 +22,7 @@ public interface MfaService {
 
     public suspend fun verifyTotpEnrollment(
         userId: UUID,
+        methodId: UUID,
         code: String
     ): EnrollmentVerificationResult
 
@@ -103,6 +104,7 @@ public sealed interface EnrollmentResult {
 }
 
 public data class TotpEnrollmentResult(
+    val methodId: UUID,
     val secret: String,
     val qrCodeDataUri: String,
     val issuer: String,
