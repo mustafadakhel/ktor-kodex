@@ -7,15 +7,17 @@ import kotlin.time.Duration
  * Rate limiter interface for controlling request frequency.
  *
  * Implementations can be in-memory, Redis-backed, or any other storage mechanism.
+ *
+ * All methods are suspend functions to support non-blocking I/O operations.
  */
 public interface RateLimiter {
-    public fun checkLimit(
+    public suspend fun checkLimit(
         key: String,
         limit: Int,
         window: Duration
     ): RateLimitResult
 
-    public fun checkAndReserve(
+    public suspend fun checkAndReserve(
         key: String,
         limit: Int,
         window: Duration,
@@ -28,19 +30,19 @@ public interface RateLimiter {
      *
      * @param reservationId The reservation ID returned from checkAndReserve
      */
-    public fun releaseReservation(reservationId: String?)
+    public suspend fun releaseReservation(reservationId: String?)
 
     /**
      * Clear rate limit for a specific key.
      *
      * @param key The key to clear
      */
-    public fun clear(key: String)
+    public suspend fun clear(key: String)
 
     /**
      * Clear all rate limits.
      */
-    public fun clearAll()
+    public suspend fun clearAll()
 }
 
 /**
@@ -85,19 +87,19 @@ public data class RateLimitReservation(
 }
 
 public class NoOpRateLimiter : RateLimiter {
-    override fun checkLimit(key: String, limit: Int, window: Duration): RateLimitResult =
+    override suspend fun checkLimit(key: String, limit: Int, window: Duration): RateLimitResult =
         RateLimitResult.Allowed
 
-    override fun checkAndReserve(
+    override suspend fun checkAndReserve(
         key: String,
         limit: Int,
         window: Duration,
         cooldown: Duration?
     ): RateLimitReservation = RateLimitReservation(RateLimitResult.Allowed, null)
 
-    override fun releaseReservation(reservationId: String?) {}
+    override suspend fun releaseReservation(reservationId: String?) {}
 
-    override fun clear(key: String) {}
+    override suspend fun clear(key: String) {}
 
-    override fun clearAll() {}
+    override suspend fun clearAll() {}
 }

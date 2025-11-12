@@ -78,7 +78,8 @@ internal class DefaultPasswordResetService(
         val token = TokenGenerator.generate(HexFormat())
         val expiresAt = ExpirationCalculator.calculateExpiration(config.tokenValidity, timeZone, clockNow)
 
-        val userInfo = kodexTransaction {
+        // First, get userId from database
+        val userId = kodexTransaction {
             val contact = PasswordResetContacts
                 .selectAll()
                 .where {
@@ -88,30 +89,30 @@ internal class DefaultPasswordResetService(
                 }
                 .singleOrNull()
 
-            if (contact == null) {
-                return@kodexTransaction null
-            }
-
-            val userId = contact[PasswordResetContacts.userId]
-
-            val userReservation = rateLimiter.checkAndReserve(
-                key = "reset:user:$userId",
-                limit = config.rateLimit.maxAttemptsPerUser,
-                window = config.rateLimit.window,
-                cooldown = config.rateLimit.cooldown
-            )
-            if (!userReservation.isAllowed()) {
-                return@kodexTransaction null
-            }
-
-            Triple(userId, userReservation.reservationId, true)
+            contact?.get(PasswordResetContacts.userId)
         }
 
-        if (userInfo == null) {
+        if (userId == null) {
+            // No matching contact - simulate success for security (don't reveal if identifier exists)
             return PasswordResetResult.Success
         }
 
-        val (userId, userReservationId, _) = userInfo
+        // Check user rate limit outside transaction
+        val userReservation = rateLimiter.checkAndReserve(
+            key = "reset:user:$userId",
+            limit = config.rateLimit.maxAttemptsPerUser,
+            window = config.rateLimit.window,
+            cooldown = config.rateLimit.cooldown
+        )
+        if (!userReservation.isAllowed()) {
+            // Release previous reservations
+            rateLimiter.releaseReservation(identifierReservation.reservationId)
+            rateLimiter.releaseReservation(ipReservation?.reservationId)
+            // Simulate success for security
+            return PasswordResetResult.Success
+        }
+
+        val userReservationId = userReservation.reservationId
 
         try {
             passwordResetSender.send(

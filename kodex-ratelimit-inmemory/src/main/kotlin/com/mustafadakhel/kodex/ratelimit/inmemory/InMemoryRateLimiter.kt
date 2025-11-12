@@ -26,8 +26,9 @@ public class InMemoryRateLimiter(
     private val attempts = ConcurrentHashMap<String, AttemptWindow>()
     private val lastCleanup = AtomicLong(System.currentTimeMillis())
     private val keyLocks = ConcurrentHashMap<String, Any>()
+    private val sizeLock = Any()  // Global lock for size management
 
-    override fun checkLimit(
+    override suspend fun checkLimit(
         key: String,
         limit: Int,
         window: Duration
@@ -37,8 +38,11 @@ public class InMemoryRateLimiter(
         synchronized(lock) {
             performLazyCleanup(window)
 
-            if (attempts.size >= maxEntries && !attempts.containsKey(key)) {
-                evictOldestEntries()
+            // Use global size lock to prevent race conditions with concurrent evictions
+            synchronized(sizeLock) {
+                if (attempts.size >= maxEntries && !attempts.containsKey(key)) {
+                    evictOldestEntries()
+                }
             }
 
             val attemptWindow = attempts.compute(key) { _, existing ->
@@ -60,7 +64,7 @@ public class InMemoryRateLimiter(
         }
     }
 
-    override fun checkAndReserve(
+    override suspend fun checkAndReserve(
         key: String,
         limit: Int,
         window: Duration,
@@ -71,8 +75,11 @@ public class InMemoryRateLimiter(
         synchronized(lock) {
             performLazyCleanup(window)
 
-            if (attempts.size >= maxEntries && !attempts.containsKey(key)) {
-                evictOldestEntries()
+            // Use global size lock to prevent race conditions with concurrent evictions
+            synchronized(sizeLock) {
+                if (attempts.size >= maxEntries && !attempts.containsKey(key)) {
+                    evictOldestEntries()
+                }
             }
 
             val now = Clock.System.now()
@@ -123,7 +130,7 @@ public class InMemoryRateLimiter(
         }
     }
 
-    override fun releaseReservation(reservationId: String?) {
+    override suspend fun releaseReservation(reservationId: String?) {
         if (reservationId == null) return
 
         val key = reservationId.substringBeforeLast(":")
@@ -142,12 +149,14 @@ public class InMemoryRateLimiter(
         }
     }
 
-    override fun clear(key: String) {
+    override suspend fun clear(key: String) {
         attempts.remove(key)
+        keyLocks.remove(key)  // Clean up lock to prevent memory leak
     }
 
-    override fun clearAll() {
+    override suspend fun clearAll() {
         attempts.clear()
+        keyLocks.clear()  // Clean up locks to prevent memory leak
     }
 
     public fun size(): Int = attempts.size
@@ -167,8 +176,19 @@ public class InMemoryRateLimiter(
         val clockNow = Clock.System.now()
         val cleanupCutoff = clockNow - window - cleanupAge
 
-        attempts.entries.removeIf { (_, attemptWindow) ->
-            attemptWindow.windowStart < cleanupCutoff
+        // Track keys being removed to clean up their locks
+        val removedKeys = mutableSetOf<String>()
+        attempts.entries.removeIf { (key, attemptWindow) ->
+            val shouldRemove = attemptWindow.windowStart < cleanupCutoff
+            if (shouldRemove) {
+                removedKeys.add(key)
+            }
+            shouldRemove
+        }
+
+        // Clean up locks for removed keys to prevent memory leak
+        removedKeys.forEach { key ->
+            keyLocks.remove(key)
         }
     }
 
@@ -180,7 +200,10 @@ public class InMemoryRateLimiter(
             .take(entriesToRemove)
 
         sortedByAge.forEach { entry ->
-            attempts.remove(entry.key, entry.value)
+            if (attempts.remove(entry.key, entry.value)) {
+                // Clean up lock for evicted key to prevent memory leak
+                keyLocks.remove(entry.key)
+            }
         }
     }
 

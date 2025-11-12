@@ -6,7 +6,6 @@ import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import io.lettuce.core.ScriptOutputType
 import io.lettuce.core.api.StatefulRedisConnection
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import java.util.UUID
@@ -24,20 +23,20 @@ public class RedisRateLimiter(
 
     private val async = connection.async()
 
-    override fun checkLimit(
+    override suspend fun checkLimit(
         key: String,
         limit: Int,
         window: Duration
-    ): RateLimitResult = runBlocking {
+    ): RateLimitResult {
         if (circuitBreaker.isOpen) {
-            return@runBlocking fallbackRateLimiter.checkLimit(key, limit, window)
+            return fallbackRateLimiter.checkLimit(key, limit, window)
         }
 
         val redisKey = "$keyPrefix$key"
         val now = Clock.System.now()
         val windowStart = now - window
 
-        try {
+        return try {
             val result = async.eval<Long>(
                 LuaScripts.CHECK_LIMIT,
                 ScriptOutputType.INTEGER,
@@ -61,21 +60,21 @@ public class RedisRateLimiter(
         }
     }
 
-    override fun checkAndReserve(
+    override suspend fun checkAndReserve(
         key: String,
         limit: Int,
         window: Duration,
         cooldown: Duration?
-    ): RateLimitReservation = runBlocking {
+    ): RateLimitReservation {
         if (circuitBreaker.isOpen) {
-            return@runBlocking fallbackRateLimiter.checkAndReserve(key, limit, window, cooldown)
+            return fallbackRateLimiter.checkAndReserve(key, limit, window, cooldown)
         }
 
         val redisKey = "$keyPrefix$key"
         val now = Clock.System.now()
         val windowStart = now - window
 
-        try {
+        return try {
             if (cooldown != null) {
                 val lastAttemptResult = async.eval<String>(
                     LuaScripts.GET_LAST_ATTEMPT,
@@ -90,7 +89,7 @@ public class RedisRateLimiter(
 
                     if (timeSinceLastAttempt < cooldown) {
                         val retryAfter = lastAttemptTime + cooldown
-                        return@runBlocking RateLimitReservation(
+                        return RateLimitReservation(
                             result = RateLimitResult.Cooldown(
                                 reason = "Cooldown period not elapsed. Minimum $cooldown between requests.",
                                 retryAfter = retryAfter
@@ -132,7 +131,7 @@ public class RedisRateLimiter(
         }
     }
 
-    override fun releaseReservation(reservationId: String?) {
+    override suspend fun releaseReservation(reservationId: String?) {
         if (reservationId == null) return
         if (circuitBreaker.isOpen) {
             fallbackRateLimiter.releaseReservation(reservationId)
@@ -151,7 +150,7 @@ public class RedisRateLimiter(
                 ScriptOutputType.INTEGER,
                 arrayOf(redisKey),
                 actualReservationId
-            )
+            ).await()
             circuitBreaker.recordSuccess()
         } catch (e: Exception) {
             circuitBreaker.recordFailure()
@@ -159,7 +158,7 @@ public class RedisRateLimiter(
         }
     }
 
-    override fun clear(key: String) {
+    override suspend fun clear(key: String) {
         val redisKey = "$keyPrefix$key"
         if (circuitBreaker.isOpen) {
             fallbackRateLimiter.clear(key)
@@ -167,7 +166,7 @@ public class RedisRateLimiter(
         }
 
         try {
-            async.del(redisKey)
+            async.del(redisKey).await()
             circuitBreaker.recordSuccess()
         } catch (e: Exception) {
             circuitBreaker.recordFailure()
@@ -175,16 +174,28 @@ public class RedisRateLimiter(
         }
     }
 
-    override fun clearAll() {
+    override suspend fun clearAll() {
         if (circuitBreaker.isOpen) {
             fallbackRateLimiter.clearAll()
             return
         }
 
         try {
-            val keys = async.keys("$keyPrefix*").get()
-            if (keys.isNotEmpty()) {
-                async.del(*keys.toTypedArray())
+            // Use SCAN instead of KEYS to avoid blocking Redis server
+            val allKeys = mutableListOf<String>()
+            var cursor = io.lettuce.core.ScanCursor.INITIAL
+
+            do {
+                val scanResult = async.scan(
+                    cursor,
+                    io.lettuce.core.ScanArgs.Builder.matches("$keyPrefix*").limit(1000)
+                ).await()
+                allKeys.addAll(scanResult.keys)
+                cursor = io.lettuce.core.ScanCursor.of(scanResult.cursor)
+            } while (!cursor.isFinished)
+
+            if (allKeys.isNotEmpty()) {
+                async.del(*allKeys.toTypedArray()).await()
             }
             circuitBreaker.recordSuccess()
         } catch (e: Exception) {

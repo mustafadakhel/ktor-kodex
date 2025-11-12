@@ -322,10 +322,13 @@ internal class DefaultVerificationService(
 
             setVerified(userId, identifier, true)
 
+            VerificationResult.Success
+        }
+
+        // Clear rate limits after successful verification (outside transaction)
+        if (result is VerificationResult.Success) {
             rateLimiter.clear(rateLimitKey)
             rateLimiter.clear("verify:send:user:$userId")
-
-            VerificationResult.Success
         }
 
         when (result) {

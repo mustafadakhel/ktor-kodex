@@ -6,7 +6,6 @@ import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import io.lettuce.core.ScriptOutputType
 import io.lettuce.core.cluster.api.StatefulRedisClusterConnection
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import java.util.UUID
@@ -25,20 +24,20 @@ public class RedisClusterRateLimiter(
 
     private val async = connection.async()
 
-    override fun checkLimit(
+    override suspend fun checkLimit(
         key: String,
         limit: Int,
         window: Duration
-    ): RateLimitResult = runBlocking {
+    ): RateLimitResult {
         if (circuitBreaker.isOpen) {
-            return@runBlocking fallbackRateLimiter.checkLimit(key, limit, window)
+            return fallbackRateLimiter.checkLimit(key, limit, window)
         }
 
         val redisKey = "$keyPrefix$key"
         val now = Clock.System.now()
         val windowStart = now - window
 
-        try {
+        return try {
             val result = async.eval<Long>(
                 LuaScripts.CHECK_LIMIT,
                 ScriptOutputType.INTEGER,
@@ -62,21 +61,21 @@ public class RedisClusterRateLimiter(
         }
     }
 
-    override fun checkAndReserve(
+    override suspend fun checkAndReserve(
         key: String,
         limit: Int,
         window: Duration,
         cooldown: Duration?
-    ): RateLimitReservation = runBlocking {
+    ): RateLimitReservation {
         if (circuitBreaker.isOpen) {
-            return@runBlocking fallbackRateLimiter.checkAndReserve(key, limit, window, cooldown)
+            return fallbackRateLimiter.checkAndReserve(key, limit, window, cooldown)
         }
 
         val redisKey = "$keyPrefix$key"
         val now = Clock.System.now()
         val windowStart = now - window
 
-        try {
+        return try {
             if (cooldown != null) {
                 val lastAttemptResult = async.eval<String>(
                     LuaScripts.GET_LAST_ATTEMPT,
@@ -91,7 +90,7 @@ public class RedisClusterRateLimiter(
 
                     if (timeSinceLastAttempt < cooldown) {
                         val retryAfter = lastAttemptTime + cooldown
-                        return@runBlocking RateLimitReservation(
+                        return RateLimitReservation(
                             result = RateLimitResult.Cooldown(
                                 reason = "Cooldown period not elapsed. Minimum $cooldown between requests.",
                                 retryAfter = retryAfter
@@ -133,7 +132,7 @@ public class RedisClusterRateLimiter(
         }
     }
 
-    override fun releaseReservation(reservationId: String?) {
+    override suspend fun releaseReservation(reservationId: String?) {
         if (reservationId == null) return
         if (circuitBreaker.isOpen) {
             fallbackRateLimiter.releaseReservation(reservationId)
@@ -152,7 +151,7 @@ public class RedisClusterRateLimiter(
                 ScriptOutputType.INTEGER,
                 arrayOf(redisKey),
                 actualReservationId
-            )
+            ).await()
             circuitBreaker.recordSuccess()
         } catch (e: Exception) {
             circuitBreaker.recordFailure()
@@ -160,7 +159,7 @@ public class RedisClusterRateLimiter(
         }
     }
 
-    override fun clear(key: String) {
+    override suspend fun clear(key: String) {
         val redisKey = "$keyPrefix$key"
         if (circuitBreaker.isOpen) {
             fallbackRateLimiter.clear(key)
@@ -168,7 +167,7 @@ public class RedisClusterRateLimiter(
         }
 
         try {
-            async.del(redisKey)
+            async.del(redisKey).await()
             circuitBreaker.recordSuccess()
         } catch (e: Exception) {
             circuitBreaker.recordFailure()
@@ -176,7 +175,7 @@ public class RedisClusterRateLimiter(
         }
     }
 
-    override fun clearAll() {
+    override suspend fun clearAll() {
         if (circuitBreaker.isOpen) {
             fallbackRateLimiter.clearAll()
             return
@@ -204,7 +203,7 @@ public class RedisClusterRateLimiter(
             }
 
             if (allKeys.isNotEmpty()) {
-                async.del(*allKeys.toTypedArray())
+                async.del(*allKeys.toTypedArray()).await()
             }
             circuitBreaker.recordSuccess()
         } catch (e: Exception) {
