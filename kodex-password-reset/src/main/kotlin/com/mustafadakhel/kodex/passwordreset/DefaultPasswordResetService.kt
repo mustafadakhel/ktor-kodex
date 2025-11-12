@@ -3,9 +3,9 @@ package com.mustafadakhel.kodex.passwordreset
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.PasswordResetEvent
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
-import com.mustafadakhel.kodex.tokens.security.RateLimitReservation
-import com.mustafadakhel.kodex.tokens.security.RateLimitResult
-import com.mustafadakhel.kodex.tokens.security.RateLimiter
+import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
+import com.mustafadakhel.kodex.ratelimit.RateLimitResult
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import com.mustafadakhel.kodex.tokens.token.HexFormat
 import com.mustafadakhel.kodex.tokens.token.TokenGenerator
 import com.mustafadakhel.kodex.tokens.token.TokenValidator
@@ -15,7 +15,6 @@ import com.mustafadakhel.kodex.util.kodexTransaction
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -30,10 +29,9 @@ internal class DefaultPasswordResetService(
     private val passwordResetSender: PasswordResetSender,
     private val timeZone: TimeZone,
     private val eventBus: EventBus?,
-    private val realm: String
+    private val realm: String,
+    private val rateLimiter: RateLimiter
 ) : PasswordResetService {
-
-    private val rateLimiter = RateLimiter()
 
     override suspend fun initiatePasswordReset(
         identifier: String,

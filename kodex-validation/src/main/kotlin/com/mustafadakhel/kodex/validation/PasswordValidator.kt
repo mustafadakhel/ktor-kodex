@@ -16,22 +16,20 @@ internal class PasswordValidator(
     private val commonPasswords: Set<String> = CommonPasswords.default
 ) {
     private companion object {
-        const val MAX_PASSWORD_LENGTH = 256  // Prevent DoS from extremely long passwords
-        const val RECOMMENDED_MIN_LENGTH = 12  // Recommended length for better security
-        const val MIN_SEQUENTIAL_CHARS = 3  // Minimum length for sequential pattern detection
-        const val MIN_REPEATED_CHARS = 3  // Minimum consecutive repeats to flag
+        const val MAX_PASSWORD_LENGTH = 256
+        const val RECOMMENDED_MIN_LENGTH = 12
+        const val MIN_SEQUENTIAL_CHARS = 3
+        const val MIN_REPEATED_CHARS = 3
 
-        // Brute force attack assumptions (10 billion guesses/second on modern hardware)
-        const val GUESSES_PER_SECOND = 10_000_000_000.0
+        const val GUESSES_PER_SECOND = 10_000_000_000.0 // Modern hardware
 
-        // Entropy thresholds for password strength scoring (bits)
+        // Entropy thresholds (bits)
         // These values align with NIST SP 800-63B guidelines
         const val ENTROPY_VERY_WEAK = 28.0   // < 3.5 bits per char for 8 chars
         const val ENTROPY_WEAK = 36.0        // ~4.5 bits per char for 8 chars
         const val ENTROPY_MODERATE = 60.0    // ~7.5 bits per char for 8 chars
         const val ENTROPY_STRONG = 128.0     // ~16 bits per char for 8 chars
 
-        // Pre-allocated sequences for pattern detection (performance optimization)
         val SEQUENTIAL_SEQUENCES = listOf(
             "abcdefghijklmnopqrstuvwxyz",
             "0123456789"
@@ -46,9 +44,7 @@ internal class PasswordValidator(
     private val lowercasePool = 26
     private val uppercasePool = 26
     private val digitPool = 10
-    // Special characters pool: ASCII printable symbols (32 chars)
-    // !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
-    private val specialPool = 32
+    private val specialPool = 32 // !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
 
     public fun validate(password: String, field: String = "password"): ValidationResult {
         val strength = analyzeStrength(password)
@@ -106,8 +102,7 @@ internal class PasswordValidator(
         val feedback = mutableListOf<String>()
         var penalties = 0
 
-        // Cache lowercase version to avoid multiple allocations (use Locale.ROOT for consistency)
-        val passwordLower = password.lowercase(Locale.ROOT)
+        val passwordLower = password.lowercase(Locale.ROOT) // Cache for multiple checks
 
         // Common password check
         if (passwordLower in commonPasswords) {
@@ -121,9 +116,7 @@ internal class PasswordValidator(
             )
         }
 
-        // Pattern detection
-        // Note: Sequential and keyboard patterns use lowercase for case-insensitive matching.
-        // Repeated chars use original case because "AAA" vs "aaa" are distinct patterns.
+        // Pattern detection (sequential/keyboard use lowercase, repeated use original case)
         if (hasSequentialChars(passwordLower)) {
             feedback.add("Avoid sequential characters (abc, 123)")
             penalties++
@@ -146,23 +139,20 @@ internal class PasswordValidator(
         val poolSize = calculatePoolSize(password)
         val entropy = log2(poolSize.toDouble()) * effectiveLength
 
-        // Calculate crack time (assuming 10 billion guesses per second)
         val possibleCombinations = poolSize.toDouble().pow(effectiveLength)
         val crackTimeSeconds = (possibleCombinations / 2) / GUESSES_PER_SECOND
         val crackTime = crackTimeSeconds.seconds
 
-        // Calculate score (0-4) based on entropy with penalties
         val baseScore = when {
-            entropy < ENTROPY_VERY_WEAK -> 0  // Very weak
-            entropy < ENTROPY_WEAK -> 1       // Weak
-            entropy < ENTROPY_MODERATE -> 2   // Moderate
-            entropy < ENTROPY_STRONG -> 3     // Strong
-            else -> 4                         // Very strong
+            entropy < ENTROPY_VERY_WEAK -> 0
+            entropy < ENTROPY_WEAK -> 1
+            entropy < ENTROPY_MODERATE -> 2
+            entropy < ENTROPY_STRONG -> 3
+            else -> 4
         }
 
         val finalScore = (baseScore - penalties).coerceAtLeast(0)
 
-        // Add constructive feedback
         if (password.length < RECOMMENDED_MIN_LENGTH) {
             feedback.add("Use at least $RECOMMENDED_MIN_LENGTH characters for better security")
         }
@@ -215,7 +205,6 @@ internal class PasswordValidator(
 
     private fun hasRepeatedChars(password: String): Boolean {
         for (i in 0 until password.length - (MIN_REPEATED_CHARS - 1)) {
-            // Check if MIN_REPEATED_CHARS consecutive characters are the same
             val allSame = (1 until MIN_REPEATED_CHARS).all { offset ->
                 password[i] == password[i + offset]
             }

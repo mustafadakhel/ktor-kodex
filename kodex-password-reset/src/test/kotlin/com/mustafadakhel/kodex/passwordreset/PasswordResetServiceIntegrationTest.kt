@@ -54,6 +54,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
         override val realm = Realm(owner = "test-realm")
         override val timeZone = timeZone
         override val eventBus = mockEventBus
+        override val rateLimiter = com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter()
     }
 
     // Mock sender that tracks calls
@@ -83,6 +84,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             SchemaUtils.create(PasswordResetContacts, PasswordResetTokens)
         }
         mockSender.reset()
+        // Clear rate limiter state between tests
+        testContext.rateLimiter.clearAll()
     }
 
     afterTest {

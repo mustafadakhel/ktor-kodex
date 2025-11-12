@@ -10,6 +10,8 @@ import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.extensionContext
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import com.mustafadakhel.kodex.util.*
 import io.ktor.utils.io.*
 import kotlinx.datetime.TimeZone
@@ -26,7 +28,8 @@ internal data class RealmConfig(
     internal val extensions: ExtensionRegistry,
     val timeZone: TimeZone,
     val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy,
-    internal val eventBus: EventBus
+    internal val eventBus: EventBus,
+    internal val rateLimiter: RateLimiter
 )
 
 @KtorDsl
@@ -47,6 +50,7 @@ public class RealmConfigScope internal constructor(
     @PublishedApi
     internal var extensionPriorityCounter: Int = 0
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
+    private var rateLimiter: RateLimiter = NoOpRateLimiter()
 
     public var hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy =
         com.mustafadakhel.kodex.extension.HookFailureStrategy.FAIL_FAST
@@ -55,7 +59,7 @@ public class RealmConfigScope internal constructor(
     internal fun getExtensionContext(
         eventBus: com.mustafadakhel.kodex.event.EventBus
     ): com.mustafadakhel.kodex.extension.ExtensionContext {
-        return extensionContext(realm, timeZone, eventBus)
+        return extensionContext(realm, timeZone, eventBus, rateLimiter)
     }
 
     public fun secrets(block: SecretsConfigScope.() -> Unit) {
@@ -115,9 +119,12 @@ public class RealmConfigScope internal constructor(
         extensionConfigs.add(config to extensionPriorityCounter++)
     }
 
-    /** Configure time zone for this realm. */
     public fun timeZone(zone: TimeZone) {
         this.timeZone = zone
+    }
+
+    public fun rateLimiter(limiter: RateLimiter) {
+        this.rateLimiter = limiter
     }
 
     /**
@@ -170,7 +177,8 @@ public class RealmConfigScope internal constructor(
             extensions = extensionRegistry,
             timeZone = timeZone,
             hookFailureStrategy = hookFailureStrategy,
-            eventBus = eventBus
+            eventBus = eventBus,
+            rateLimiter = rateLimiter
         )
     }
 }

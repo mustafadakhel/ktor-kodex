@@ -1,5 +1,8 @@
-package com.mustafadakhel.kodex.tokens.security
+package com.mustafadakhel.kodex.ratelimit.inmemory
 
+import com.mustafadakhel.kodex.ratelimit.RateLimitResult
+import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -8,22 +11,23 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * In-memory rate limiter using sliding window algorithm with automatic cleanup.
+ * In-memory rate limiter using sliding window algorithm.
  */
-public class RateLimiter(
+public class InMemoryRateLimiter(
     private val maxEntries: Int = 100_000,
     private val cleanupAge: Duration = 1.minutes
-) {
+) : RateLimiter {
     init {
         require(maxEntries > 0) { "maxEntries must be positive, got: $maxEntries" }
         require(maxEntries <= 1_000_000) { "maxEntries should not exceed 1,000,000 for memory safety, got: $maxEntries" }
         require(cleanupAge.isPositive()) { "cleanupAge must be positive, got: $cleanupAge" }
     }
+
     private val attempts = ConcurrentHashMap<String, AttemptWindow>()
     private val lastCleanup = AtomicLong(System.currentTimeMillis())
     private val keyLocks = ConcurrentHashMap<String, Any>()
 
-    public fun checkLimit(
+    override fun checkLimit(
         key: String,
         limit: Int,
         window: Duration
@@ -56,11 +60,11 @@ public class RateLimiter(
         }
     }
 
-    public fun checkAndReserve(
+    override fun checkAndReserve(
         key: String,
         limit: Int,
         window: Duration,
-        cooldown: Duration? = null
+        cooldown: Duration?
     ): RateLimitReservation {
         val lock = keyLocks.computeIfAbsent(key) { Any() }
 
@@ -119,7 +123,7 @@ public class RateLimiter(
         }
     }
 
-    public fun releaseReservation(reservationId: String?) {
+    override fun releaseReservation(reservationId: String?) {
         if (reservationId == null) return
 
         val key = reservationId.substringBeforeLast(":")
@@ -138,11 +142,11 @@ public class RateLimiter(
         }
     }
 
-    public fun clear(key: String) {
+    override fun clear(key: String) {
         attempts.remove(key)
     }
 
-    public fun clearAll() {
+    override fun clearAll() {
         attempts.clear()
     }
 
@@ -186,20 +190,4 @@ public class RateLimiter(
         val lastAccess: Instant,
         val lastAttemptTime: Instant
     )
-}
-
-public sealed interface RateLimitResult {
-    public data object Allowed : RateLimitResult
-    public data class Exceeded(val reason: String) : RateLimitResult
-    public data class Cooldown(
-        val reason: String,
-        val retryAfter: Instant? = null
-    ) : RateLimitResult
-}
-
-public data class RateLimitReservation(
-    val result: RateLimitResult,
-    val reservationId: String?
-) {
-    public fun isAllowed(): Boolean = result is RateLimitResult.Allowed
 }

@@ -11,6 +11,7 @@ import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.passwordreset.passwordReset
 import com.mustafadakhel.kodex.passwordreset.PasswordResetSender
+import com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter
 import com.mustafadakhel.kodex.sample.routing.setupAuthRouting
 import com.mustafadakhel.kodex.sample.routing.setupMfaRouting
 import com.mustafadakhel.kodex.sample.routing.setupPasswordResetRouting
@@ -60,6 +61,32 @@ private fun Application.setupAuthentication() {
                 secrets {
                     raw("secret", "secret2", "secret3")
                 }
+
+                // Rate limiter examples:
+                // - NoOpRateLimiter (default)
+                // - InMemoryRateLimiter (single instance)
+                // - RedisRateLimiter (distributed)
+                when (realm) {
+                    DefaultRealms.AdminRealm -> {
+                        // No rate limiting
+                    }
+                    DefaultRealms.UserRealm -> {
+                        rateLimiter(InMemoryRateLimiter(
+                            maxEntries = 100_000,
+                            cleanupAge = 5.minutes
+                        ))
+                    }
+                }
+
+                // Redis example (requires kodex-ratelimit-redis dependency):
+                // val redisClient = RedisClient.create("redis://localhost:6379")
+                // val circuitBreaker = CircuitBreaker(5, 30.seconds, 3)
+                // rateLimiter(RedisRateLimiter(
+                //     connection = redisClient.connect(),
+                //     keyPrefix = "kodex:ratelimit:",
+                //     circuitBreaker = circuitBreaker,
+                //     fallbackRateLimiter = InMemoryRateLimiter()
+                // ))
 
                 validation {
                     email {

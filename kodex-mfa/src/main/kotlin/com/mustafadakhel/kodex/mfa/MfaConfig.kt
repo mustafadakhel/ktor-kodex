@@ -131,7 +131,8 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
             hashingService = hashingService!!,
             secretEncryption = secretEncryption!!,
             eventBus = context.eventBus,
-            realmId = context.realm.owner
+            realmId = context.realm.owner,
+            rateLimiter = context.rateLimiter
         )
     }
 }

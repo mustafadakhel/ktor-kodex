@@ -166,10 +166,8 @@ internal class DefaultUserService(
     }
 
     override suspend fun deleteUser(userId: UUID): Boolean {
-        // Execute beforeUserDelete hooks (extensions can perform cleanup)
         hookExecutor.executeBeforeUserDelete(userId)
 
-        // Delete user from database
         val result = userRepository.deleteUser(userId)
 
         if (result is UserRepository.DeleteResult.Success) {

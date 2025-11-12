@@ -3,9 +3,9 @@ package com.mustafadakhel.kodex.verification
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.VerificationEvent
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
-import com.mustafadakhel.kodex.tokens.security.RateLimitReservation
-import com.mustafadakhel.kodex.tokens.security.RateLimitResult
-import com.mustafadakhel.kodex.tokens.security.RateLimiter
+import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
+import com.mustafadakhel.kodex.ratelimit.RateLimitResult
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import com.mustafadakhel.kodex.tokens.token.HexFormat
 import com.mustafadakhel.kodex.tokens.token.TokenGenerator
 import com.mustafadakhel.kodex.tokens.token.TokenValidator
@@ -31,10 +31,9 @@ internal class DefaultVerificationService(
     private val config: VerificationConfig,
     private val timeZone: TimeZone,
     private val eventBus: EventBus?,
-    private val realm: String
+    private val realm: String,
+    private val rateLimiter: RateLimiter
 ) : VerificationService {
-
-    private val rateLimiter = RateLimiter()
 
     override suspend fun setContact(userId: UUID, identifier: ContactIdentifier, value: String) {
         kodexTransaction {

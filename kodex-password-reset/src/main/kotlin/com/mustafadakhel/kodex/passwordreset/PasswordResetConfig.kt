@@ -49,10 +49,8 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
         requirePositive(maxAttemptsPerIdentifier, "maxAttemptsPerIdentifier")
         requirePositive(maxAttemptsPerIp, "maxAttemptsPerIp")
 
-        // Validate rate limit window
         requirePositive(rateLimitWindow, "rateLimitWindow")
 
-        // Validate cooldown period (optional, but must be reasonable if provided)
         cooldownPeriod?.let { cooldown ->
             require(cooldown.isPositive()) {
                 "cooldownPeriod must be positive if provided, got: $cooldown"
@@ -98,7 +96,8 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
             passwordResetSender = sender,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.owner
+            realm = context.realm.owner,
+            rateLimiter = context.rateLimiter
         )
         val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.owner)
 

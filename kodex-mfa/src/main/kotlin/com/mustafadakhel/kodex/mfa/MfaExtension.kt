@@ -11,6 +11,7 @@ import com.mustafadakhel.kodex.mfa.database.MfaMethods
 import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import com.mustafadakhel.kodex.service.HashingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,8 @@ public class MfaExtension internal constructor(
     hashingService: HashingService,
     secretEncryption: SecretEncryption,
     eventBus: EventBus,
-    private val realmId: String
+    private val realmId: String,
+    rateLimiter: RateLimiter
 ) : UserLifecycleHooks, PersistentExtension, ServiceProvider {
 
     private val logger = LoggerFactory.getLogger(MfaExtension::class.java)
@@ -42,7 +44,8 @@ public class MfaExtension internal constructor(
         hashingService = hashingService,
         secretEncryption = secretEncryption,
         eventBus = eventBus,
-        realmId = realmId
+        realmId = realmId,
+        rateLimiter = rateLimiter
     )
 
     private val sessionStore = MfaSessionStore(

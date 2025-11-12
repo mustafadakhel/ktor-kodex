@@ -31,6 +31,7 @@ class VerificationConfigTest : FunSpec({
         override val realm = Realm(owner = "test")
         override val timeZone = TimeZone.UTC
         override val eventBus = mockEventBus
+        override val rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
     }
 
     context("Valid configurations") {

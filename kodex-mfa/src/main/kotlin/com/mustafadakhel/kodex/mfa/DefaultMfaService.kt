@@ -10,15 +10,14 @@ import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.encryption.EncryptedSecret
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
 import com.mustafadakhel.kodex.mfa.event.MfaEvent
-import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.mfa.totp.QrCodeGenerator
 import com.mustafadakhel.kodex.mfa.totp.TotpGenerator
 import com.mustafadakhel.kodex.mfa.totp.TotpValidator
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
-import com.mustafadakhel.kodex.tokens.security.RateLimitResult
-import com.mustafadakhel.kodex.tokens.security.RateLimiter
+import com.mustafadakhel.kodex.ratelimit.RateLimitResult
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import com.mustafadakhel.kodex.tokens.token.AlphanumericFormat
 import com.mustafadakhel.kodex.tokens.token.NumericFormat
 import com.mustafadakhel.kodex.tokens.token.TokenGenerator
@@ -39,7 +38,6 @@ import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.minutes
 
 internal class DefaultMfaService(
     private val config: MfaConfig,
@@ -47,10 +45,10 @@ internal class DefaultMfaService(
     private val hashingService: HashingService,
     private val secretEncryption: SecretEncryption,
     private val eventBus: EventBus,
-    private val realmId: String
+    private val realmId: String,
+    private val rateLimiter: RateLimiter
 ) : MfaService {
 
-    private val rateLimiter = RateLimiter()
     private val totpGenerator = TotpGenerator(
         algorithm = config.totpAlgorithm,
         digits = config.totpDigits,

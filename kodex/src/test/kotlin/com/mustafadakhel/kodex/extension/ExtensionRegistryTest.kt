@@ -398,7 +398,8 @@ class ExtensionRegistryTest : DescribeSpec({
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
                 timeZone = kotlinx.datetime.TimeZone.UTC,
-                eventBus = mockEventBus
+                eventBus = mockEventBus,
+                rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
             )
 
             val extension = config.build(context)
@@ -413,7 +414,8 @@ class ExtensionRegistryTest : DescribeSpec({
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("test"),
                 timeZone = kotlinx.datetime.TimeZone.UTC,
-                eventBus = mockEventBus
+                eventBus = mockEventBus,
+                rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
             )
 
             val extension = config.build(context) as? RealmExtension
@@ -435,7 +437,8 @@ class ExtensionRegistryTest : DescribeSpec({
             val context = extensionContext(
                 realm = com.mustafadakhel.kodex.model.Realm("my-realm"),
                 timeZone = kotlinx.datetime.TimeZone.of("America/New_York"),
-                eventBus = mockEventBus
+                eventBus = mockEventBus,
+                rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
             )
 
             val extension = config.build(context)

@@ -4,6 +4,8 @@ include(
     "sample",
     "kodex",
     "kodex-tokens",
+    "kodex-ratelimit-inmemory",
+    "kodex-ratelimit-redis",
     "kodex-validation",
     "kodex-lockout",
     "kodex-audit",

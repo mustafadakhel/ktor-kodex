@@ -244,7 +244,8 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
             config = this,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.owner
+            realm = context.realm.owner,
+            rateLimiter = context.rateLimiter
         )
         val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.owner)
         return VerificationExtension(service, cleanupService, this, context.timeZone)

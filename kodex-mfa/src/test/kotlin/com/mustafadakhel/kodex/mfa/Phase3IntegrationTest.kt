@@ -10,6 +10,7 @@ import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.mfa.totp.TotpAlgorithm
 import com.mustafadakhel.kodex.mfa.totp.TotpGenerator
 import com.mustafadakhel.kodex.model.UserStatus
+import com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.test.TestDatabaseSetup
 import com.mustafadakhel.kodex.throwable.KodexThrowable
@@ -111,7 +112,8 @@ class Phase3IntegrationTest : FunSpec({
             hashingService = hashingService,
             secretEncryption = secretEncryption,
             eventBus = eventBus,
-            realmId = "test-realm"
+            realmId = "test-realm",
+            rateLimiter = InMemoryRateLimiter()
         )
     }
 

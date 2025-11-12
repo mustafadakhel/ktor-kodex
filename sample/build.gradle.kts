@@ -23,4 +23,7 @@ dependencies {
     implementation(project(":kodex-verification"))
     implementation(project(":kodex-password-reset"))
     implementation(project(":kodex-mfa"))
+    implementation(project(":kodex-ratelimit-inmemory"))
+    // Optional: Add Redis rate limiter for distributed deployments
+    // implementation(project(":kodex-ratelimit-redis"))
 }

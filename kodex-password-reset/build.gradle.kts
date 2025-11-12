@@ -53,4 +53,5 @@ dependencies {
     // Test dependencies
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
+    testImplementation(project(":kodex-ratelimit-inmemory"))
 }
