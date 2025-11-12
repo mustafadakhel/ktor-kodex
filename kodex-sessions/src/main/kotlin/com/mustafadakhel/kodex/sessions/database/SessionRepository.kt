@@ -110,13 +110,18 @@ public class SessionRepository(
             .count()
     }
 
-    public fun findOldestActiveSessionId(userId: UUID): UUID? {
+    public fun findOldestActiveSessionId(userId: UUID, excludeSessionId: UUID? = null): UUID? {
         return Sessions
             .select(Sessions.id)
             .where {
-                (Sessions.userId eq userId) and
-                (Sessions.realmId eq realmId) and
-                (Sessions.status eq SessionStatus.ACTIVE)
+                val baseCondition = (Sessions.userId eq userId) and
+                    (Sessions.realmId eq realmId) and
+                    (Sessions.status eq SessionStatus.ACTIVE)
+                if (excludeSessionId != null) {
+                    baseCondition and (Sessions.id neq excludeSessionId)
+                } else {
+                    baseCondition
+                }
             }
             .orderBy(Sessions.createdAt, SortOrder.ASC)
             .limit(1)
