@@ -6,6 +6,7 @@ import com.mustafadakhel.kodex.mfa.database.MfaBackupCodes
 import com.mustafadakhel.kodex.mfa.database.MfaChallenges
 import com.mustafadakhel.kodex.mfa.database.MfaMethodType
 import com.mustafadakhel.kodex.mfa.database.MfaMethods
+import com.mustafadakhel.kodex.mfa.database.MfaTotpUsedCodes
 import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.encryption.EncryptedSecret
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
@@ -28,6 +29,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -38,6 +40,7 @@ import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 internal class DefaultMfaService(
     private val config: MfaConfig,
@@ -730,6 +733,8 @@ internal class DefaultMfaService(
         ipAddress: String?
     ): VerificationResult {
         return ensureMinimumResponseTime(100.milliseconds) {
+            val codeHash = hashingService.hash(code)
+
             val method = kodexTransaction {
                 MfaMethods
                     .selectAll()
@@ -749,6 +754,36 @@ internal class DefaultMfaService(
                 ?: return@ensureMinimumResponseTime VerificationResult.Invalid("No nonce found")
 
             val secret = secretEncryption.decrypt(EncryptedSecret(encryptedSecret, nonce))
+
+            // Check if code has been used recently (replay attack protection)
+            val codeAlreadyUsed = kodexTransaction {
+                MfaTotpUsedCodes
+                    .selectAll()
+                    .where {
+                        (MfaTotpUsedCodes.realmId eq realmId) and
+                        (MfaTotpUsedCodes.userId eq userId) and
+                        (MfaTotpUsedCodes.methodId eq methodId) and
+                        (MfaTotpUsedCodes.codeHash eq codeHash)
+                    }
+                    .count() > 0
+            }
+
+            if (codeAlreadyUsed) {
+                eventBus.publish(MfaEvent.VerificationFailed(
+                    eventId = UUID.randomUUID(),
+                    timestamp = Clock.System.now(),
+                    realmId = realmId,
+                    userId = userId,
+                    methodId = methodId,
+                    challengeId = null,
+                    methodType = MfaMethodType.TOTP,
+                    reason = "Code already used (replay attack detected)",
+                    failureReason = FailureReason.INVALID_CREDENTIALS,
+                    attemptsRemaining = null,
+                    sourceIp = ipAddress
+                ))
+                return@ensureMinimumResponseTime VerificationResult.Invalid("Code already used")
+            }
 
             val isValid = totpValidator.validate(secret, code)
 
@@ -770,10 +805,29 @@ internal class DefaultMfaService(
             }
 
             kodexTransaction {
+                val now = Clock.System.now().toLocalDateTime(timeZone)
+
+                // Record the used code
+                MfaTotpUsedCodes.insert {
+                    it[MfaTotpUsedCodes.realmId] = this@DefaultMfaService.realmId
+                    it[MfaTotpUsedCodes.userId] = userId
+                    it[MfaTotpUsedCodes.methodId] = methodId
+                    it[MfaTotpUsedCodes.codeHash] = codeHash
+                    it[MfaTotpUsedCodes.usedAt] = now
+                }
+
+                // Update last used timestamp
                 MfaMethods.update({
                     (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
                 }) {
-                    it[MfaMethods.lastUsedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                    it[MfaMethods.lastUsedAt] = now
+                }
+
+                // Clean up old used codes (keep only last 3 time windows = 90 seconds with 30s period)
+                val cutoffTime = Clock.System.now().minus(90.seconds).toLocalDateTime(timeZone)
+                MfaTotpUsedCodes.deleteWhere {
+                    (MfaTotpUsedCodes.realmId eq this@DefaultMfaService.realmId) and
+                    (MfaTotpUsedCodes.usedAt less cutoffTime)
                 }
             }
 

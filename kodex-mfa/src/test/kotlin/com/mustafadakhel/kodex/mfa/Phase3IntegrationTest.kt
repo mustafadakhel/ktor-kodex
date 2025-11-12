@@ -55,7 +55,8 @@ class Phase3IntegrationTest : FunSpec({
                 MfaMethods,
                 MfaChallenges,
                 MfaTrustedDevices,
-                MfaBackupCodes
+                MfaBackupCodes,
+                MfaTotpUsedCodes
             )
         }
 

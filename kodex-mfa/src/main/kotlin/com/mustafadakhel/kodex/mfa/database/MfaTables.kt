@@ -64,3 +64,18 @@ internal object MfaBackupCodes : UUIDTable("mfa_backup_codes") {
         index(false, realmId, userId, usedAt)
     }
 }
+
+internal object MfaTotpUsedCodes : UUIDTable("mfa_totp_used_codes") {
+    public val realmId: Column<String> = varchar("realm_id", 50)
+    public val userId: Column<UUID> = uuid("user_id")
+    public val methodId: Column<UUID> = uuid("method_id")
+    public val codeHash: Column<String> = varchar("code_hash", 255)
+    public val usedAt: Column<kotlinx.datetime.LocalDateTime> = datetime("used_at").defaultExpression(CurrentDateTime)
+
+    init {
+        index(false, realmId)
+        index(false, userId, methodId)
+        index(false, realmId, usedAt)
+        uniqueIndex(realmId, userId, methodId, codeHash)
+    }
+}
