@@ -65,7 +65,8 @@ private fun Application.setupAuthentication() {
                 // Rate limiter examples:
                 // - NoOpRateLimiter (default)
                 // - InMemoryRateLimiter (single instance)
-                // - RedisRateLimiter (distributed)
+                // - RedisRateLimiter (distributed, single Redis)
+                // - RedisClusterRateLimiter (distributed, Redis Cluster HA)
                 when (realm) {
                     DefaultRealms.AdminRealm -> {
                         // No rate limiting
@@ -78,11 +79,21 @@ private fun Application.setupAuthentication() {
                     }
                 }
 
-                // Redis example (requires kodex-ratelimit-redis dependency):
+                // Redis standalone example (requires kodex-ratelimit-redis dependency):
                 // val redisClient = RedisClient.create("redis://localhost:6379")
                 // val circuitBreaker = CircuitBreaker(5, 30.seconds, 3)
                 // rateLimiter(RedisRateLimiter(
                 //     connection = redisClient.connect(),
+                //     keyPrefix = "kodex:ratelimit:",
+                //     circuitBreaker = circuitBreaker,
+                //     fallbackRateLimiter = InMemoryRateLimiter()
+                // ))
+
+                // Redis Cluster example (requires kodex-ratelimit-redis dependency):
+                // val clusterClient = RedisClusterClient.create("redis://localhost:7000")
+                // val circuitBreaker = CircuitBreaker(5, 30.seconds, 3)
+                // rateLimiter(RedisClusterRateLimiter(
+                //     connection = clusterClient.connect(),
                 //     keyPrefix = "kodex:ratelimit:",
                 //     circuitBreaker = circuitBreaker,
                 //     fallbackRateLimiter = InMemoryRateLimiter()
