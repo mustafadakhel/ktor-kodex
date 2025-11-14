@@ -28,6 +28,7 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
 
     public var automaticCleanup: Boolean = true
     public var cleanupInterval: Duration = 1.hours
+    public var inactiveEnrollmentExpiration: Duration = 24.hours
     public var defaultTrustedDeviceExpiry: Duration? = 30.days
 
     public var maxEnrollAttemptsPerUser: Int = 3
@@ -111,6 +112,7 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
         require(secretEncryption != null) { "secretEncryption must be configured" }
         require(hashingService != null) { "hashingService must be configured" }
         require(cleanupInterval.inWholeMinutes >= 1) { "cleanupInterval must be at least 1 minute" }
+        require(inactiveEnrollmentExpiration.inWholeHours >= 1) { "inactiveEnrollmentExpiration must be at least 1 hour" }
         defaultTrustedDeviceExpiry?.let { expiry ->
             require(expiry.inWholeHours >= 1) { "defaultTrustedDeviceExpiry must be at least 1 hour if specified" }
         }

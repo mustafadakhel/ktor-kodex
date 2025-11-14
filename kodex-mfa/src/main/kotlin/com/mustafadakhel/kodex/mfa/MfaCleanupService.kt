@@ -1,6 +1,8 @@
 package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.mfa.database.MfaChallenges
+import com.mustafadakhel.kodex.mfa.database.MfaMethodType
+import com.mustafadakhel.kodex.mfa.database.MfaMethods
 import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 import com.mustafadakhel.kodex.util.kodexTransaction
@@ -12,6 +14,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
+import kotlin.time.Duration
 
 public interface MfaCleanupService {
     /**
@@ -36,17 +39,25 @@ public interface MfaCleanupService {
     public suspend fun cleanupExpiredTrustedDevices(): Int
 
     /**
+     * Removes abandoned TOTP enrollments from the database.
+     * Cleans up inactive TOTP methods that have exceeded the enrollment expiration period.
+     * @return Number of abandoned enrollments deleted
+     */
+    public suspend fun cleanupAbandonedEnrollments(): Int
+
+    /**
      * Runs all cleanup operations.
      * This is the recommended method for periodic cleanup tasks.
-     * @return Triple of (challenges deleted, sessions deleted, trusted devices deleted)
+     * @return Quadruple of (challenges deleted, sessions deleted, trusted devices deleted, abandoned enrollments deleted)
      */
-    public suspend fun cleanupAll(): Triple<Int, Int, Int>
+    public suspend fun cleanupAll(): List<Int>
 }
 
 internal class DefaultMfaCleanupService(
     private val realmId: String,
     private val timeZone: TimeZone,
-    private val sessionStore: MfaSessionStore
+    private val sessionStore: MfaSessionStore,
+    private val inactiveEnrollmentExpiration: Duration
 ) : MfaCleanupService {
 
     override suspend fun cleanupExpiredChallenges(): Int {
@@ -75,10 +86,24 @@ internal class DefaultMfaCleanupService(
         }
     }
 
-    override suspend fun cleanupAll(): Triple<Int, Int, Int> {
+    override suspend fun cleanupAbandonedEnrollments(): Int {
+        val cutoffTime = Clock.System.now().minus(inactiveEnrollmentExpiration).toLocalDateTime(timeZone)
+
+        return kodexTransaction {
+            MfaMethods.deleteWhere {
+                (MfaMethods.realmId eq realmId) and
+                (MfaMethods.methodType eq MfaMethodType.TOTP) and
+                (MfaMethods.isActive eq false) and
+                (MfaMethods.enrolledAt less cutoffTime)
+            }
+        }
+    }
+
+    override suspend fun cleanupAll(): List<Int> {
         val challengesDeleted = cleanupExpiredChallenges()
         val sessionsDeleted = cleanupExpiredSessions()
         val trustedDevicesDeleted = cleanupExpiredTrustedDevices()
-        return Triple(challengesDeleted, sessionsDeleted, trustedDevicesDeleted)
+        val abandonedEnrollmentsDeleted = cleanupAbandonedEnrollments()
+        return listOf(challengesDeleted, sessionsDeleted, trustedDevicesDeleted, abandonedEnrollmentsDeleted)
     }
 }

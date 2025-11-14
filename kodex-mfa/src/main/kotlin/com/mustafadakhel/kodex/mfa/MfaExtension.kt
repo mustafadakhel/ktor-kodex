@@ -8,6 +8,7 @@ import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.mfa.database.MfaBackupCodes
 import com.mustafadakhel.kodex.mfa.database.MfaChallenges
 import com.mustafadakhel.kodex.mfa.database.MfaMethods
+import com.mustafadakhel.kodex.mfa.database.MfaTotpUsedCodes
 import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
@@ -56,7 +57,8 @@ public class MfaExtension internal constructor(
     private val cleanupService: MfaCleanupService = DefaultMfaCleanupService(
         realmId = realmId,
         timeZone = timeZone,
-        sessionStore = sessionStore
+        sessionStore = sessionStore,
+        inactiveEnrollmentExpiration = config.inactiveEnrollmentExpiration
     )
 
     private val cleanupScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -74,7 +76,8 @@ public class MfaExtension internal constructor(
         MfaMethods,
         MfaChallenges,
         MfaBackupCodes,
-        MfaTrustedDevices
+        MfaTrustedDevices,
+        MfaTotpUsedCodes
     )
 
     override suspend fun afterAuthentication(user: AuthenticatedUser) {
