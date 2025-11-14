@@ -38,10 +38,13 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
     public var maxChallengeAttemptsPerContact: Int = 3
     public var maxChallengeAttemptsPerIp: Int = 10
     public var maxVerifyAttempts: Int = 5
+    public var maxBackupCodeAttemptsPerUser: Int = 10
+    public var maxBackupCodeAttemptsPerIp: Int = 15
 
     public var enrollRateLimitWindow: Duration = 15.minutes
     public var challengeRateLimitWindow: Duration = 15.minutes
     public var verifyRateLimitWindow: Duration = 5.minutes
+    public var backupCodeRateLimitWindow: Duration = 5.minutes
     public var enrollCooldownPeriod: Duration = 30.seconds
     public var challengeCooldownPeriod: Duration = 30.seconds
 

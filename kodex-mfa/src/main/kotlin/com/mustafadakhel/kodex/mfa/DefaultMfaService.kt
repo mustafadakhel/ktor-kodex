@@ -957,6 +957,14 @@ internal class DefaultMfaService(
     }
 
     override suspend fun generateBackupCodes(userId: UUID): List<String> {
+        // Verify user has at least one active MFA method
+        if (!hasAnyMethod(userId)) {
+            throw KodexThrowable.Authorization.InsufficientPermissions(
+                requiredRole = "MFA_ENROLLED",
+                userId = userId
+            )
+        }
+
         val codes = mutableListOf<String>()
 
         kodexTransaction {
@@ -1000,6 +1008,39 @@ internal class DefaultMfaService(
         ipAddress: String?
     ): VerificationResult {
         return ensureMinimumResponseTime(100.milliseconds) {
+            // Check rate limits for backup code verification
+            val userLimit = rateLimiter.checkLimit(
+                key = "mfa:backup_code_verify:user:$userId",
+                limit = config.maxBackupCodeAttemptsPerUser,
+                window = config.backupCodeRateLimitWindow
+            )
+
+            if (userLimit !is RateLimitResult.Allowed) {
+                val reason = when (userLimit) {
+                    is RateLimitResult.Exceeded -> userLimit.reason
+                    is RateLimitResult.Cooldown -> userLimit.reason
+                    else -> "Rate limit exceeded"
+                }
+                return@ensureMinimumResponseTime VerificationResult.RateLimitExceeded(reason)
+            }
+
+            val ipLimit = ipAddress?.let { ip ->
+                rateLimiter.checkLimit(
+                    key = "mfa:backup_code_verify:ip:$ip",
+                    limit = config.maxBackupCodeAttemptsPerIp,
+                    window = config.backupCodeRateLimitWindow
+                )
+            }
+
+            if (ipLimit != null && ipLimit !is RateLimitResult.Allowed) {
+                val reason = when (ipLimit) {
+                    is RateLimitResult.Exceeded -> ipLimit.reason
+                    is RateLimitResult.Cooldown -> ipLimit.reason
+                    else -> "Rate limit exceeded for IP address"
+                }
+                return@ensureMinimumResponseTime VerificationResult.RateLimitExceeded(reason)
+            }
+
             val backupCodes = kodexTransaction {
                 MfaBackupCodes
                     .selectAll()
