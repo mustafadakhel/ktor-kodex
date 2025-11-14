@@ -7,7 +7,7 @@ import java.util.UUID
 /**
  * Generates device fingerprints for trusted device recognition using IP address and user agent.
  */
-public object DeviceFingerprint {
+internal object DeviceFingerprint {
 
     /**
      * Generates a device fingerprint from IP address and user agent.
@@ -19,7 +19,7 @@ public object DeviceFingerprint {
      * @param userAgent The client user agent string (optional)
      * @return A base64-encoded SHA-256 hash of the device characteristics
      */
-    public fun generate(
+    fun generate(
         ipAddress: String?,
         userAgent: String?
     ): String {

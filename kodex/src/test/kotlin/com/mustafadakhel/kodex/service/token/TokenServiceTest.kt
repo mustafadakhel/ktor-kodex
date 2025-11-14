@@ -39,13 +39,15 @@ class TokenServiceTest : FunSpec({
             access = "access-token",
             refresh = "refresh-token"
         )
+        val tokenFamily = UUID.randomUUID()
+        val result = com.mustafadakhel.kodex.token.TokenPairWithFamily(expectedTokenPair, tokenFamily)
 
-        coEvery { tokenManager.issueNewTokens(userId) } returns expectedTokenPair
+        coEvery { tokenManager.issueNewTokensWithFamily(userId) } returns result
 
-        val result = tokenService.issue(userId)
+        val actual = tokenService.issue(userId)
 
-        result shouldBe expectedTokenPair
-        coVerify(exactly = 1) { tokenManager.issueNewTokens(userId) }
+        actual shouldBe expectedTokenPair
+        coVerify(exactly = 1) { tokenManager.issueNewTokensWithFamily(userId) }
     }
 
     test("refresh should delegate to TokenManager.refreshTokens") {
@@ -55,13 +57,15 @@ class TokenServiceTest : FunSpec({
             access = "new-access-token",
             refresh = "new-refresh-token"
         )
+        val tokenFamily = UUID.randomUUID()
+        val result = com.mustafadakhel.kodex.token.TokenPairWithFamily(expectedTokenPair, tokenFamily)
 
-        coEvery { tokenManager.refreshTokens(userId, refreshToken) } returns expectedTokenPair
+        coEvery { tokenManager.refreshTokensWithFamily(userId, refreshToken) } returns result
 
-        val result = tokenService.refresh(userId, refreshToken)
+        val actual = tokenService.refresh(userId, refreshToken)
 
-        result shouldBe expectedTokenPair
-        coVerify(exactly = 1) { tokenManager.refreshTokens(userId, refreshToken) }
+        actual shouldBe expectedTokenPair
+        coVerify(exactly = 1) { tokenManager.refreshTokensWithFamily(userId, refreshToken) }
     }
 
     test("revokeTokens should delegate to TokenManager.revokeTokensForUser") {

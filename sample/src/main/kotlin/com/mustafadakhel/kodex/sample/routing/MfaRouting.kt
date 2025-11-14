@@ -15,6 +15,66 @@ import java.util.UUID
 
 fun Application.setupMfaRouting() = routing {
     DefaultRealms.forEach { realm ->
+        // Public MFA verification endpoint (no authentication required)
+        route("/${realm.owner}/mfa") {
+            post("/verify") {
+                val mfaService = call.extensionService<MfaService>(realm)
+                    ?: return@post call.respondText("MFA not configured", status = HttpStatusCode.InternalServerError)
+
+                val params = call.receiveParameters()
+                val sessionId = params["sessionId"] ?: return@post call.respondText(
+                    "Missing sessionId",
+                    status = HttpStatusCode.BadRequest
+                )
+                val code = params["code"] ?: return@post call.respondText(
+                    "Missing code",
+                    status = HttpStatusCode.BadRequest
+                )
+                val methodId = params["methodId"]?.let {
+                    try {
+                        UUID.fromString(it)
+                    } catch (e: IllegalArgumentException) {
+                        return@post call.respondText("Invalid methodId format", status = HttpStatusCode.BadRequest)
+                    }
+                }
+
+                try {
+                    val result = mfaService.verifyMfaSession(sessionId, code, methodId)
+                    when (result) {
+                        is com.mustafadakhel.kodex.mfa.VerificationResult.Success -> {
+                            call.respond(
+                                HttpStatusCode.OK,
+                                mapOf(
+                                    "success" to true,
+                                    "message" to "MFA verified successfully. Device has been trusted. Please login again."
+                                )
+                            )
+                        }
+                        is com.mustafadakhel.kodex.mfa.VerificationResult.Invalid -> {
+                            call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("success" to false, "error" to result.reason)
+                            )
+                        }
+                        is com.mustafadakhel.kodex.mfa.VerificationResult.Expired -> {
+                            call.respond(
+                                HttpStatusCode.Unauthorized,
+                                mapOf("success" to false, "error" to result.reason)
+                            )
+                        }
+                        is com.mustafadakhel.kodex.mfa.VerificationResult.RateLimitExceeded -> {
+                            call.respond(
+                                HttpStatusCode.TooManyRequests,
+                                mapOf("success" to false, "error" to result.reason)
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    call.respondText("Verification failed: ${e.message}", status = HttpStatusCode.InternalServerError)
+                }
+            }
+        }
+
         authenticateFor(realm) {
             authorizedRoute("/${realm.owner}/mfa", KodexId) {
                 post("/enroll/email") { userId: UUID ->

@@ -61,11 +61,15 @@ public interface UserLifecycleHooks : RealmExtension {
     }
 
     /** Called after successful authentication, before token generation. Extensions can check user state and throw to block login. */
-    public suspend fun afterAuthentication(user: AuthenticatedUser) {
+    public suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
     }
 
     /** Called before user deletion. Extensions can perform cleanup (e.g., anonymize audit logs). */
     public suspend fun beforeUserDelete(userId: UUID) {
+    }
+
+    /** Called after user logout. Extensions can perform cleanup (e.g., session tracking). */
+    public suspend fun afterLogout(userId: UUID, tokenFamily: UUID?, metadata: LogoutMetadata) {
     }
 }
 
@@ -99,4 +103,10 @@ public data class AuthenticatedUser(
     val phone: String?,
     val roles: List<String>,
     val status: UserStatus
+)
+
+public data class LogoutMetadata(
+    val ipAddress: String,
+    val userAgent: String?,
+    val reason: String = "user_initiated"
 )

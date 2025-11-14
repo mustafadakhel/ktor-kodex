@@ -77,7 +77,7 @@ public class VerificationExtension internal constructor(
         // No action needed for verification
     }
 
-    override suspend fun afterAuthentication(user: AuthenticatedUser) {
+    override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
         if (!verificationService.canLogin(user.userId)) {
             throw VerificationThrowable.UnverifiedAccount
         }

@@ -7,7 +7,9 @@ import java.util.*
 
 internal interface TokenManager {
     suspend fun issueNewTokens(userId: UUID): TokenPair
+    suspend fun issueNewTokensWithFamily(userId: UUID): TokenPairWithFamily
     suspend fun refreshTokens(userId: UUID, refreshToken: String): TokenPair
+    suspend fun refreshTokensWithFamily(userId: UUID, refreshToken: String): TokenPairWithFamily
     fun verifyToken(
         token: DecodedJWT,
         expectedType: TokenType,

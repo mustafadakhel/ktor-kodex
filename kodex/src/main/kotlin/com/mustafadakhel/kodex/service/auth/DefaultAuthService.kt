@@ -184,7 +184,7 @@ internal class DefaultAuthService(
             roles = userRoles.map { it.name },
             status = user.status
         )
-        hookExecutor.executeAfterAuthentication(authenticatedUser)
+        hookExecutor.executeAfterAuthentication(authenticatedUser, metadata)
 
         userRepository.updateLastLogin(user.id, nowLocal(timeZone))
 
@@ -199,7 +199,7 @@ internal class DefaultAuthService(
             )
         )
 
-        return generateTokenInternal(user.id)
+        return generateTokenInternal(user.id, ipAddress, userAgent)
     }
 
     private fun authenticateInternal(password: String, userId: UUID): Boolean {
@@ -207,7 +207,7 @@ internal class DefaultAuthService(
         return hashingService.verify(password, storedPassword)
     }
 
-    private suspend fun generateTokenInternal(userId: UUID): TokenPair {
-        return tokenService.issue(userId)
+    private suspend fun generateTokenInternal(userId: UUID, sourceIp: String? = null, userAgent: String? = null): TokenPair {
+        return tokenService.issue(userId, sourceIp, userAgent)
     }
 }

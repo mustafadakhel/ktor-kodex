@@ -13,4 +13,5 @@ include(
     "kodex-verification",
     "kodex-password-reset",
     "kodex-mfa",
+    "kodex-sessions",
 )

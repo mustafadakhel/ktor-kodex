@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.sample.routing
 
 import com.mustafadakhel.kodex.kodex
+import com.mustafadakhel.kodex.mfa.MfaThrowable
 import com.mustafadakhel.kodex.sample.DefaultRealms
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.verification.VerificationThrowable
@@ -58,6 +59,26 @@ fun Application.setupAuthRouting() = routing {
                         else -> throw KodexThrowable.Authorization.InvalidCredentials
                     }
                     call.respond(tokenPair)
+                } catch (e: MfaThrowable.MfaRequired) {
+                    // MFA is required - return session ID and available methods
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        mapOf(
+                            "error" to "mfa_required",
+                            "message" to "MFA verification required",
+                            "mfaSessionId" to e.sessionId,
+                            "availableMethods" to e.availableMethods
+                        )
+                    )
+                } catch (e: MfaThrowable.MfaEnrollmentRequired) {
+                    // User needs to enroll in MFA first
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        mapOf(
+                            "error" to "mfa_enrollment_required",
+                            "message" to e.message
+                        )
+                    )
                 } catch (e: KodexThrowable.Authorization.InvalidCredentials) {
                     call.respondText("Invalid credentials", status = HttpStatusCode.Unauthorized)
                 } catch (e: VerificationThrowable.UnverifiedAccount) {
@@ -76,8 +97,11 @@ fun Application.setupAuthRouting() = routing {
                     )
 
                 try {
+                    val ipAddress = call.request.local.remoteHost
+                    val userAgent = call.request.userAgent()
+
                     val user = services.users.getUserByEmail(email)
-                    val newTokens = services.tokens.refresh(user.id, refreshToken)
+                    val newTokens = services.tokens.refresh(user.id, refreshToken, ipAddress, userAgent)
                     call.respond(newTokens)
                 } catch (e: Throwable) {
                     call.respondText("Unable to refresh token", status = HttpStatusCode.Unauthorized)

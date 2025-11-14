@@ -53,7 +53,7 @@ public class AccountLockoutExtension internal constructor(
         return identifier
     }
 
-    override suspend fun afterAuthentication(user: AuthenticatedUser) {
+    override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
         // Layer 2: Check if account is locked or should be locked
         val nowLocal = now(timeZone)
 

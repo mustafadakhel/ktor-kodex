@@ -60,6 +60,12 @@ public interface MfaService {
         ipAddress: String?
     ): VerificationResult
 
+    public suspend fun verifyMfaSession(
+        sessionId: String,
+        code: String,
+        methodId: UUID? = null
+    ): VerificationResult
+
     public fun hasAnyMethod(userId: UUID): Boolean
 
     public fun isMfaRequired(userId: UUID): Boolean

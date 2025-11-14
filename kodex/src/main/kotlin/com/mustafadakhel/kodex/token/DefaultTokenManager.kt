@@ -42,6 +42,10 @@ internal class DefaultTokenManager(
     private val eventBus: EventBus
 ) : TokenManager {
     override suspend fun issueNewTokens(userId: UUID): TokenPair {
+        return issueNewTokensWithFamily(userId).tokenPair
+    }
+
+    override suspend fun issueNewTokensWithFamily(userId: UUID): TokenPairWithFamily {
         val roles = userRepository.findRoles(userId).map { it.name }
         val tokenFamily = UUID.randomUUID()
         val accessToken = issueToken(
@@ -58,7 +62,10 @@ internal class DefaultTokenManager(
             tokenFamily = tokenFamily,
             roles = roles
         )
-        return TokenPair(accessToken.token, refreshToken.token)
+        return TokenPairWithFamily(
+            tokenPair = TokenPair(accessToken.token, refreshToken.token),
+            tokenFamily = tokenFamily
+        )
     }
 
     private suspend fun issueToken(
@@ -95,14 +102,22 @@ internal class DefaultTokenManager(
     }
 
     override suspend fun refreshTokens(userId: UUID, refreshToken: String): TokenPair {
+        return refreshTokensWithFamily(userId, refreshToken).tokenPair
+    }
+
+    override suspend fun refreshTokensWithFamily(userId: UUID, refreshToken: String): TokenPairWithFamily {
         return if (tokenRotationPolicy.enabled) {
-            refreshWithRotation(userId, refreshToken)
+            refreshWithRotationWithFamily(userId, refreshToken)
         } else {
-            refreshWithoutRotation(userId, refreshToken)
+            refreshWithoutRotationWithFamily(userId, refreshToken)
         }
     }
 
     private suspend fun refreshWithoutRotation(userId: UUID, refreshToken: String): TokenPair {
+        return refreshWithoutRotationWithFamily(userId, refreshToken).tokenPair
+    }
+
+    private suspend fun refreshWithoutRotationWithFamily(userId: UUID, refreshToken: String): TokenPairWithFamily {
         val decodedJWT = JWT.decode(refreshToken)
         verifyToken(decodedJWT, TokenType.RefreshToken)
         val credential = JWTCredential(decodedJWT)
@@ -117,10 +132,14 @@ internal class DefaultTokenManager(
         }
 
         tokenRepository.deleteToken(tokenId)
-        return issueNewTokens(userId)
+        return issueNewTokensWithFamily(userId)
     }
 
     private suspend fun refreshWithRotation(userId: UUID, refreshToken: String): TokenPair {
+        return refreshWithRotationWithFamily(userId, refreshToken).tokenPair
+    }
+
+    private suspend fun refreshWithRotationWithFamily(userId: UUID, refreshToken: String): TokenPairWithFamily {
         val clockNow = CurrentKotlinInstant
         val now = clockNow.toLocalDateTime(timeZone)
 
@@ -176,9 +195,12 @@ internal class DefaultTokenManager(
         val newAccessToken = issueToken(userId, tokenValidity.access, TokenType.AccessToken, tokenFamily, null)
         val newRefreshToken = issueToken(userId, tokenValidity.refresh, TokenType.RefreshToken, tokenFamily, tokenId)
 
-        return TokenPair(
-            access = newAccessToken.token,
-            refresh = newRefreshToken.token
+        return TokenPairWithFamily(
+            tokenPair = TokenPair(
+                access = newAccessToken.token,
+                refresh = newRefreshToken.token
+            ),
+            tokenFamily = tokenFamily
         )
     }
 

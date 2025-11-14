@@ -89,9 +89,9 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findRoles(testUserId) } returns emptyList()
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
-        coEvery { hookExecutor.executeAfterAuthentication(any()) } returns Unit
+        coEvery { hookExecutor.executeAfterAuthentication(any(), any()) } returns Unit
         every { userRepository.updateLastLogin(testUserId, any()) } returns true
-        coEvery { tokenService.issue(testUserId) } returns testTokenPair
+        coEvery { tokenService.issue(testUserId, any(), any()) } returns testTokenPair
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         val result = authService.login(testEmail, testPassword, testIpAddress, testUserAgent)
@@ -101,7 +101,7 @@ class AuthServiceTest : FunSpec({
         verify(exactly = 1) { userRepository.findByEmail(testEmail) }
         verify(exactly = 1) { hashingService.verify(testPassword, testHashedPassword) }
         verify(exactly = 1) { userRepository.updateLastLogin(testUserId, any()) }
-        coVerify(exactly = 1) { tokenService.issue(testUserId) }
+        coVerify(exactly = 1) { tokenService.issue(testUserId, any(), any()) }
 
         eventSlot.captured.apply {
             userId shouldBe testUserId
@@ -168,9 +168,9 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findRoles(testUserId) } returns emptyList()
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
-        coEvery { hookExecutor.executeAfterAuthentication(any()) } returns Unit
+        coEvery { hookExecutor.executeAfterAuthentication(any(), any()) } returns Unit
         every { userRepository.updateLastLogin(testUserId, any()) } returns true
-        coEvery { tokenService.issue(testUserId) } returns testTokenPair
+        coEvery { tokenService.issue(testUserId, any(), any()) } returns testTokenPair
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         val result = authService.loginByPhone(testPhone, testPassword, testIpAddress, testUserAgent)

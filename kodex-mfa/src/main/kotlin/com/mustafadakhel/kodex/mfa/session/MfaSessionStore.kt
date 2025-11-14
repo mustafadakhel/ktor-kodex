@@ -13,7 +13,9 @@ public data class PendingMfaSession(
     val createdAt: Instant,
     val expiresAt: Instant,
     val ipAddress: String?,
-    val userAgent: String?
+    val userAgent: String?,
+    val verified: Boolean = false,
+    val verifiedAt: Instant? = null
 )
 
 public class MfaSessionStore(
@@ -61,6 +63,21 @@ public class MfaSessionStore(
     public fun removeSession(sessionId: String) {
         val session = sessions.remove(sessionId)
         session?.let { userSessions[it.userId]?.remove(sessionId) }
+    }
+
+    public fun markAsVerified(sessionId: String): Boolean {
+        val session = sessions[sessionId] ?: return false
+        if (session.isExpired()) {
+            removeSession(sessionId)
+            return false
+        }
+
+        val verifiedSession = session.copy(
+            verified = true,
+            verifiedAt = Clock.System.now()
+        )
+        sessions[sessionId] = verifiedSession
+        return true
     }
 
     private fun enforceLimits(userId: UUID) {

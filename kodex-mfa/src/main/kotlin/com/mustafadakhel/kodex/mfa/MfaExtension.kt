@@ -39,6 +39,11 @@ public class MfaExtension internal constructor(
 
     private val logger = LoggerFactory.getLogger(MfaExtension::class.java)
 
+    private val sessionStore = MfaSessionStore(
+        sessionExpiration = config.sessionExpiration,
+        maxActiveSessions = config.maxActiveSessions
+    )
+
     private val mfaService: MfaService = DefaultMfaService(
         config = config,
         timeZone = timeZone,
@@ -46,12 +51,8 @@ public class MfaExtension internal constructor(
         secretEncryption = secretEncryption,
         eventBus = eventBus,
         realmId = realmId,
-        rateLimiter = rateLimiter
-    )
-
-    private val sessionStore = MfaSessionStore(
-        sessionExpiration = config.sessionExpiration,
-        maxActiveSessions = config.maxActiveSessions
+        rateLimiter = rateLimiter,
+        sessionStore = sessionStore
     )
 
     private val cleanupService: MfaCleanupService = DefaultMfaCleanupService(
@@ -80,7 +81,12 @@ public class MfaExtension internal constructor(
         MfaTotpUsedCodes
     )
 
-    override suspend fun afterAuthentication(user: AuthenticatedUser) {
+    override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: com.mustafadakhel.kodex.extension.LoginMetadata) {
+        // Check device trust (automatic)
+        if (mfaService.isDeviceTrusted(user.userId, metadata.ipAddress, metadata.userAgent)) {
+            return  // Trusted device, skip MFA
+        }
+
         // Check if MFA is required (global or role-based)
         val requiresMfa = if (config.requiredRolesForMfa.isNotEmpty()) {
             // Role-based enforcement
@@ -94,6 +100,7 @@ public class MfaExtension internal constructor(
             return
         }
 
+        // Ensure user has enrolled MFA methods
         val methods = mfaService.getMethods(user.userId)
         if (methods.isEmpty()) {
             throw MfaThrowable.MfaEnrollmentRequired(
@@ -101,17 +108,11 @@ public class MfaExtension internal constructor(
             )
         }
 
-        if (!mfaService.isMfaRequired(user.userId)) {
-            return
-        }
-
-        // Note: Trusted device checking is not possible here because this hook lacks request context
-        // (IP address, user agent). Implement trusted device checks at the route/endpoint level.
-
+        // Create MFA session and throw challenge
         val session = sessionStore.createSession(
             userId = user.userId,
-            ipAddress = null,
-            userAgent = null
+            ipAddress = metadata.ipAddress,
+            userAgent = metadata.userAgent
         )
 
         throw MfaThrowable.MfaRequired(

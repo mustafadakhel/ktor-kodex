@@ -23,10 +23,10 @@ internal class DefaultTokenService(
     private val realm: Realm
 ) : TokenService {
 
-    override suspend fun issue(userId: UUID): TokenPair {
-        val result = tokenManager.issueNewTokens(userId)
+    override suspend fun issue(userId: UUID, sourceIp: String?, userAgent: String?): TokenPair {
+        val result = tokenManager.issueNewTokensWithFamily(userId)
 
-        val accessTokenId = extractTokenId(result.access)
+        val accessTokenId = extractTokenId(result.tokenPair.access)
 
         eventBus.publish(
             TokenEvent.Issued(
@@ -34,18 +34,21 @@ internal class DefaultTokenService(
                 timestamp = CurrentKotlinInstant,
                 realmId = realm.owner,
                 userId = userId,
-                tokenId = accessTokenId
+                tokenId = accessTokenId,
+                tokenFamily = result.tokenFamily,
+                sourceIp = sourceIp,
+                userAgent = userAgent
             )
         )
 
-        return result
+        return result.tokenPair
     }
 
-    override suspend fun refresh(userId: UUID, refreshToken: String): TokenPair {
+    override suspend fun refresh(userId: UUID, refreshToken: String, sourceIp: String?, userAgent: String?): TokenPair {
         return try {
             val oldTokenId = extractTokenId(refreshToken)
-            val result = tokenManager.refreshTokens(userId, refreshToken)
-            val newTokenId = extractTokenId(result.access)
+            val result = tokenManager.refreshTokensWithFamily(userId, refreshToken)
+            val newTokenId = extractTokenId(result.tokenPair.access)
 
             eventBus.publish(
                 TokenEvent.Refreshed(
@@ -54,11 +57,14 @@ internal class DefaultTokenService(
                     realmId = realm.owner,
                     userId = userId,
                     oldTokenId = oldTokenId,
-                    newTokenId = newTokenId
+                    newTokenId = newTokenId,
+                    tokenFamily = result.tokenFamily,
+                    sourceIp = sourceIp,
+                    userAgent = userAgent
                 )
             )
 
-            result
+            result.tokenPair
         } catch (e: Exception) {
             eventBus.publish(
                 TokenEvent.RefreshFailed(

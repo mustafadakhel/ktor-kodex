@@ -29,6 +29,8 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
     public var automaticCleanup: Boolean = true
     public var cleanupInterval: Duration = 1.hours
     public var inactiveEnrollmentExpiration: Duration = 24.hours
+
+    public var autoTrustDeviceAfterVerification: Boolean = true
     public var defaultTrustedDeviceExpiry: Duration? = 30.days
 
     public var maxEnrollAttemptsPerUser: Int = 3

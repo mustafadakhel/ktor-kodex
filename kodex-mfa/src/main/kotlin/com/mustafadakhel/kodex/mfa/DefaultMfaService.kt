@@ -50,7 +50,8 @@ internal class DefaultMfaService(
     private val secretEncryption: SecretEncryption,
     private val eventBus: EventBus,
     private val realmId: String,
-    private val rateLimiter: RateLimiter
+    private val rateLimiter: RateLimiter,
+    private val sessionStore: com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 ) : MfaService {
 
     private val totpGenerator = TotpGenerator(
@@ -1094,6 +1095,51 @@ internal class DefaultMfaService(
 
             VerificationResult.Invalid("Invalid backup code")
         }
+    }
+
+    override suspend fun verifyMfaSession(
+        sessionId: String,
+        code: String,
+        methodId: UUID?
+    ): VerificationResult {
+        // Get MFA session
+        val session = sessionStore.getSession(sessionId)
+            ?: return VerificationResult.Invalid("Invalid or expired MFA session")
+
+        // Determine verification method and verify code
+        val result = when {
+            // TOTP verification (requires methodId)
+            methodId != null -> verifyTotp(session.userId, methodId, code, session.ipAddress)
+
+            // Backup code verification (code length matches backup code length)
+            code.length == config.backupCodeLength ->
+                verifyBackupCode(session.userId, code, session.ipAddress)
+
+            // Invalid - no method ID provided and code is not a backup code
+            else -> VerificationResult.Invalid("Invalid verification method or code")
+        }
+
+        // If verification successful, mark session as verified and auto-trust device
+        if (result is VerificationResult.Success) {
+            sessionStore.markAsVerified(sessionId)
+
+            // Auto-trust device if enabled
+            if (config.autoTrustDeviceAfterVerification &&
+                session.ipAddress != null &&
+                session.userAgent != null) {
+
+                val expiresInDays = config.defaultTrustedDeviceExpiry?.inWholeDays?.toInt()
+                trustDevice(
+                    userId = session.userId,
+                    ipAddress = session.ipAddress,
+                    userAgent = session.userAgent,
+                    deviceName = null,
+                    expiresInDays = expiresInDays
+                )
+            }
+        }
+
+        return result
     }
 
     override fun hasAnyMethod(userId: UUID): Boolean {

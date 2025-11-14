@@ -107,6 +107,8 @@ class Phase3IntegrationTest : FunSpec({
             override fun shutdown() {}
         }
 
+        val sessionStore = com.mustafadakhel.kodex.mfa.session.MfaSessionStore()
+
         mfaService = DefaultMfaService(
             config = config,
             timeZone = TimeZone.UTC,
@@ -114,7 +116,8 @@ class Phase3IntegrationTest : FunSpec({
             secretEncryption = secretEncryption,
             eventBus = eventBus,
             realmId = "test-realm",
-            rateLimiter = InMemoryRateLimiter()
+            rateLimiter = InMemoryRateLimiter(),
+            sessionStore = sessionStore
         )
     }
 

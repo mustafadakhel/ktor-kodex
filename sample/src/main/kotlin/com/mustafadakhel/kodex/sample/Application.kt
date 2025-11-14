@@ -10,6 +10,9 @@ import com.mustafadakhel.kodex.mfa.mfa
 import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.passwordreset.passwordReset
+import com.mustafadakhel.kodex.sessions.anomalyDetection
+import com.mustafadakhel.kodex.sessions.geoLocation
+import com.mustafadakhel.kodex.sessions.sessions
 import com.mustafadakhel.kodex.passwordreset.PasswordResetSender
 import com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter
 import com.mustafadakhel.kodex.sample.routing.setupAuthRouting
@@ -187,6 +190,24 @@ private fun Application.setupAuthentication() {
                         )
                     }
                 }
+
+                sessions {
+                    maxConcurrentSessions = 5
+                    sessionExpiration = 30.hours
+                    sessionHistoryRetention = 90.hours
+                    cleanupInterval = 1.hours
+
+                    anomalyDetection {
+                        enabled = true
+                        detectNewDevice = true
+                        detectNewLocation = true
+                        locationRadiusKm = 100.0
+                    }
+
+                    geoLocation {
+                        enabled = true
+                    }
+                }
             }
         }
     }
@@ -195,4 +216,13 @@ private fun Application.setupAuthentication() {
     setupMfaRouting()
     setupVerificationRouting()
     setupPasswordResetRouting()
+    // Session routes can be added similarly using call.extensionService<SessionService>(realm)
+
+    // Note: For production, add shutdown hooks to properly cleanup resources:
+    // environment.monitor.subscribe(ApplicationStopped) {
+    //     DefaultRealms.forEach { realm ->
+    //         kodex.servicesOf(realm).extensions.get(SessionExtension::class)?.shutdown()
+    //         kodex.servicesOf(realm).extensions.get(MfaExtension::class)?.shutdown()
+    //     }
+    // }
 }
