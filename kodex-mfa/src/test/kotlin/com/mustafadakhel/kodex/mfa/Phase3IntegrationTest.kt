@@ -138,15 +138,16 @@ class Phase3IntegrationTest : FunSpec({
     context("Trusted Devices") {
 
         test("should trust a device with expiration") {
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
+            val ipAddress = "192.168.1.1"
+            val userAgent = "Mozilla/5.0"
             val deviceName = "Chrome on Windows"
+            val expectedFingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
 
             val deviceId = mfaService.trustDevice(
                 userId = testUserId,
-                deviceFingerprint = fingerprint,
+                ipAddress = ipAddress,
+                userAgent = userAgent,
                 deviceName = deviceName,
-                ipAddress = "192.168.1.1",
-                userAgent = "Mozilla/5.0",
                 expiresInDays = 30
             )
 
@@ -154,43 +155,44 @@ class Phase3IntegrationTest : FunSpec({
 
             val devices = mfaService.getTrustedDevices(testUserId)
             devices shouldHaveSize 1
-            devices[0].deviceFingerprint shouldBe fingerprint
+            devices[0].deviceFingerprint shouldBe expectedFingerprint
             devices[0].deviceName shouldBe deviceName
             devices[0].expiresAt shouldNotBe null
         }
 
         test("should check if device is trusted") {
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
+            val ipAddress = "192.168.1.1"
+            val userAgent = "Mozilla/5.0"
 
             mfaService.trustDevice(
                 userId = testUserId,
-                deviceFingerprint = fingerprint,
+                ipAddress = ipAddress,
+                userAgent = userAgent,
                 deviceName = "Test Device",
-                ipAddress = "192.168.1.1",
-                userAgent = "Mozilla/5.0",
                 expiresInDays = 30
             )
 
-            val isTrusted = mfaService.isDeviceTrusted(testUserId, fingerprint)
+            val isTrusted = mfaService.isDeviceTrusted(testUserId, ipAddress, userAgent)
             isTrusted shouldBe true
         }
 
         test("should return false for untrusted device") {
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
+            val ipAddress = "192.168.1.1"
+            val userAgent = "Mozilla/5.0"
 
-            val isTrusted = mfaService.isDeviceTrusted(testUserId, fingerprint)
+            val isTrusted = mfaService.isDeviceTrusted(testUserId, ipAddress, userAgent)
             isTrusted shouldBe false
         }
 
         test("should update last used timestamp when checking trusted device") {
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
+            val ipAddress = "192.168.1.1"
+            val userAgent = "Mozilla/5.0"
 
             val deviceId = mfaService.trustDevice(
                 userId = testUserId,
-                deviceFingerprint = fingerprint,
+                ipAddress = ipAddress,
+                userAgent = userAgent,
                 deviceName = "Test Device",
-                ipAddress = "192.168.1.1",
-                userAgent = "Mozilla/5.0",
                 expiresInDays = 30
             )
 
@@ -198,14 +200,16 @@ class Phase3IntegrationTest : FunSpec({
             devices1[0].lastUsedAt shouldBe null
 
             delay(10.milliseconds)
-            mfaService.isDeviceTrusted(testUserId, fingerprint)
+            mfaService.isDeviceTrusted(testUserId, ipAddress, userAgent)
 
             val devices2 = mfaService.getTrustedDevices(testUserId)
             devices2[0].lastUsedAt shouldNotBe null
         }
 
         test("should return false for expired device") {
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
+            val ipAddress = "192.168.1.1"
+            val userAgent = "Mozilla/5.0"
+            val fingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
 
             // Trust device with very short expiration (simulated via direct DB insert)
             kodexTransaction {
@@ -218,27 +222,27 @@ class Phase3IntegrationTest : FunSpec({
                     it[userId] = testUserId
                     it[deviceFingerprint] = fingerprint
                     it[deviceName] = "Expired Device"
-                    it[ipAddress] = "192.168.1.1"
-                    it[userAgent] = "Mozilla/5.0"
+                    it[MfaTrustedDevices.ipAddress] = ipAddress
+                    it[MfaTrustedDevices.userAgent] = userAgent
                     it[trustedAt] = now
                     it[lastUsedAt] = null
                     it[expiresAt] = expiredTime
                 }
             }
 
-            val isTrusted = mfaService.isDeviceTrusted(testUserId, fingerprint)
+            val isTrusted = mfaService.isDeviceTrusted(testUserId, ipAddress, userAgent)
             isTrusted shouldBe false
         }
 
         test("should remove specific trusted device") {
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
+            val ipAddress = "192.168.1.1"
+            val userAgent = "Mozilla/5.0"
 
             val deviceId = mfaService.trustDevice(
                 userId = testUserId,
-                deviceFingerprint = fingerprint,
+                ipAddress = ipAddress,
+                userAgent = userAgent,
                 deviceName = "Test Device",
-                ipAddress = "192.168.1.1",
-                userAgent = "Mozilla/5.0",
                 expiresInDays = 30
             )
 
@@ -250,11 +254,8 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should remove all trusted devices for user") {
-            val fingerprint1 = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
-            val fingerprint2 = DeviceFingerprint.generate("192.168.1.2", "Safari/1.0")
-
-            mfaService.trustDevice(testUserId, fingerprint1, "Device 1", "192.168.1.1", "Mozilla/5.0")
-            mfaService.trustDevice(testUserId, fingerprint2, "Device 2", "192.168.1.2", "Safari/1.0")
+            mfaService.trustDevice(testUserId, "192.168.1.1", "Mozilla/5.0", "Device 1")
+            mfaService.trustDevice(testUserId, "192.168.1.2", "Safari/1.0", "Device 2")
 
             mfaService.getTrustedDevices(testUserId) shouldHaveSize 2
 
@@ -334,8 +335,7 @@ class Phase3IntegrationTest : FunSpec({
             }
 
             mfaService.generateBackupCodes(testUserId)
-            val fingerprint = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
-            mfaService.trustDevice(testUserId, fingerprint, "Device", "192.168.1.1", "Mozilla/5.0")
+            mfaService.trustDevice(testUserId, "192.168.1.1", "Mozilla/5.0", "Device")
 
             // Verify everything is set up
             mfaService.getMethods(testUserId) shouldHaveSize 1
@@ -474,11 +474,8 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should return trusted devices count in statistics") {
-            val fingerprint1 = DeviceFingerprint.generate("192.168.1.1", "Mozilla/5.0")
-            val fingerprint2 = DeviceFingerprint.generate("192.168.1.2", "Safari/1.0")
-
-            mfaService.trustDevice(testUserId, fingerprint1, "Device 1", "192.168.1.1", "Mozilla/5.0")
-            mfaService.trustDevice(adminUserId, fingerprint2, "Device 2", "192.168.1.2", "Safari/1.0")
+            mfaService.trustDevice(testUserId, "192.168.1.1", "Mozilla/5.0", "Device 1")
+            mfaService.trustDevice(adminUserId, "192.168.1.2", "Safari/1.0", "Device 2")
 
             val stats = mfaService.getMfaStatistics()
 

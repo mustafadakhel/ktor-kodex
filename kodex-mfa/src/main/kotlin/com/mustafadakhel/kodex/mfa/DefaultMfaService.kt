@@ -8,6 +8,7 @@ import com.mustafadakhel.kodex.mfa.database.MfaMethodType
 import com.mustafadakhel.kodex.mfa.database.MfaMethods
 import com.mustafadakhel.kodex.mfa.database.MfaTotpUsedCodes
 import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
+import com.mustafadakhel.kodex.mfa.device.DeviceFingerprint
 import com.mustafadakhel.kodex.mfa.encryption.EncryptedSecret
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
 import com.mustafadakhel.kodex.mfa.event.MfaEvent
@@ -1115,12 +1116,14 @@ internal class DefaultMfaService(
     // Trusted Devices
     override suspend fun trustDevice(
         userId: UUID,
-        deviceFingerprint: String,
-        deviceName: String?,
         ipAddress: String?,
         userAgent: String?,
+        deviceName: String?,
         expiresInDays: Int?
     ): UUID {
+        // Generate device fingerprint from IP and user agent
+        val deviceFingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
+
         val now = Clock.System.now()
         val deviceId = kodexTransaction {
             val nowLocal = now.toLocalDateTime(timeZone)
@@ -1164,8 +1167,12 @@ internal class DefaultMfaService(
 
     override suspend fun isDeviceTrusted(
         userId: UUID,
-        deviceFingerprint: String
+        ipAddress: String?,
+        userAgent: String?
     ): Boolean {
+        // Generate device fingerprint from IP and user agent
+        val deviceFingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
+
         return kodexTransaction {
             val now = Clock.System.now().toLocalDateTime(timeZone)
 

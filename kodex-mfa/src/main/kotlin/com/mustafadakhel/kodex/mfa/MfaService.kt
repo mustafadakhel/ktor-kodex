@@ -67,16 +67,16 @@ public interface MfaService {
     // Trusted Devices
     public suspend fun trustDevice(
         userId: UUID,
-        deviceFingerprint: String,
-        deviceName: String?,
         ipAddress: String?,
         userAgent: String?,
+        deviceName: String? = null,
         expiresInDays: Int? = null
     ): UUID
 
     public suspend fun isDeviceTrusted(
         userId: UUID,
-        deviceFingerprint: String
+        ipAddress: String?,
+        userAgent: String?
     ): Boolean
 
     public suspend fun getTrustedDevices(userId: UUID): List<TrustedDeviceInfo>
