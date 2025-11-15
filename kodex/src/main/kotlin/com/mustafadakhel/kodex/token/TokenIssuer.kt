@@ -8,7 +8,8 @@ internal interface TokenIssuer {
         userId: UUID,
         validityMs: Long,
         tokenType: Claim.TokenType,
-        roles: List<String>? = null
+        roles: List<String>? = null,
+        tokenFamily: UUID? = null
     ): GeneratedToken
 }
 

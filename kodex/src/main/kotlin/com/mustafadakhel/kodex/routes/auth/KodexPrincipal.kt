@@ -25,6 +25,9 @@ public interface KodexPrincipal {
 
     /** Raw token string if present. */
     public val token: String?
+
+    /** Token family ID for session tracking. */
+    public val tokenFamily: UUID?
 }
 
 /** Default [KodexPrincipal] implementation. */
@@ -33,7 +36,8 @@ public class DefaultKodexPrincipal(
     override val type: TokenType,
     override val realm: Realm,
     override val roles: List<Role>,
-    override val token: String?
+    override val token: String?,
+    override val tokenFamily: UUID?
 ) : KodexPrincipal
 
 /** Returns the [KodexPrincipal] from this call if present. */

@@ -10,6 +10,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.datetime.TimeZone
@@ -67,7 +68,7 @@ class VerificationConfigTest : FunSpec({
 
             // Should not throw
             val extension = config.build(testContext)
-            (extension != null) shouldBe true
+            extension.shouldNotBeNull()
         }
     }
 

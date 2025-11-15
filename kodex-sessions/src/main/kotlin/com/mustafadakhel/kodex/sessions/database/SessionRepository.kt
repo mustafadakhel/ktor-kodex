@@ -12,6 +12,7 @@ import kotlinx.datetime.toKotlinInstant
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import java.util.UUID
@@ -27,10 +28,10 @@ public class SessionRepository(
         location: String?,
         latitude: Double?,
         longitude: Double?,
-        expiresAt: Instant
+        expiresAt: Instant,
+        now: Instant
     ): Session {
         val sessionId = UUID.randomUUID()
-        val now = kotlinx.datetime.Clock.System.now()
 
         Sessions.insert {
             it[id] = sessionId
@@ -197,6 +198,19 @@ public class SessionRepository(
         }
     }
 
+    /**
+     * Delete multiple sessions in a single batch operation.
+     * Returns the number of deleted sessions.
+     */
+    public fun deleteSessions(sessionIds: List<UUID>): Int {
+        if (sessionIds.isEmpty()) return 0
+
+        return Sessions.deleteWhere {
+            (Sessions.id inList sessionIds) and
+            (Sessions.realmId eq realmId)
+        }
+    }
+
     public fun archiveToHistory(session: Session, endReason: String, logoutAt: Instant?): UUID {
         val historyId = UUID.randomUUID()
 
@@ -216,7 +230,32 @@ public class SessionRepository(
         return historyId
     }
 
-    public fun findHistoryByUserId(userId: UUID, limit: Int): List<SessionHistoryEntry> {
+    /**
+     * Archive multiple sessions to history in a single batch operation.
+     * Returns a list of history entry IDs in the same order as the input sessions.
+     */
+    public fun archiveSessionsToHistory(sessions: List<Session>, endReason: String, logoutAt: Instant?): List<UUID> {
+        if (sessions.isEmpty()) return emptyList()
+
+        val historyIds = sessions.map { UUID.randomUUID() }
+
+        SessionHistory.batchInsert(sessions.zip(historyIds)) { (session, historyId) ->
+            this[SessionHistory.id] = historyId
+            this[SessionHistory.realmId] = realmId
+            this[SessionHistory.userId] = session.userId
+            this[SessionHistory.sessionId] = session.id
+            this[SessionHistory.deviceName] = session.deviceName
+            this[SessionHistory.ipAddress] = session.ipAddress
+            this[SessionHistory.location] = session.location
+            this[SessionHistory.loginAt] = session.createdAt.toLocalDateTime(TimeZone.UTC)
+            this[SessionHistory.logoutAt] = logoutAt?.toLocalDateTime(TimeZone.UTC)
+            this[SessionHistory.endReason] = endReason
+        }
+
+        return historyIds
+    }
+
+    public fun findHistoryByUserId(userId: UUID, limit: Int, offset: Int = 0): List<SessionHistoryEntry> {
         return SessionHistory
             .selectAll()
             .where {
@@ -225,7 +264,18 @@ public class SessionRepository(
             }
             .orderBy(SessionHistory.loginAt, SortOrder.DESC)
             .limit(limit)
+            .offset(offset.toLong())
             .map { it.toSessionHistoryEntry() }
+    }
+
+    public fun countHistoryByUserId(userId: UUID): Long {
+        return SessionHistory
+            .selectAll()
+            .where {
+                (SessionHistory.userId eq userId) and
+                (SessionHistory.realmId eq realmId)
+            }
+            .count()
     }
 
     public fun deleteOldHistory(cutoffTime: Instant): Int {

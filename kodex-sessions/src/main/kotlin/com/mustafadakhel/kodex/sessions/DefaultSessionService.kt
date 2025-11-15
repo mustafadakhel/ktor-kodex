@@ -46,6 +46,7 @@ internal class DefaultSessionService(
             null
         }
 
+        val now = Clock.System.now()
         val (session, revokedEvent) = kodexTransaction {
             // Create session FIRST to avoid race condition
             val session = repository.create(
@@ -55,7 +56,8 @@ internal class DefaultSessionService(
                 location = location?.displayName,
                 latitude = location?.latitude,
                 longitude = location?.longitude,
-                expiresAt = expiresAt
+                expiresAt = expiresAt,
+                now = now
             )
 
             // Then enforce limit - if we exceeded, evict oldest (not the one we just created)
@@ -81,7 +83,7 @@ internal class DefaultSessionService(
         eventBus.publish(
             SessionEvent.SessionCreated(
                 eventId = UUID.randomUUID(),
-                timestamp = Clock.System.now(),
+                timestamp = now,
                 realmId = repository.realmId,
                 kodexSessionId = session.id,
                 userId = userId,
@@ -99,7 +101,7 @@ internal class DefaultSessionService(
                 eventBus.publish(
                     SessionEvent.SessionAnomalyDetected(
                         eventId = UUID.randomUUID(),
-                        timestamp = Clock.System.now(),
+                        timestamp = now,
                         realmId = repository.realmId,
                         kodexSessionId = session.id,
                         userId = userId,
@@ -185,9 +187,10 @@ internal class DefaultSessionService(
 
             repository.revokeAllForUser(userId, exceptSessionId, "force_logout_all", now)
 
-            sessionsToRevoke.forEach { session ->
-                repository.archiveToHistory(session, "force_logout_all", now)
-                repository.deleteSession(session.id)
+            // Batch archive and delete to avoid N+1 queries
+            if (sessionsToRevoke.isNotEmpty()) {
+                repository.archiveSessionsToHistory(sessionsToRevoke, "force_logout_all", now)
+                repository.deleteSessions(sessionsToRevoke.map { it.id })
             }
 
             sessionsToRevoke
@@ -239,15 +242,23 @@ internal class DefaultSessionService(
         repository.findHistoryByUserId(userId, limit)
     }
 
+    override suspend fun getSessionHistoryPage(userId: UUID, limit: Int, offset: Int): com.mustafadakhel.kodex.sessions.model.SessionHistoryPage = kodexTransaction {
+        val totalCount = repository.countHistoryByUserId(userId)
+        val entries = repository.findHistoryByUserId(userId, limit, offset)
+        com.mustafadakhel.kodex.sessions.model.SessionHistoryPage.create(entries, totalCount, offset, limit)
+    }
+
     override suspend fun archiveExpiredSessions(): Int {
         val now = Clock.System.now()
         val expiredSessions = kodexTransaction {
             repository.markExpired(now)
 
             val expiredSessions = repository.findExpiredSessions()
-            expiredSessions.forEach { session ->
-                repository.archiveToHistory(session, "expired", null)
-                repository.deleteSession(session.id)
+
+            // Batch archive and delete to avoid N+1 queries
+            if (expiredSessions.isNotEmpty()) {
+                repository.archiveSessionsToHistory(expiredSessions, "expired", null)
+                repository.deleteSessions(expiredSessions.map { it.id })
             }
 
             expiredSessions

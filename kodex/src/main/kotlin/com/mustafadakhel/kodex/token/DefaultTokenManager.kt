@@ -80,7 +80,8 @@ internal class DefaultTokenManager(
             userId = userId,
             validityMs = validityMs.inWholeMilliseconds,
             tokenType = tokenType.claim,
-            roles = roles
+            roles = roles,
+            tokenFamily = tokenFamily
         )
         if (tokenPersistence[tokenType] == true)
             tokenRepository.storeToken(
@@ -220,6 +221,7 @@ internal class DefaultTokenManager(
     ): KodexPrincipal {
         val userId = token.subject?.toUuidOrNull()
         val tokenId = token.id?.toUuidOrNull()
+        val tokenFamily = token.getClaim("tokenFamily")?.asString()?.toUuidOrNull()
         val claims = token.claims.map { Claim.from(it.key, it.value) }
 
         val decodedToken = DecodedToken(
@@ -240,6 +242,7 @@ internal class DefaultTokenManager(
             type = verifiedToken.type,
             realm = realm,
             roles = verifiedToken.roles,
+            tokenFamily = tokenFamily,
         )
     }
 

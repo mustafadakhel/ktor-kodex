@@ -59,14 +59,14 @@ class VerificationServiceIntegrationTest : FunSpec({
 
     // Mock sender that tracks calls
     class MockVerificationSender : VerificationSender {
-        val sentTokens = mutableListOf<Pair<String, String>>() // (destination, token)
+        val sentTokens = mutableListOf<Pair<String, String>>() // (contactValue, token)
         var shouldFail = false
 
-        override suspend fun send(destination: String, token: String) {
+        override suspend fun send(contactValue: String, token: String) {
             if (shouldFail) {
                 throw RuntimeException("Sender failure simulation")
             }
-            sentTokens.add(destination to token)
+            sentTokens.add(contactValue to token)
         }
 
         fun reset() {

@@ -23,7 +23,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.userId shouldBe testUserId
@@ -39,7 +40,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.shouldBeInstanceOf<KodexPrincipal>()
@@ -51,7 +53,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.RefreshToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = null
+                token = null,
+                tokenFamily = null
             )
 
             principal.token.shouldBeNull()
@@ -64,7 +67,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = emptyList(),
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.roles shouldBe emptyList()
@@ -76,7 +80,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.RefreshToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.type shouldBe TokenType.RefreshToken
@@ -89,7 +94,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = customRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.realm shouldBe customRealm
@@ -107,7 +113,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = multipleRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.roles.size shouldBe 3
@@ -125,7 +132,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             val principal2 = DefaultKodexPrincipal(
@@ -133,7 +141,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal1.userId shouldBe userId1
@@ -147,7 +156,8 @@ class KodexPrincipalTest : DescribeSpec({
                 type = TokenType.AccessToken,
                 realm = testRealm,
                 roles = testRoles,
-                token = testToken
+                token = testToken,
+                tokenFamily = null
             )
 
             principal.userId shouldBe testUserId

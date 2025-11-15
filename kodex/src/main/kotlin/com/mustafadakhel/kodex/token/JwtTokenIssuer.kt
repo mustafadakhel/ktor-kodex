@@ -20,14 +20,16 @@ internal class JwtTokenIssuer internal constructor(
         userId: UUID,
         validityMs: Long,
         tokenType: Claim.TokenType,
-        roles: List<String>?
-    ) = generateToken(userId, validityMs, tokenType, roles)
+        roles: List<String>?,
+        tokenFamily: UUID?
+    ) = generateToken(userId, validityMs, tokenType, roles, tokenFamily)
 
     private fun generateToken(
         userId: UUID,
         validityMs: Long,
         tokenType: Claim.TokenType,
-        rolesParam: List<String>?
+        rolesParam: List<String>?,
+        tokenFamily: UUID?
     ): GeneratedToken {
         val roles = rolesParam ?: userRepository.findRoles(userId).map { it.name }
         val (secret, kid) = secretsConfig.randomWithKid()
@@ -44,6 +46,7 @@ internal class JwtTokenIssuer internal constructor(
                     tokenType.value?.let { put(Claim.TokenType.Key, it) }
                     put(Claim.Roles.Key, roles)
                     put(Claim.Realm.Key, realm.owner)
+                    tokenFamily?.let { put("tokenFamily", it.toString()) }
                     putAll(claimsConfig.additionalClaims)
                 }
             )
