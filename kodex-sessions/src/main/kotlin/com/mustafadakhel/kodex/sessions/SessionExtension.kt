@@ -82,10 +82,10 @@ public class SessionExtension(
         private val logger = KodexLogger.logger<TokenIssuedSubscriber>()
 
         override suspend fun onEvent(event: TokenEvent.Issued) {
-            if (event.realmId != realmId || event.sourceIp == null) return
+            val sourceIp = event.sourceIp ?: return
+            if (event.realmId != realmId) return
 
             try {
-                val sourceIp = event.sourceIp!! // Already checked for null above
                 val userAgent = event.userAgent
                 val deviceInfo = DeviceInfo(
                     fingerprint = DeviceFingerprint.generate(sourceIp, userAgent),

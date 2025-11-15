@@ -18,6 +18,7 @@ import com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter
 import com.mustafadakhel.kodex.sample.routing.setupAuthRouting
 import com.mustafadakhel.kodex.sample.routing.setupMfaRouting
 import com.mustafadakhel.kodex.sample.routing.setupPasswordResetRouting
+import com.mustafadakhel.kodex.sample.routing.setupSessionRouting
 import com.mustafadakhel.kodex.sample.routing.setupVerificationRouting
 import com.mustafadakhel.kodex.validation.validation
 import com.mustafadakhel.kodex.verification.verification
@@ -216,7 +217,7 @@ private fun Application.setupAuthentication() {
     setupMfaRouting()
     setupVerificationRouting()
     setupPasswordResetRouting()
-    // Session routes can be added similarly using call.extensionService<SessionService>(realm)
+    setupSessionRouting()
 
     // Note: For production, add shutdown hooks to properly cleanup resources:
     // environment.monitor.subscribe(ApplicationStopped) {

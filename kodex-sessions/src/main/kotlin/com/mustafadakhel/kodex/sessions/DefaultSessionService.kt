@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.event.SessionEvent
 import com.mustafadakhel.kodex.sessions.database.SessionRepository
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
 import com.mustafadakhel.kodex.sessions.model.Session
+import com.mustafadakhel.kodex.sessions.model.SessionEndReason
 import com.mustafadakhel.kodex.sessions.model.SessionHistoryEntry
 import com.mustafadakhel.kodex.sessions.model.SessionStatus
 import com.mustafadakhel.kodex.sessions.security.AnomalyDetector
@@ -74,7 +75,7 @@ internal class DefaultSessionService(
                     realmId = repository.realmId,
                     kodexSessionId = revokedEvent.sessionId,
                     userId = revokedEvent.userId,
-                    reason = "max_sessions_exceeded",
+                    reason = SessionEndReason.MAX_SESSIONS_EXCEEDED,
                     revokedBy = "system"
                 )
             )
@@ -123,11 +124,11 @@ internal class DefaultSessionService(
             val oldestSessionId = repository.findOldestActiveSessionId(userId, excludeSessionId = excludeSessionId)
             if (oldestSessionId != null) {
                 val now = Clock.System.now()
-                repository.revoke(oldestSessionId, "max_sessions_exceeded", now)
+                repository.revoke(oldestSessionId, SessionEndReason.MAX_SESSIONS_EXCEEDED, now)
 
                 val session = repository.findById(oldestSessionId)
                 if (session != null) {
-                    repository.archiveToHistory(session, "max_sessions_exceeded", now)
+                    repository.archiveToHistory(session, SessionEndReason.MAX_SESSIONS_EXCEEDED, now)
                     repository.deleteSession(oldestSessionId)
                 }
 
@@ -185,11 +186,11 @@ internal class DefaultSessionService(
                 repository.findActiveByUserId(userId)
             }
 
-            repository.revokeAllForUser(userId, exceptSessionId, "force_logout_all", now)
+            repository.revokeAllForUser(userId, exceptSessionId, SessionEndReason.FORCE_LOGOUT_ALL, now)
 
             // Batch archive and delete to avoid N+1 queries
             if (sessionsToRevoke.isNotEmpty()) {
-                repository.archiveSessionsToHistory(sessionsToRevoke, "force_logout_all", now)
+                repository.archiveSessionsToHistory(sessionsToRevoke, SessionEndReason.FORCE_LOGOUT_ALL, now)
                 repository.deleteSessions(sessionsToRevoke.map { it.id })
             }
 
@@ -204,7 +205,7 @@ internal class DefaultSessionService(
                     realmId = repository.realmId,
                     kodexSessionId = session.id,
                     userId = userId,
-                    reason = "force_logout_all",
+                    reason = SessionEndReason.FORCE_LOGOUT_ALL,
                     revokedBy = "user"
                 )
             )
@@ -257,7 +258,7 @@ internal class DefaultSessionService(
 
             // Batch archive and delete to avoid N+1 queries
             if (expiredSessions.isNotEmpty()) {
-                repository.archiveSessionsToHistory(expiredSessions, "expired", null)
+                repository.archiveSessionsToHistory(expiredSessions, SessionEndReason.EXPIRED, null)
                 repository.deleteSessions(expiredSessions.map { it.id })
             }
 

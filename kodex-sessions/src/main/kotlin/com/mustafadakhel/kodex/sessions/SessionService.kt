@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.sessions
 
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
 import com.mustafadakhel.kodex.sessions.model.Session
+import com.mustafadakhel.kodex.sessions.model.SessionEndReason
 import com.mustafadakhel.kodex.sessions.model.SessionHistoryEntry
 import com.mustafadakhel.kodex.sessions.model.SessionHistoryPage
 import java.util.UUID
@@ -35,7 +36,7 @@ public interface SessionService {
     /**
      * Revoke a specific session.
      */
-    public suspend fun revokeSession(sessionId: UUID, reason: String = "user_revoked")
+    public suspend fun revokeSession(sessionId: UUID, reason: String = SessionEndReason.USER_REVOKED)
 
     /**
      * Revoke all sessions for a user, optionally except the current one.

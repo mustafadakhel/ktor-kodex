@@ -5,6 +5,7 @@ import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.routes.auth.RealmConfigScope
 import com.mustafadakhel.kodex.routes.auth.kodex
 import com.mustafadakhel.kodex.sessions.SessionService
+import com.mustafadakhel.kodex.sessions.model.SessionEndReason
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -92,7 +93,7 @@ public fun Route.sessionRoutes(realmId: String, serviceProvider: ServiceProvider
                 return@delete call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Access denied"))
             }
 
-            val reason = call.parameters["reason"] ?: "user_revoked"
+            val reason = call.parameters["reason"] ?: SessionEndReason.USER_REVOKED
             sessionService.revokeSession(sessionId, reason)
 
             call.respond(HttpStatusCode.OK, mapOf("message" to "Session revoked successfully"))
