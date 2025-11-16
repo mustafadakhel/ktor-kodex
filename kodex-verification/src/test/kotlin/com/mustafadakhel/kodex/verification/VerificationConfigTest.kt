@@ -5,7 +5,7 @@ import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.model.Realm
-import com.mustafadakhel.kodex.validation.ValidationResult
+import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
@@ -79,7 +79,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors() shouldContain "defaultTokenExpiration must be positive, got: -1h"
         }
 
@@ -89,7 +89,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("defaultTokenExpiration must be positive") } shouldBe true
         }
     }
@@ -101,7 +101,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxSendAttemptsPerUser must be positive") } shouldBe true
         }
 
@@ -111,7 +111,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxSendAttemptsPerUser must be positive") } shouldBe true
         }
 
@@ -121,7 +121,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxSendAttemptsPerContact must be positive") } shouldBe true
         }
 
@@ -131,7 +131,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxSendAttemptsPerIp must be positive") } shouldBe true
         }
 
@@ -141,7 +141,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxVerifyAttemptsPerUserIp must be positive") } shouldBe true
         }
 
@@ -151,7 +151,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("sendRateLimitWindow must be positive") } shouldBe true
         }
 
@@ -161,7 +161,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("verifyRateLimitWindow must be positive") } shouldBe true
         }
     }
@@ -173,7 +173,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("minVerificationResponseTimeMs must be non-negative") } shouldBe true
         }
 
@@ -183,7 +183,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("should be less than 10 seconds to avoid request timeouts") } shouldBe true
         }
     }
@@ -199,7 +199,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("autoSend is true for email but no sender is configured") } shouldBe true
         }
 
@@ -213,7 +213,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("Contact email is required but no sender is configured") } shouldBe true
         }
 
@@ -226,7 +226,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any {
                 it.contains("Strategy is VERIFY_REQUIRED_ONLY but no contacts are marked as required")
             } shouldBe true
@@ -240,7 +240,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("Token expiration for email must be positive") } shouldBe true
         }
     }
@@ -254,7 +254,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors() shouldHaveSize 3
         }
     }
@@ -284,7 +284,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("sendCooldownPeriod must be positive") } shouldBe true
         }
 
@@ -294,7 +294,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("sendCooldownPeriod should be at least 1 second") } shouldBe true
         }
 
@@ -304,7 +304,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("sendCooldownPeriod should not exceed 1 hour") } shouldBe true
         }
 

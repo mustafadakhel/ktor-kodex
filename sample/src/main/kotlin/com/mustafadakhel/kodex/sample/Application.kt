@@ -23,9 +23,14 @@ import com.mustafadakhel.kodex.sample.routing.setupVerificationRouting
 import com.mustafadakhel.kodex.validation.validation
 import com.mustafadakhel.kodex.verification.verification
 import com.mustafadakhel.kodex.verification.VerificationConfig
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.response.*
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
@@ -46,12 +51,22 @@ fun main() {
 
 private fun Application.setupAuthentication() {
     val config = environment.config
+
     install(Kodex) {
         database {
-            driverClassName = config.property("db.driver").getString()
-            jdbcUrl = config.property("db.jdbcUrl").getString()
-            username = config.property("db.username").getString()
-            password = config.property("db.password").getString()
+            // Fallback to H2 in-memory for testing if no config provided
+            driverClassName = config.propertyOrNull("db.driver")?.getString()
+                ?: System.getenv("DB_DRIVER")
+                ?: "org.h2.Driver"
+            jdbcUrl = config.propertyOrNull("db.jdbcUrl")?.getString()
+                ?: System.getenv("DB_JDBC_URL")
+                ?: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
+            username = config.propertyOrNull("db.username")?.getString()
+                ?: System.getenv("DB_USERNAME")
+                ?: "sa"
+            password = config.propertyOrNull("db.password")?.getString()
+                ?: System.getenv("DB_PASSWORD")
+                ?: ""
 
             maximumPoolSize = 10
             idleTimeout = 600_000
@@ -142,15 +157,25 @@ private fun Application.setupAuthentication() {
                     defaultTokenExpiration = 24.hours
 
                     email {
-                        required = true
+                        required = false
                         autoSend = false
                         tokenExpiration = 24.hours
+                        sender = object : com.mustafadakhel.kodex.verification.VerificationSender {
+                            override suspend fun send(contactValue: String, token: String) {
+                                println("Email verification token for $contactValue: $token")
+                            }
+                        }
                     }
 
                     phone {
-                        required = true
+                        required = false
                         autoSend = false
                         tokenExpiration = 10.minutes
+                        sender = object : com.mustafadakhel.kodex.verification.VerificationSender {
+                            override suspend fun send(contactValue: String, token: String) {
+                                println("Phone verification token for $contactValue: $token")
+                            }
+                        }
                     }
                 }
 
@@ -170,6 +195,7 @@ private fun Application.setupAuthentication() {
 
                 mfa {
                     requireMfa = false
+                    hashingService = com.mustafadakhel.kodex.service.passwordHashingService()
 
                     emailMfa {
                         sender = object : MfaCodeSender {
@@ -206,10 +232,25 @@ private fun Application.setupAuthentication() {
                     }
 
                     geoLocation {
-                        enabled = true
+                        enabled = false
                     }
                 }
             }
+        }
+    }
+
+    install(ContentNegotiation) {
+        json()
+    }
+
+    install(StatusPages) {
+        exception<Throwable> { call, cause ->
+            call.application.environment.log.error("Unhandled exception", cause)
+            cause.printStackTrace()
+            call.respondText(
+                text = "500: ${cause.message}\n\nStack trace:\n${cause.stackTraceToString()}",
+                status = HttpStatusCode.InternalServerError
+            )
         }
     }
 

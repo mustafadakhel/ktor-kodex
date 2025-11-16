@@ -10,6 +10,7 @@ import com.mustafadakhel.kodex.sessions.model.SessionHistoryEntry
 import com.mustafadakhel.kodex.sessions.model.SessionStatus
 import com.mustafadakhel.kodex.sessions.security.AnomalyDetector
 import com.mustafadakhel.kodex.sessions.security.GeoLocationService
+import com.mustafadakhel.kodex.util.kodexSuspendedTransaction
 import com.mustafadakhel.kodex.util.kodexTransaction
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -48,7 +49,7 @@ internal class DefaultSessionService(
         }
 
         val now = Clock.System.now()
-        val (session, revokedEvent) = kodexTransaction {
+        val (session, revokedEvent, anomalies) = kodexSuspendedTransaction {
             // Create session FIRST to avoid race condition
             val session = repository.create(
                 userId = userId,
@@ -64,7 +65,14 @@ internal class DefaultSessionService(
             // Then enforce limit - if we exceeded, evict oldest (not the one we just created)
             val revokedEvent = enforceConcurrentSessionLimit(userId, excludeSessionId = session.id)
 
-            session to revokedEvent
+            // Detect anomalies while still in transaction context
+            val anomalies = if (anomalyDetector != null && config.anomalyDetection.enabled) {
+                anomalyDetector.detectAnomalies(userId, session, repository)
+            } else {
+                emptyList()
+            }
+
+            Triple(session, revokedEvent, anomalies)
         }
 
         if (revokedEvent != null) {
@@ -96,21 +104,19 @@ internal class DefaultSessionService(
             )
         )
 
-        if (anomalyDetector != null && config.anomalyDetection.enabled) {
-            val anomalies = anomalyDetector.detectAnomalies(userId, session, repository)
-            anomalies.forEach { anomaly ->
-                eventBus.publish(
-                    SessionEvent.SessionAnomalyDetected(
-                        eventId = UUID.randomUUID(),
-                        timestamp = now,
-                        realmId = repository.realmId,
-                        kodexSessionId = session.id,
-                        userId = userId,
-                        anomalyType = anomaly.type,
-                        details = anomaly.details
-                    )
+        // Publish anomaly events after session creation
+        anomalies.forEach { anomaly ->
+            eventBus.publish(
+                SessionEvent.SessionAnomalyDetected(
+                    eventId = UUID.randomUUID(),
+                    timestamp = now,
+                    realmId = repository.realmId,
+                    kodexSessionId = session.id,
+                    userId = userId,
+                    anomalyType = anomaly.type,
+                    details = anomaly.details
                 )
-            }
+            )
         }
 
         return session

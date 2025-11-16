@@ -7,8 +7,8 @@ import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
 import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.mfa.totp.TotpAlgorithm
 import com.mustafadakhel.kodex.service.HashingService
+import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
-import com.mustafadakhel.kodex.validation.ValidationResult
 import com.mustafadakhel.kodex.validation.validate
 import io.ktor.utils.io.*
 import kotlin.time.Duration
@@ -104,7 +104,7 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
         requiredRolesForMfa = roles.toSet()
     }
 
-    override fun validate(): ValidationResult = validate {
+    override fun validate(): ConfigValidationResult = validate {
         require(codeLength in 4..10) { "codeLength must be between 4 and 10" }
         require(codeExpiration.inWholeMinutes in 1..30) { "codeExpiration must be 1-30 minutes" }
         require(maxEnrollAttemptsPerUser > 0) { "maxEnrollAttemptsPerUser must be positive" }

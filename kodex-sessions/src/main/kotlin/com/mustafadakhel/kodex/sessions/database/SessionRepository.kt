@@ -107,7 +107,6 @@ public class SessionRepository(
                 (Sessions.realmId eq realmId) and
                 (Sessions.status eq SessionStatus.ACTIVE)
             }
-            .forUpdate()
             .count()
     }
 
@@ -216,7 +215,7 @@ public class SessionRepository(
 
         SessionHistory.insert {
             it[id] = historyId
-            it[SessionHistory.realmId] = realmId
+            it[SessionHistory.realmId] = this@SessionRepository.realmId
             it[SessionHistory.userId] = session.userId
             it[sessionId] = session.id
             it[deviceName] = session.deviceName
@@ -241,7 +240,7 @@ public class SessionRepository(
 
         SessionHistory.batchInsert(sessions.zip(historyIds)) { (session, historyId) ->
             this[SessionHistory.id] = historyId
-            this[SessionHistory.realmId] = realmId
+            this[SessionHistory.realmId] = this@SessionRepository.realmId
             this[SessionHistory.userId] = session.userId
             this[SessionHistory.sessionId] = session.id
             this[SessionHistory.deviceName] = session.deviceName

@@ -19,6 +19,7 @@ public class SessionCleanupService(
     public fun start(scope: CoroutineScope) {
         cleanupJob?.cancel()
         cleanupJob = scope.launch {
+            delay(config.cleanupInterval) // Initial delay to allow database initialization
             while (isActive) {
                 try {
                     cleanup()

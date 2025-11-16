@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.sample.routing
 
 import com.mustafadakhel.kodex.extensionService
 import com.mustafadakhel.kodex.routes.auth.KodexId
+import com.mustafadakhel.kodex.routes.auth.authenticateFor
 import com.mustafadakhel.kodex.routes.auth.kodex
 import com.mustafadakhel.kodex.sample.DefaultRealms
 import com.mustafadakhel.kodex.sessions.SessionService
@@ -14,9 +15,10 @@ import java.util.UUID
 
 fun Application.setupSessionRouting() = routing {
     DefaultRealms.forEach { realm ->
-        route("/${realm.owner}/sessions") {
-            // GET /sessions - List active sessions for the authenticated user
-            get {
+        authenticateFor(realm) {
+            route("/${realm.owner}/sessions") {
+                // GET /sessions - List active sessions for the authenticated user
+                get {
                 val userId = with(KodexId) { call.idOrFail() }
                 val sessionService = call.extensionService<SessionService>(realm)
                     ?: return@get call.respondText(
@@ -134,7 +136,7 @@ fun Application.setupSessionRouting() = routing {
 
                     call.respond(
                         HttpStatusCode.OK,
-                        mapOf("success" to true, "message" to "Session revoked successfully")
+                        SessionActionResponse(success = true, message = "Session revoked successfully")
                     )
                 } catch (e: IllegalArgumentException) {
                     call.respondText("Invalid sessionId format", status = HttpStatusCode.BadRequest)
@@ -172,7 +174,7 @@ fun Application.setupSessionRouting() = routing {
 
                     call.respond(
                         HttpStatusCode.OK,
-                        mapOf("success" to true, "message" to "All sessions revoked successfully")
+                        SessionActionResponse(success = true, message = "All sessions revoked successfully")
                     )
                 } catch (e: Exception) {
                     call.respondText(
@@ -180,6 +182,7 @@ fun Application.setupSessionRouting() = routing {
                         status = HttpStatusCode.InternalServerError
                     )
                 }
+            }
             }
         }
     }
@@ -220,4 +223,10 @@ data class SessionHistoryDto(
     val loginAt: String,
     val logoutAt: String?,
     val endReason: String
+)
+
+@Serializable
+data class SessionActionResponse(
+    val success: Boolean,
+    val message: String
 )
