@@ -2,8 +2,8 @@ package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
-import com.mustafadakhel.kodex.validation.ValidationResult
 import com.mustafadakhel.kodex.validation.validate
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration
@@ -60,7 +60,7 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
      */
     public var passwordResetSender: PasswordResetSender? = null
 
-    override fun validate(): ValidationResult = validate {
+    override fun validate(): ConfigValidationResult = validate {
         // Validate token validity
         requirePositive(tokenValidity, "tokenValidity")
         require(tokenValidity.inWholeMinutes >= 5) {

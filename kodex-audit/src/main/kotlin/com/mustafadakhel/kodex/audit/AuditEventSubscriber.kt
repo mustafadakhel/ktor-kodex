@@ -336,6 +336,82 @@ public class AuditEventSubscriber internal constructor(
                 realmId = event.realmId
             )
 
+            is SessionEvent.SessionCreated -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                targetId = event.kodexSessionId,
+                targetType = "session",
+                result = EventResult.SUCCESS,
+                metadata = buildMap {
+                    put("tokenFamily", event.tokenFamily.toString())
+                    put("deviceFingerprint", event.deviceFingerprint)
+                    event.deviceName?.let { put("deviceName", it) }
+                    event.ipAddress?.let { put("ipAddress", it) }
+                    event.location?.let { put("location", it) }
+                },
+                realmId = event.realmId
+            )
+
+            is SessionEvent.SessionRevoked -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.fromString(event.revokedBy),
+                targetId = event.kodexSessionId,
+                targetType = "session",
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "reason" to event.reason,
+                    "revokedBy" to event.revokedBy
+                ),
+                realmId = event.realmId
+            )
+
+            is SessionEvent.SessionActivityUpdated -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                targetId = event.kodexSessionId,
+                targetType = "session",
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "lastActivityAt" to event.lastActivityAt.toString()
+                ),
+                realmId = event.realmId
+            )
+
+            is SessionEvent.SessionAnomalyDetected -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorId = event.userId,
+                actorType = ActorType.USER,
+                targetId = event.kodexSessionId,
+                targetType = "session",
+                result = EventResult.FAILURE,
+                metadata = buildMap {
+                    put("anomalyType", event.anomalyType)
+                    putAll(event.details)
+                },
+                realmId = event.realmId
+            )
+
+            is SessionEvent.SessionExpired -> AuditEvent(
+                eventType = event.eventType,
+                timestamp = event.timestamp,
+                actorType = ActorType.SYSTEM,
+                targetId = event.kodexSessionId,
+                targetType = "session",
+                result = EventResult.SUCCESS,
+                metadata = mapOf(
+                    "expiredAt" to event.expiredAt.toString(),
+                    "userId" to event.userId.toString()
+                ),
+                realmId = event.realmId
+            )
+
             else -> throw IllegalArgumentException("Unsupported event type: ${event::class.simpleName}")
         }
     }

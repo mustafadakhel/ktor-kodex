@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.model.Realm
-import com.mustafadakhel.kodex.validation.ValidationResult
+import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldHaveSize
@@ -74,7 +74,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("tokenValidity must be positive") } shouldBe true
         }
 
@@ -85,7 +85,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("tokenValidity must be positive") } shouldBe true
         }
 
@@ -96,7 +96,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("tokenValidity should be at least 5 minutes for usability") } shouldBe true
         }
 
@@ -107,7 +107,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("tokenValidity should not exceed 24 hours for security") } shouldBe true
         }
     }
@@ -120,7 +120,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxAttemptsPerUser must be positive") } shouldBe true
         }
 
@@ -131,7 +131,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxAttemptsPerUser must be positive") } shouldBe true
         }
 
@@ -142,7 +142,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxAttemptsPerIdentifier must be positive") } shouldBe true
         }
 
@@ -153,7 +153,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("maxAttemptsPerIp must be positive") } shouldBe true
         }
 
@@ -164,7 +164,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("rateLimitWindow must be positive") } shouldBe true
         }
     }
@@ -177,7 +177,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("passwordResetSender must not be null") } shouldBe true
         }
     }
@@ -192,7 +192,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors() shouldHaveSize 4
         }
     }
@@ -225,7 +225,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("cooldownPeriod must be positive") } shouldBe true
         }
 
@@ -236,7 +236,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("cooldownPeriod should be at least 1 second") } shouldBe true
         }
 
@@ -247,7 +247,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val result = config.validate()
-            (result is ValidationResult.Invalid) shouldBe true
+            (result is ConfigValidationResult.Invalid) shouldBe true
             result.errors().any { it.contains("cooldownPeriod should not exceed 1 hour") } shouldBe true
         }
 

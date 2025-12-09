@@ -3,24 +3,34 @@ package com.mustafadakhel.kodex.sample
 import com.mustafadakhel.kodex.Kodex
 import com.mustafadakhel.kodex.audit.audit
 import com.mustafadakhel.kodex.audit.DatabaseAuditProvider
-import com.mustafadakhel.kodex.kodex
 import com.mustafadakhel.kodex.lockout.accountLockout
 import com.mustafadakhel.kodex.lockout.AccountLockoutPolicy
 import com.mustafadakhel.kodex.metrics.metrics
+import com.mustafadakhel.kodex.mfa.mfa
+import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.model.Realm
-import com.mustafadakhel.kodex.throwable.KodexThrowable
+import com.mustafadakhel.kodex.passwordreset.passwordReset
+import com.mustafadakhel.kodex.sessions.anomalyDetection
+import com.mustafadakhel.kodex.sessions.geoLocation
+import com.mustafadakhel.kodex.sessions.sessions
+import com.mustafadakhel.kodex.passwordreset.PasswordResetSender
+import com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter
+import com.mustafadakhel.kodex.sample.routing.setupAuthRouting
+import com.mustafadakhel.kodex.sample.routing.setupMfaRouting
+import com.mustafadakhel.kodex.sample.routing.setupPasswordResetRouting
+import com.mustafadakhel.kodex.sample.routing.setupSessionRouting
+import com.mustafadakhel.kodex.sample.routing.setupVerificationRouting
 import com.mustafadakhel.kodex.validation.validation
 import com.mustafadakhel.kodex.verification.verification
 import com.mustafadakhel.kodex.verification.VerificationConfig
-import com.mustafadakhel.kodex.passwordreset.passwordReset
-import com.mustafadakhel.kodex.passwordreset.PasswordResetSender
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
-import io.ktor.server.request.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
-import io.ktor.server.routing.*
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
@@ -41,12 +51,22 @@ fun main() {
 
 private fun Application.setupAuthentication() {
     val config = environment.config
-    val kodex = install(Kodex) {
+
+    install(Kodex) {
         database {
-            driverClassName = config.property("db.driver").getString()
-            jdbcUrl = config.property("db.jdbcUrl").getString()
-            username = config.property("db.username").getString()
-            password = config.property("db.password").getString()
+            // Fallback to H2 in-memory for testing if no config provided
+            driverClassName = config.propertyOrNull("db.driver")?.getString()
+                ?: System.getenv("DB_DRIVER")
+                ?: "org.h2.Driver"
+            jdbcUrl = config.propertyOrNull("db.jdbcUrl")?.getString()
+                ?: System.getenv("DB_JDBC_URL")
+                ?: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
+            username = config.propertyOrNull("db.username")?.getString()
+                ?: System.getenv("DB_USERNAME")
+                ?: "sa"
+            password = config.propertyOrNull("db.password")?.getString()
+                ?: System.getenv("DB_PASSWORD")
+                ?: ""
 
             maximumPoolSize = 10
             idleTimeout = 600_000
@@ -60,6 +80,43 @@ private fun Application.setupAuthentication() {
                 secrets {
                     raw("secret", "secret2", "secret3")
                 }
+
+                // Rate limiter examples:
+                // - NoOpRateLimiter (default)
+                // - InMemoryRateLimiter (single instance)
+                // - RedisRateLimiter (distributed, single Redis)
+                // - RedisClusterRateLimiter (distributed, Redis Cluster HA)
+                when (realm) {
+                    DefaultRealms.AdminRealm -> {
+                        // No rate limiting
+                    }
+                    DefaultRealms.UserRealm -> {
+                        rateLimiter(InMemoryRateLimiter(
+                            maxEntries = 100_000,
+                            cleanupAge = 5.minutes
+                        ))
+                    }
+                }
+
+                // Redis standalone example (requires kodex-ratelimit-redis dependency):
+                // val redisClient = RedisClient.create("redis://localhost:6379")
+                // val circuitBreaker = CircuitBreaker(5, 30.seconds, 3)
+                // rateLimiter(RedisRateLimiter(
+                //     connection = redisClient.connect(),
+                //     keyPrefix = "kodex:ratelimit:",
+                //     circuitBreaker = circuitBreaker,
+                //     fallbackRateLimiter = InMemoryRateLimiter()
+                // ))
+
+                // Redis Cluster example (requires kodex-ratelimit-redis dependency):
+                // val clusterClient = RedisClusterClient.create("redis://localhost:7000")
+                // val circuitBreaker = CircuitBreaker(5, 30.seconds, 3)
+                // rateLimiter(RedisClusterRateLimiter(
+                //     connection = clusterClient.connect(),
+                //     keyPrefix = "kodex:ratelimit:",
+                //     circuitBreaker = circuitBreaker,
+                //     fallbackRateLimiter = InMemoryRateLimiter()
+                // ))
 
                 validation {
                     email {
@@ -93,7 +150,6 @@ private fun Application.setupAuthentication() {
                 }
 
                 metrics {
-                    // registry = SimpleMeterRegistry() // default
                 }
 
                 verification {
@@ -101,26 +157,26 @@ private fun Application.setupAuthentication() {
                     defaultTokenExpiration = 24.hours
 
                     email {
-                        required = true
-                        autoSend = false  // Set to false until sender is implemented
+                        required = false
+                        autoSend = false
                         tokenExpiration = 24.hours
-                        // sender = EmailVerificationSender(emailProvider)  // TODO: Implement email sender
+                        sender = object : com.mustafadakhel.kodex.verification.VerificationSender {
+                            override suspend fun send(contactValue: String, token: String) {
+                                println("Email verification token for $contactValue: $token")
+                            }
+                        }
                     }
 
                     phone {
-                        required = true
-                        autoSend = false  // Set to false until sender is implemented
-                        tokenExpiration = 10.minutes  // SMS should expire faster
-                        // sender = SMSVerificationSender(twilioClient)  // TODO: Implement SMS sender
+                        required = false
+                        autoSend = false
+                        tokenExpiration = 10.minutes
+                        sender = object : com.mustafadakhel.kodex.verification.VerificationSender {
+                            override suspend fun send(contactValue: String, token: String) {
+                                println("Phone verification token for $contactValue: $token")
+                            }
+                        }
                     }
-
-                    // Example: Custom attribute verification
-                    // customAttribute("discord") {
-                    //     required = false
-                    //     autoSend = false
-                    //     tokenExpiration = 30.minutes
-                    //     sender = DiscordVerificationSender(discordBot)
-                    // }
                 }
 
                 passwordReset(
@@ -136,95 +192,79 @@ private fun Application.setupAuthentication() {
                     maxAttemptsPerIp = 20
                     cooldownPeriod = 1.minutes
                 }
+
+                mfa {
+                    requireMfa = false
+                    hashingService = com.mustafadakhel.kodex.service.passwordHashingService()
+
+                    emailMfa {
+                        sender = object : MfaCodeSender {
+                            override suspend fun send(contactValue: String, code: String) {
+                                println("MFA code for $contactValue: $code")
+                            }
+                        }
+                    }
+
+                    totpMfa {
+                        enabled = true
+                        issuer = "KodexSample"
+                    }
+
+                    encryption {
+                        aesGcm(
+                            System.getenv("MFA_ENCRYPTION_KEY")
+                                ?: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                        )
+                    }
+                }
+
+                sessions {
+                    maxConcurrentSessions = 5
+                    sessionExpiration = 30.hours
+                    sessionHistoryRetention = 90.hours
+                    cleanupInterval = 1.hours
+
+                    anomalyDetection {
+                        enabled = true
+                        detectNewDevice = true
+                        detectNewLocation = true
+                        locationRadiusKm = 100.0
+                    }
+
+                    geoLocation {
+                        enabled = false
+                    }
+                }
             }
+        }
+    }
+
+    install(ContentNegotiation) {
+        json()
+    }
+
+    install(StatusPages) {
+        exception<Throwable> { call, cause ->
+            call.application.environment.log.error("Unhandled exception", cause)
+            cause.printStackTrace()
+            call.respondText(
+                text = "500: ${cause.message}\n\nStack trace:\n${cause.stackTraceToString()}",
+                status = HttpStatusCode.InternalServerError
+            )
         }
     }
 
     setupAuthRouting()
-}
+    setupMfaRouting()
+    setupVerificationRouting()
+    setupPasswordResetRouting()
+    setupSessionRouting()
 
-fun Application.setupAuthRouting() = routing {
-    DefaultRealms.forEach { realm ->
-        val services = kodex.servicesOf(realm)
-        route("/${realm.owner}/auth") {
-            post("/register") {
-                val params = call.receiveParameters()
-                val password = params["password"] ?: return@post call.respondText(
-                    "Missing password",
-                    status = HttpStatusCode.BadRequest
-                )
-                val email =
-                    params["email"] ?: return@post call.respondText("Missing email", status = HttpStatusCode.BadRequest)
-
-                // or use status-page to handle exceptions globally
-                try {
-                    services.users.createUser(
-                        email = email,
-                        phone = null,
-                        password = password,
-                        customAttributes = null,
-                        profile = null
-                    )
-                    call.respondText("User registered", status = HttpStatusCode.Created)
-                } catch (e: KodexThrowable.EmailAlreadyExists) {
-                    call.respondText("User already exists with email: $email", status = HttpStatusCode.Conflict)
-                } catch (e: KodexThrowable.RoleNotFound) {
-                    call.respondText("Invalid realm configuration", status = HttpStatusCode.InternalServerError)
-                }
-            }
-
-            post("/login") {
-                val params = call.receiveParameters()
-                val email = params["email"]
-                val phone = params["phone"]
-                val password = params["password"] ?: return@post call.respondText(
-                    "Missing password",
-                    status = HttpStatusCode.BadRequest
-                )
-
-                // or use status-page to handle exceptions globally
-                try {
-                    val ipAddress = call.request.local.remoteHost
-                    val userAgent = call.request.userAgent()
-
-                    val tokenPair = when {
-                        email != null -> services.auth.login(email, password, ipAddress, userAgent)
-                        phone != null -> services.auth.loginByPhone(phone, password, ipAddress, userAgent)
-                        else -> throw KodexThrowable.Authorization.InvalidCredentials
-                    }
-                    call.respond(tokenPair)
-                } catch (e: KodexThrowable.Authorization.InvalidCredentials) {
-                    call.respondText("Invalid credentials", status = HttpStatusCode.Unauthorized)
-                } catch (e: KodexThrowable.Authorization.UnverifiedAccount) {
-                    call.respondText("Account not verified", status = HttpStatusCode.Forbidden)
-                }
-            }
-
-            post("/refresh") {
-                val params = call.receiveParameters()
-                val email =
-                    params["email"] ?: return@post call.respondText("Missing email", status = HttpStatusCode.BadRequest)
-                val refreshToken =
-                    params["refresh_token"] ?: return@post call.respondText(
-                        "Missing refresh_token",
-                        status = HttpStatusCode.BadRequest
-                    )
-
-                // or use status-page to handle exceptions globally
-                try {
-                    val user = services.users.getUserByEmail(email)
-                    val newTokens = services.tokens.refresh(user.id, refreshToken)
-                    call.respond(newTokens)
-                } catch (e: Throwable) {
-                    call.respondText("Unable to refresh token", status = HttpStatusCode.Unauthorized)
-                }
-            }
-
-            // TODO: Add verification and password reset routes
-            // Example usage:
-            // - call.extensionService<VerificationService>(realm)
-            // - call.extensionService<PasswordResetService>(realm)
-            // See extension documentation for complete API
-        }
-    }
+    // Note: For production, add shutdown hooks to properly cleanup resources:
+    // environment.monitor.subscribe(ApplicationStopped) {
+    //     DefaultRealms.forEach { realm ->
+    //         kodex.servicesOf(realm).extensions.get(SessionExtension::class)?.shutdown()
+    //         kodex.servicesOf(realm).extensions.get(MfaExtension::class)?.shutdown()
+    //     }
+    // }
 }

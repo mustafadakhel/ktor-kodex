@@ -5,9 +5,9 @@ import kotlin.time.Duration
 /**
  * Result of configuration validation.
  */
-public sealed interface ValidationResult {
-    public data object Valid : ValidationResult
-    public data class Invalid(val errors: List<String>) : ValidationResult
+public sealed interface ConfigValidationResult {
+    public data object Valid : ConfigValidationResult
+    public data class Invalid(val errors: List<String>) : ConfigValidationResult
 
     public fun isValid(): Boolean = this is Valid
     public fun errors(): List<String> = if (this is Invalid) errors else emptyList()
@@ -57,11 +57,11 @@ public class ValidationBuilder {
         require(value != null) { "$name must not be null" }
     }
 
-    public fun build(): ValidationResult {
+    public fun build(): ConfigValidationResult {
         return if (errors.isEmpty()) {
-            ValidationResult.Valid
+            ConfigValidationResult.Valid
         } else {
-            ValidationResult.Invalid(errors.toList())
+            ConfigValidationResult.Invalid(errors.toList())
         }
     }
 }
@@ -73,13 +73,13 @@ public interface ValidatableConfig {
     /**
      * Validates the configuration and returns errors if any.
      */
-    public fun validate(): ValidationResult
+    public fun validate(): ConfigValidationResult
 }
 
 /**
  * DSL for building validation results.
  */
-public inline fun validate(block: ValidationBuilder.() -> Unit): ValidationResult {
+public inline fun validate(block: ValidationBuilder.() -> Unit): ConfigValidationResult {
     val builder = ValidationBuilder()
     builder.block()
     return builder.build()

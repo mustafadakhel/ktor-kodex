@@ -2,8 +2,8 @@ package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
-import com.mustafadakhel.kodex.validation.ValidationResult
 import com.mustafadakhel.kodex.validation.validate
 import io.ktor.utils.io.*
 import kotlin.time.Duration
@@ -252,7 +252,7 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         return getPolicy(identifier)?.sender
     }
 
-    override fun validate(): ValidationResult = validate {
+    override fun validate(): ConfigValidationResult = validate {
         // Validate token expiration
         requirePositive(defaultTokenExpiration, "defaultTokenExpiration")
 

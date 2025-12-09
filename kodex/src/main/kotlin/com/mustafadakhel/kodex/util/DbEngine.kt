@@ -41,13 +41,19 @@ internal class ExposedDbEngine(
     log: Boolean = false
 ) : DbEngine<Transaction> {
     override var runner: EngineRunner<Transaction>? = null
+    private var database: Database? = null
 
     init {
         setup(dataSource, extensionTables, log)
     }
 
+    fun getDatabase(): Database {
+        return database ?: error("Database not initialized")
+    }
+
     private fun setup(dataSource: HikariDataSource, extensionTables: List<Table>, log: Boolean = false) {
         val db = Database.connect(dataSource)
+        database = db
         runner = exposedRunner(db)
 
         transaction(db) {

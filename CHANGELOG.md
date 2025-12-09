@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Session Management Module** (`kodex-sessions`) - Enterprise-grade session management
+  - Active session tracking with device fingerprinting (IP + User-Agent)
+  - Geolocation-based anomaly detection (IP-API and IPInfo provider support)
+  - Session history with pagination support (offset, limit, total count)
+  - Automatic session cleanup service with configurable retention policies
+  - REST API endpoints for session management (`GET /sessions`, `GET /sessions/history`, `DELETE /sessions/:id`, `DELETE /sessions`)
+  - Concurrent session limits per user with automatic eviction
+  - TokenFamily in JWT claims for accurate "current session" identification
+  - Composite database indexes for query performance optimization
+  - Batch operations for session archival and deletion (eliminates N+1 queries)
+  - Error logging for geolocation service failures (IP, provider, exception details)
+  - Cleanup results logging (expired count, history count)
 - Email and phone verification extension (`kodex-verification`) with token generation and verification
 - Password reset extension (`kodex-password-reset`) with self-service password reset and rate limiting
 - Metrics extension (`kodex-metrics`) with Micrometer integration
@@ -22,6 +34,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Breaking:** `TokenIssuer.issue()` now accepts optional `tokenFamily` parameter for session tracking
+- **Breaking:** `KodexPrincipal` interface adds `tokenFamily` property
+- **Breaking:** `DefaultKodexPrincipal` constructor requires `tokenFamily` parameter
+- Session module production-ready with all critical and high-priority issues resolved
+- Timestamp handling standardized (single `Clock.System.now()` call per operation)
 - Separated password hashing (Argon2id) from token hashing (SHA-256) for security
 - Authentication flow refactored to eliminate try-catch for control flow
 - `authenticateInternal()` now returns `Boolean` instead of throwing exceptions
@@ -29,12 +46,24 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Session anomaly detection false negative bug (new device/location not detected)
+- Session limit enforcement race condition under concurrent logins
+- Geolocation service failures now logged with diagnostic information
+- Compilation warnings in test files (redundant null checks, parameter naming)
 - SQL query syntax errors in verification service (Exposed ORM `.select()` → `.selectAll().where {}`)
 - Upsert reliability issues with nullable columns in composite unique indexes
 - Rate limit bypass vulnerability in password reset for non-existent users (OWASP A03:2021)
 
 ### Performance
 
+- Session module optimized with composite database indexes:
+  - `idx_sessions_user_created` (user_id, created_at DESC)
+  - `idx_sessions_user_status` (user_id, status)
+  - `idx_sessions_user_activity` (user_id, last_activity_at DESC)
+  - `idx_session_history_user_login` (user_id, login_at DESC)
+- N+1 queries eliminated with batch operations:
+  - `archiveSessionsToHistory()` uses Exposed `batchInsert`
+  - `deleteSessions()` uses `deleteWhere` with `inList`
 - Failed login handling optimized with scoped database cleanup per identifier instead of table-wide scan
 - Authentication flow improved by removing try-catch overhead and exception throwing
 - Reduced database lock contention through scoped queries
@@ -42,6 +71,9 @@ All notable changes to this project will be documented in this file.
 
 ### Breaking Changes
 
+- `TokenIssuer.issue()` signature changed (added optional `tokenFamily` parameter)
+- `KodexPrincipal` interface changed (added `tokenFamily` property)
+- `DefaultKodexPrincipal` constructor changed (added `tokenFamily` parameter)
 - SHA-256 removed for password hashing (Argon2id only)
 
 ## [0.1.7] - 2025-01-18
