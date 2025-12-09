@@ -5,6 +5,7 @@ version = libs.versions.kodex.get()
 
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 java {
@@ -13,6 +14,19 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+sourceSets {
+    create("integrationTest") {
+        kotlin {
+            srcDir("src/integrationTest/kotlin")
+        }
+        resources {
+            srcDir("src/integrationTest/resources")
+        }
+        compileClasspath += sourceSets["main"].output + sourceSets["test"].output
+        runtimeClasspath += sourceSets["main"].output + sourceSets["test"].output
+    }
 }
 
 tasks {
@@ -32,6 +46,32 @@ tasks {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+
+    val integrationTest = register<Test>("integrationTest") {
+        description = "Runs integration tests."
+        group = "verification"
+
+        testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+        classpath = sourceSets["integrationTest"].runtimeClasspath
+
+        useJUnitPlatform()
+        shouldRunAfter(test)
+    }
+
+    named<Task>("compileIntegrationTestKotlin") {
+        (this as org.jetbrains.kotlin.gradle.tasks.KotlinCompile).compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xfriend-paths=${project.layout.buildDirectory.get()}/classes/kotlin/main")
+        }
+    }
+
+    named<Task>("check") {
+        dependsOn(integrationTest)
+    }
+}
+
+val integrationTestImplementation by configurations.getting {
+    extendsFrom(configurations.testImplementation.get())
 }
 
 dependencies {
@@ -53,4 +93,15 @@ dependencies {
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(project(":kodex-ratelimit-inmemory"))
+
+    integrationTestImplementation(libs.h2.database)
+    integrationTestImplementation(libs.ktor.server.test.host)
+    integrationTestImplementation("io.ktor:ktor-server-content-negotiation:3.2.1")
+    integrationTestImplementation("io.ktor:ktor-serialization-kotlinx-json:3.2.1")
+    integrationTestImplementation(libs.logback.classic)
+    integrationTestImplementation(project(":kodex-ratelimit-inmemory"))
+    integrationTestImplementation(project(":kodex"))
+    integrationTestImplementation(libs.bundles.kotest)
+    integrationTestImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    integrationTestImplementation("dev.turingcomplete:kotlin-onetimepassword:2.4.1")
 }

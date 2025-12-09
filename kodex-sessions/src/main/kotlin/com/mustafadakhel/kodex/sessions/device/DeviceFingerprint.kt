@@ -73,10 +73,12 @@ public object DeviceFingerprint {
 
         val os = when {
             ua.contains("windows") -> "Windows"
+            // Check Android BEFORE Linux since Android UAs contain "Linux"
+            ua.contains("android") -> "Android"
+            // Check iOS BEFORE macOS since iOS UAs contain "like Mac OS X"
+            ua.contains("iphone") || ua.contains("ipad") -> "iOS"
             ua.contains("mac os") -> "macOS"
             ua.contains("linux") -> "Linux"
-            ua.contains("android") -> "Android"
-            ua.contains("iphone") || ua.contains("ipad") -> "iOS"
             else -> "Unknown OS"
         }
 

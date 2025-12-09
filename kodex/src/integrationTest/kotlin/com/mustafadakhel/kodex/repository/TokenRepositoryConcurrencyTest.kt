@@ -66,6 +66,7 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                     this.createdAt = now
                     this.updatedAt = now
                     this.lastLoginAt = null
+                    this.realmId = "test-realm"
                 }
             }
         }

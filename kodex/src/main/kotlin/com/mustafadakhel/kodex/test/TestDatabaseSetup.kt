@@ -44,7 +44,8 @@ public object TestDatabaseSetup {
         email: String,
         phone: String? = null,
         passwordHash: String = "test_hash",
-        status: UserStatus = UserStatus.ACTIVE
+        status: UserStatus = UserStatus.ACTIVE,
+        realmId: String = "test-realm"
     ): UUID {
         return kodexTransaction {
             Users.insertAndGetId {
@@ -54,6 +55,7 @@ public object TestDatabaseSetup {
                     it[Users.phoneNumber] = phone
                 }
                 it[Users.status] = status
+                it[Users.realmId] = realmId
             }.value
         }
     }

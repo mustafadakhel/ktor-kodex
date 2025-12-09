@@ -134,10 +134,6 @@ class Phase3IntegrationTest : FunSpec({
         }
     }
 
-    // ============================================================================
-    // TRUSTED DEVICES TESTS
-    // ============================================================================
-
     context("Trusted Devices") {
 
         test("should trust a device with expiration") {
@@ -297,10 +293,6 @@ class Phase3IntegrationTest : FunSpec({
         }
     }
 
-    // ============================================================================
-    // ADMIN MANAGEMENT TESTS
-    // ============================================================================
-
     context("Admin Management") {
 
         test("should allow admin to force remove user's MFA method") {
@@ -377,10 +369,6 @@ class Phase3IntegrationTest : FunSpec({
         }
     }
 
-    // ============================================================================
-    // ADMIN AUTHORIZATION TESTS
-    // ============================================================================
-
     context("Admin Authorization") {
 
         test("should reject non-admin trying to force remove MFA method") {
@@ -426,10 +414,6 @@ class Phase3IntegrationTest : FunSpec({
             exception.message shouldContain "admin"
         }
     }
-
-    // ============================================================================
-    // STATISTICS TESTS
-    // ============================================================================
 
     context("Statistics") {
 
@@ -498,10 +482,6 @@ class Phase3IntegrationTest : FunSpec({
             stats.trustedDevices shouldBe 0
         }
     }
-
-    // ============================================================================
-    // AUTHENTICATION FLOW TESTS
-    // ============================================================================
 
     context("Authentication Flow - Email Challenge") {
 

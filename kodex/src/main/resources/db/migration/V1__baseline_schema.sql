@@ -21,12 +21,13 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    phone_number VARCHAR(20) UNIQUE,
-    email VARCHAR(255) UNIQUE,
+    phone_number VARCHAR(20),
+    email VARCHAR(255),
     last_login_at TIMESTAMP,
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
     is_locked BOOLEAN NOT NULL DEFAULT FALSE,
-    locked_until TIMESTAMP
+    locked_until TIMESTAMP,
+    realm_id VARCHAR(50) NOT NULL
 );
 
 -- Roles table: Role definitions
@@ -119,9 +120,10 @@ CREATE TABLE IF NOT EXISTS failed_login_attempts (
 -- Indexes for Performance
 -- ============================================================================
 
--- Users table indexes
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users(phone_number);
+-- Users table indexes (composite unique constraints for realm isolation)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_realm ON users(email, realm_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_realm ON users(phone_number, realm_id);
+CREATE INDEX IF NOT EXISTS idx_users_realm_id ON users(realm_id);
 
 -- Tokens table indexes
 CREATE INDEX IF NOT EXISTS idx_tokens_user_id ON tokens(user_id);

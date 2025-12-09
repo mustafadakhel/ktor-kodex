@@ -50,7 +50,7 @@ internal class DefaultAuthService(
             identifierType = "email",
             ipAddress = ipAddress,
             userAgent = userAgent,
-            userFetcher = { userRepository.findByEmail(it) }
+            userFetcher = { userRepository.findByEmail(it, realm.name) }
         )
 
     override suspend fun loginByPhone(
@@ -65,7 +65,7 @@ internal class DefaultAuthService(
             identifierType = "phone",
             ipAddress = ipAddress,
             userAgent = userAgent,
-            userFetcher = { userRepository.findByPhone(it) }
+            userFetcher = { userRepository.findByPhone(it, realm.name) }
         )
 
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
