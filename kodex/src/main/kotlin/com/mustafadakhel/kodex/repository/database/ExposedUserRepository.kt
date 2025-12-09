@@ -9,6 +9,7 @@ import com.mustafadakhel.kodex.update.FieldUpdate
 import com.mustafadakhel.kodex.util.exposedTransaction
 import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -80,12 +81,12 @@ private object ExposedUserRepository : UserRepository {
         UserDao.findById(userId)?.toEntity()
     }
 
-    override fun findByPhone(phone: String): UserEntity? = exposedTransaction {
-        UserDao.find { Users.phoneNumber eq phone }.firstOrNull()?.toEntity()
+    override fun findByPhone(phone: String, realmId: String): UserEntity? = exposedTransaction {
+        UserDao.find { (Users.phoneNumber eq phone) and (Users.realmId eq realmId) }.firstOrNull()?.toEntity()
     }
 
-    override fun findByEmail(email: String): UserEntity? = exposedTransaction {
-        UserDao.find { Users.email eq email }.firstOrNull()?.toEntity()
+    override fun findByEmail(email: String, realmId: String): UserEntity? = exposedTransaction {
+        UserDao.find { (Users.email eq email) and (Users.realmId eq realmId) }.firstOrNull()?.toEntity()
     }
 
     override fun findFullById(userId: UUID): FullUserEntity? = exposedTransaction {
@@ -100,12 +101,18 @@ private object ExposedUserRepository : UserRepository {
         customAttributes: Map<String, String>?,
         profile: UserProfile?,
         currentTime: LocalDateTime,
+        realmId: String,
     ) = exposedTransaction {
-        if (email != null && UserDao.find { Users.email eq email }.any()) {
+        if (email != null && UserDao.find { (Users.email eq email) and (Users.realmId eq realmId) }.any()) {
             return@exposedTransaction UserRepository.CreateUserResult.EmailAlreadyExists
         }
-        if (phone != null && UserDao.find { Users.phoneNumber eq phone }.any()) {
+        if (phone != null && UserDao.find { (Users.phoneNumber eq phone) and (Users.realmId eq realmId) }.any()) {
             return@exposedTransaction UserRepository.CreateUserResult.PhoneAlreadyExists
+        }
+
+        roleNames.forEach { roleName ->
+            RoleDao.findById(roleName)
+                ?: return@exposedTransaction UserRepository.CreateUserResult.InvalidRole(roleName)
         }
 
         val newUser = UserDao.new {
@@ -114,11 +121,14 @@ private object ExposedUserRepository : UserRepository {
             this.createdAt = currentTime
             this.email = email
             this.phoneNumber = phone
+            this.realmId = realmId
         }
 
-        val rolesResult = updateRolesForUserInternal(newUser.id.value, roleNames)
-        if (rolesResult is UserRepository.UpdateRolesResult.InvalidRole) {
-            return@exposedTransaction UserRepository.CreateUserResult.InvalidRole(rolesResult.roleName)
+        roleNames.forEach { roleName ->
+            UserRoles.insert {
+                it[UserRoles.userId] = newUser.id.value
+                it[UserRoles.roleId] = roleName
+            }
         }
 
         if (profile != null)
@@ -157,11 +167,13 @@ private object ExposedUserRepository : UserRepository {
             return@exposedTransaction UserRepository.UpdateUserResult.NotFound
         }
 
+        val userRealmId = user.realmId
+
         when (email) {
             is FieldUpdate.NoChange -> { /* no change */ }
             is FieldUpdate.SetValue -> {
                 if (user.email != email.value) {
-                    if (UserDao.find { Users.email eq email.value }.any()) {
+                    if (UserDao.find { (Users.email eq email.value) and (Users.realmId eq userRealmId) }.any()) {
                         return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
                     }
                     user.email = email.value
@@ -176,7 +188,7 @@ private object ExposedUserRepository : UserRepository {
             is FieldUpdate.NoChange -> { /* no change */ }
             is FieldUpdate.SetValue -> {
                 if (user.phoneNumber != phone.value) {
-                    if (UserDao.find { Users.phoneNumber eq phone.value }.any()) {
+                    if (UserDao.find { (Users.phoneNumber eq phone.value) and (Users.realmId eq userRealmId) }.any()) {
                         return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
                     }
                     user.phoneNumber = phone.value
@@ -328,17 +340,17 @@ private object ExposedUserRepository : UserRepository {
         customAttributes: FieldUpdate<Map<String, String>>,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
-        // All operations in single transaction - all succeed or all fail
         val user = UserDao.findById(userId) ?: run {
             return@exposedTransaction UserRepository.UpdateUserResult.NotFound
         }
 
-        // Update user fields
+        val userRealmId = user.realmId
+
         when (email) {
             is FieldUpdate.NoChange -> { /* no change */ }
             is FieldUpdate.SetValue -> {
                 if (user.email != email.value) {
-                    if (UserDao.find { Users.email eq email.value }.any()) {
+                    if (UserDao.find { (Users.email eq email.value) and (Users.realmId eq userRealmId) }.any()) {
                         return@exposedTransaction UserRepository.UpdateUserResult.EmailAlreadyExists
                     }
                     user.email = email.value
@@ -353,7 +365,7 @@ private object ExposedUserRepository : UserRepository {
             is FieldUpdate.NoChange -> { /* no change */ }
             is FieldUpdate.SetValue -> {
                 if (user.phoneNumber != phone.value) {
-                    if (UserDao.find { Users.phoneNumber eq phone.value }.any()) {
+                    if (UserDao.find { (Users.phoneNumber eq phone.value) and (Users.realmId eq userRealmId) }.any()) {
                         return@exposedTransaction UserRepository.UpdateUserResult.PhoneAlreadyExists
                     }
                     user.phoneNumber = phone.value
@@ -374,7 +386,6 @@ private object ExposedUserRepository : UserRepository {
 
         user.updatedAt = currentTime
 
-        // Update profile if provided
         when (profile) {
             is FieldUpdate.NoChange -> { /* no change */ }
             is FieldUpdate.SetValue -> {
@@ -386,19 +397,16 @@ private object ExposedUserRepository : UserRepository {
                 }
             }
             is FieldUpdate.ClearValue -> {
-                // Profile clearing would require deleting the profile row
                 UserProfileDao.findById(userId)?.delete()
             }
         }
 
-        // Update custom attributes if provided
         when (customAttributes) {
             is FieldUpdate.NoChange -> { /* no change */ }
             is FieldUpdate.SetValue -> {
                 UserCustomAttributesDao.updateForUser(userId, customAttributes.value)
             }
             is FieldUpdate.ClearValue -> {
-                // Clear all custom attributes
                 UserCustomAttributesDao.replaceAllForUser(userId, emptyMap())
             }
         }

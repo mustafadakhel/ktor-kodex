@@ -127,7 +127,8 @@ class TokenRotationSecurityTest : FunSpec({
                 roleNames = listOf(realm.owner),
                 customAttributes = null,
                 profile = null,
-                currentTime = now(TimeZone.UTC)
+                currentTime = now(TimeZone.UTC),
+                realmId = realm.name
             )
             val userDao = (result as com.mustafadakhel.kodex.repository.UserRepository.CreateUserResult.Success).user
             testUserId = userDao.id
@@ -449,7 +450,8 @@ class TokenRotationSecurityTest : FunSpec({
                     roleNames = listOf(realm.owner),
                     customAttributes = null,
                     profile = null,
-                    currentTime = now(TimeZone.UTC)
+                    currentTime = now(TimeZone.UTC),
+                    realmId = realm.name
                 )
                 (result as com.mustafadakhel.kodex.repository.UserRepository.CreateUserResult.Success).user.id
             }

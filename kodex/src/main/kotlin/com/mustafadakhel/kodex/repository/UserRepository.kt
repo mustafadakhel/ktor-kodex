@@ -19,9 +19,9 @@ public interface UserRepository {
 
     public fun findById(userId: UUID): UserEntity?
 
-    public fun findByPhone(phone: String): UserEntity?
+    public fun findByPhone(phone: String, realmId: String): UserEntity?
 
-    public fun findByEmail(email: String): UserEntity?
+    public fun findByEmail(email: String, realmId: String): UserEntity?
 
     public fun findFullById(userId: UUID): FullUserEntity?
 
@@ -33,6 +33,7 @@ public interface UserRepository {
         customAttributes: Map<String, String>? = null,
         profile: UserProfile? = null,
         currentTime: LocalDateTime,
+        realmId: String,
     ) : CreateUserResult
 
     public fun updateById(

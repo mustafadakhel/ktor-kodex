@@ -10,13 +10,19 @@ import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 import java.util.*
 
 internal object Users : UUIDTable() {
-    val passwordHash = varchar("password_hash", 255)
-    val createdAt = datetime("created_at").defaultExpression(CurrentDateTime)
-    val updatedAt = datetime("updated_at").defaultExpression(CurrentDateTime)
-    val phoneNumber = varchar("phone_number", 20).nullable().uniqueIndex()
-    val email = varchar("email", 255).nullable().uniqueIndex()
-    val lastLoginAt = datetime("last_login_at").nullable()
-    val status = enumeration("status", UserStatus::class).default(UserStatus.ACTIVE)
+    public val passwordHash: org.jetbrains.exposed.sql.Column<String> = varchar("password_hash", 255)
+    public val createdAt: org.jetbrains.exposed.sql.Column<kotlinx.datetime.LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
+    public val updatedAt: org.jetbrains.exposed.sql.Column<kotlinx.datetime.LocalDateTime> = datetime("updated_at").defaultExpression(CurrentDateTime)
+    public val phoneNumber: org.jetbrains.exposed.sql.Column<String?> = varchar("phone_number", 20).nullable()
+    public val email: org.jetbrains.exposed.sql.Column<String?> = varchar("email", 255).nullable()
+    public val lastLoginAt: org.jetbrains.exposed.sql.Column<kotlinx.datetime.LocalDateTime?> = datetime("last_login_at").nullable()
+    public val status: org.jetbrains.exposed.sql.Column<UserStatus> = enumeration("status", UserStatus::class).default(UserStatus.ACTIVE)
+    public val realmId: org.jetbrains.exposed.sql.Column<String> = varchar("realm_id", 50)
+
+    init {
+        uniqueIndex("idx_users_email_realm", email, realmId)
+        uniqueIndex("idx_users_phone_realm", phoneNumber, realmId)
+    }
 }
 
 internal class UserDao(id: EntityID<UUID>) : UUIDEntity(id) {
@@ -29,6 +35,7 @@ internal class UserDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var email by Users.email
     var lastLoginAt by Users.lastLoginAt
     var status by Users.status
+    var realmId by Users.realmId
 
     var roles by RoleDao via UserRoles
     val profile by UserProfileDao optionalBackReferencedOn UserProfiles

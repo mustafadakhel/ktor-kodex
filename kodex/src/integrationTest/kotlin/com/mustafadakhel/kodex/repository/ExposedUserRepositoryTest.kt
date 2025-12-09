@@ -27,6 +27,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
     lateinit var userRepository: UserRepository
     val now = LocalDateTime(2024, 1, 15, 10, 30)
+    val testRealm = "test-realm"
 
     beforeEach {
         // H2 + Exposed setup
@@ -70,7 +71,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = roles,
                 customAttributes = attrs,
                 profile = profile,
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             )
 
             result.shouldBeInstanceOf<CreateUserResult.Success>()
@@ -101,7 +103,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = roles,
                 customAttributes = null,
                 profile = null,
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             )
 
             result.shouldBeInstanceOf<CreateUserResult.Success>()
@@ -119,7 +122,7 @@ class ExposedUserRepositoryTest : FunSpec({
             val roles = listOf("USER")
 
             userRepository.seedRoles(listOf(Role("USER", "")))
-            userRepository.create(email, null, pw, roles, null, null, now)
+            userRepository.create(email, null, pw, roles, null, null, now, testRealm)
 
             userRepository.create(
                 email = email,
@@ -128,7 +131,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = roles,
                 customAttributes = null,
                 profile = null,
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             ) shouldBe CreateUserResult.EmailAlreadyExists
         }
 
@@ -138,7 +142,7 @@ class ExposedUserRepositoryTest : FunSpec({
             val roles = listOf("USER")
 
             userRepository.seedRoles(listOf(Role("USER", "")))
-            userRepository.create(null, phone, pw, roles, null, null, now)
+            userRepository.create(null, phone, pw, roles, null, null, now, testRealm)
 
             userRepository.create(
                 email = null,
@@ -147,7 +151,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = roles,
                 customAttributes = null,
                 profile = null,
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             ) shouldBe CreateUserResult.PhoneAlreadyExists
         }
 
@@ -161,7 +166,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = listOf("NOPE"),
                 customAttributes = null,
                 profile = null,
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             ) shouldBe CreateUserResult.InvalidRole("NOPE")
         }
     }
@@ -191,7 +197,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
             val r2 = (userRepository.create(
                 null,
@@ -200,12 +207,13 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.findById(r1.id)!!.email shouldBe "a@x"
-            userRepository.findByEmail("a@x")!!.id shouldBe r1.id
-            userRepository.findByPhone("999")!!.id shouldBe r2.id
+            userRepository.findByEmail("a@x", testRealm)!!.id shouldBe r1.id
+            userRepository.findByPhone("999", testRealm)!!.id shouldBe r2.id
             userRepository.findById(UUID.randomUUID()).shouldBeNull()
 
             userRepository.getAll().map { it.id }
@@ -220,7 +228,7 @@ class ExposedUserRepositoryTest : FunSpec({
             val profile = UserProfile("F", "L", "Addr", "pic")
             val attrs = mapOf("k" to "v")
             val u =
-                (userRepository.create("f@x", null, "pw", roles, attrs, profile, now) as CreateUserResult.Success).user
+                (userRepository.create("f@x", null, "pw", roles, attrs, profile, now, testRealm) as CreateUserResult.Success).user
 
             val full = userRepository.findFullById(u.id)!!
             full.roles.map(RoleEntity::name)
@@ -244,7 +252,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.updateById(
@@ -280,7 +289,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
             val u2 = (userRepository.create(
                 "b@x",
@@ -289,7 +299,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.updateById(
@@ -319,7 +330,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("A"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.findRoles(u.id).map(RoleEntity::name) shouldContainExactly listOf("A")
@@ -334,7 +346,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 emptyList(),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.findRoles(u.id).shouldBeEmpty()
@@ -349,7 +362,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("X"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.updateRolesForUser(u.id, listOf("Y")) shouldBe UpdateRolesResult.Success
@@ -370,7 +384,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 orig,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.findProfileByUserId(u.id)!!.lastName shouldBe "Doe"
@@ -397,7 +412,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 orig,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             userRepository.findCustomAttributesByUserId(u.id) shouldContainExactly orig
@@ -429,7 +445,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
             userRepository.getHashedPassword(u.id) shouldBe "pw"
         }
@@ -453,7 +470,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = listOf("USER"),
                 customAttributes = mapOf("team" to "backend", "level" to "senior"),
                 profile = UserProfile("John", "Doe", "123 Main St", "pic1.jpg"),
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             ) as CreateUserResult.Success
 
             val user2Result = userRepository.create(
@@ -463,7 +481,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = listOf("USER", "ADMIN"),
                 customAttributes = mapOf("team" to "frontend"),
                 profile = UserProfile("Jane", "Smith", null, null),
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             ) as CreateUserResult.Success
 
             val user3Result = userRepository.create(
@@ -473,7 +492,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 roleNames = listOf("ADMIN"),
                 customAttributes = null,
                 profile = null,
-                currentTime = now
+                currentTime = now,
+                realmId = testRealm
             ) as CreateUserResult.Success
 
             val allFull = userRepository.getAllFull()
@@ -519,7 +539,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("USER"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updatePassword(user.id, "newHash")
@@ -544,7 +565,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateById(
@@ -568,7 +590,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateById(
@@ -594,7 +617,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateById(
@@ -620,7 +644,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 mapOf("old" to "value"),
                 UserProfile("OldFirst", "OldLast", null, null),
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(
@@ -649,7 +674,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(
@@ -675,7 +701,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(
@@ -701,7 +728,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 UserProfile("John", "Doe", null, null),
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(
@@ -727,7 +755,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 mapOf("key1" to "value1", "key2" to "value2"),
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(
@@ -767,7 +796,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val user2 = (userRepository.create(
@@ -777,7 +807,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(
@@ -802,7 +833,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val user2 = (userRepository.create(
@@ -812,7 +844,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 listOf("U"),
                 null,
                 null,
-                now
+                now,
+                testRealm
             ) as CreateUserResult.Success).user
 
             val result = userRepository.updateBatch(

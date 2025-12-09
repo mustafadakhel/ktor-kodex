@@ -27,6 +27,7 @@ class UserCustomAttributesValidationTest : DescribeSpec({
                 passwordHash = "hash"
                 createdAt = now
                 updatedAt = now
+                realmId = "test-realm"
             }
         }
     }
