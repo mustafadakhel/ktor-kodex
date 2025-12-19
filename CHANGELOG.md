@@ -23,14 +23,6 @@ All notable changes to this project will be documented in this file.
 - Metrics extension (`kodex-metrics`) with Micrometer integration
 - Extension access via global `kodex()` function for service retrieval
 - 71 integration tests for verification, password reset, audit, and lockout services
-- Argon2id password hashing using BouncyCastle with configurable parameters and presets (Spring Security, Keycloak, OWASP minimum, balanced)
-- `passwordHashing` DSL configuration block for realm-specific password hashing settings
-- Account lockout mechanism against brute force attacks with configurable policies (strict, moderate, lenient, disabled)
-- `accountLockout` DSL configuration block for realm-specific lockout settings
-- Database persistence for failed login attempts and account lockouts
-- Sliding window algorithm for tracking failed authentication attempts
-- Automatic account locking after N failed attempts within configurable time window
-- Manual unlock and clear failed attempts operations
 
 ### Changed
 
@@ -39,10 +31,6 @@ All notable changes to this project will be documented in this file.
 - **Breaking:** `DefaultKodexPrincipal` constructor requires `tokenFamily` parameter
 - Session module production-ready with all critical and high-priority issues resolved
 - Timestamp handling standardized (single `Clock.System.now()` call per operation)
-- Separated password hashing (Argon2id) from token hashing (SHA-256) for security
-- Authentication flow refactored to eliminate try-catch for control flow
-- `authenticateInternal()` now returns `Boolean` instead of throwing exceptions
-- Failed login attempts now recorded for non-existent users to prevent enumeration attacks
 
 ### Fixed
 
@@ -64,6 +52,29 @@ All notable changes to this project will be documented in this file.
 - N+1 queries eliminated with batch operations:
   - `archiveSessionsToHistory()` uses Exposed `batchInsert`
   - `deleteSessions()` uses `deleteWhere` with `inList`
+
+## [0.2.0] - 2025-01-20
+
+### Added
+
+- Argon2id password hashing using BouncyCastle with configurable parameters and presets (Spring Security, Keycloak, OWASP minimum, balanced)
+- `passwordHashing` DSL configuration block for realm-specific password hashing settings
+- Account lockout mechanism against brute force attacks with configurable policies (strict, moderate, lenient, disabled)
+- `accountLockout` DSL configuration block for realm-specific lockout settings
+- Database persistence for failed login attempts and account lockouts
+- Sliding window algorithm for tracking failed authentication attempts
+- Automatic account locking after N failed attempts within configurable time window
+- Manual unlock and clear failed attempts operations
+
+### Changed
+
+- Separated password hashing (Argon2id) from token hashing (SHA-256) for security
+- Authentication flow refactored to eliminate try-catch for control flow
+- `authenticateInternal()` now returns `Boolean` instead of throwing exceptions
+- Failed login attempts now recorded for non-existent users to prevent enumeration attacks
+
+### Performance
+
 - Failed login handling optimized with scoped database cleanup per identifier instead of table-wide scan
 - Authentication flow improved by removing try-catch overhead and exception throwing
 - Reduced database lock contention through scoped queries
@@ -71,9 +82,6 @@ All notable changes to this project will be documented in this file.
 
 ### Breaking Changes
 
-- `TokenIssuer.issue()` signature changed (added optional `tokenFamily` parameter)
-- `KodexPrincipal` interface changed (added `tokenFamily` property)
-- `DefaultKodexPrincipal` constructor changed (added `tokenFamily` parameter)
 - SHA-256 removed for password hashing (Argon2id only)
 
 ## [0.1.7] - 2025-01-18
