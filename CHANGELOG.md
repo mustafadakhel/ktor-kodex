@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-12-19
+
+### Added
+
+- Maven publishing configuration for all extension modules (kodex-tokens, kodex-audit, kodex-lockout, kodex-metrics, kodex-mfa, kodex-sessions, kodex-verification, kodex-password-reset, kodex-ratelimit-inmemory, kodex-ratelimit-redis)
+- Version catalog entries for Ktor client libraries, kotlinx-serialization, Lettuce, and Testcontainers
+- `ktor-client` bundle in version catalog for HTTP client dependencies
+
+### Fixed
+
+- Incorrect groupId in generated POM for project dependencies (was `ktor-kodex`, now `com.mustafadakhel.kodex`)
+- Extension modules now publish with correct Maven coordinates
+
+### Changed
+
+- Consolidated all dependency versions to use Gradle version catalog
+- Updated kodex-sessions Ktor client from 2.3.6 to 3.2.1
+- Updated kodex-metrics Micrometer from 1.12.0 to 1.14.2
+- Updated kodex-ratelimit-redis Lettuce from 6.3.0 to 6.5.0
+- Updated kodex-ratelimit-redis kotlinx-coroutines-reactive from 1.7.3 to 1.10.2
+- Updated kotlinx-serialization-json to 1.7.3 across all modules
+- Removed hardcoded version strings from kodex-mfa, kodex-sessions, and sample modules
+
 ## [0.3.0] - 2025-12-19
 
 ### Added

@@ -12,4 +12,6 @@ allprojects {
         mavenCentral()
         google()
     }
+
+    group = "com.mustafadakhel.kodex"
 }
