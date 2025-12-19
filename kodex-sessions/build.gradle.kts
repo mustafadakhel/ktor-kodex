@@ -1,3 +1,5 @@
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinJvm
 import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -5,7 +7,8 @@ version = libs.versions.kodex.get()
 
 plugins {
     kotlin("jvm")
-    kotlin("plugin.serialization") version "2.1.21"
+    kotlin("plugin.serialization")
+    id("com.vanniktech.maven.publish")
 }
 
 java {
@@ -45,13 +48,41 @@ dependencies {
     implementation(libs.bundles.ktor.server)
 
     // HTTP client for geolocation API
-    implementation("io.ktor:ktor-client-core:2.3.6")
-    implementation("io.ktor:ktor-client-cio:2.3.6")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.6")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.6")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    implementation(libs.bundles.ktor.client)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(project(":kodex-ratelimit-inmemory"))
+}
+
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+    configure(KotlinJvm(javadocJar = JavadocJar.Javadoc(), sourcesJar = true))
+    coordinates(group as String, project.name, version as String)
+    pom {
+        name.set(project.name)
+        description.set("Session management module for Kodex authentication library")
+        url.set("https://github.com/mustafadakhel/ktor-kodex")
+        licenses {
+            license {
+                name.set("The Apache Software License, Version 2.0")
+                url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+            }
+        }
+        scm {
+            connection.set("scm:git:git://github.com/mustafadakhel/ktor-kodex.git")
+            developerConnection.set("scm:git:ssh://github.com/mustafadakhel/ktor-kodex.git")
+            url.set("https://github.com/mustafadakhel/ktor-kodex")
+        }
+        developers {
+            developer {
+                id.set("mustafadakhel")
+                name.set("Mustafa M. Dakhel")
+                email.set("mstfdakhel@gmail.com")
+            }
+        }
+    }
 }
