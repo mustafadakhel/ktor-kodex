@@ -8,7 +8,7 @@ import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Table
@@ -48,7 +48,7 @@ public class PasswordResetExtension internal constructor(
                     // Note: Only handles UserEvent.Created. Contact updates via UserEvent.Updated
                     // are not yet implemented - users must reset password using their original contact.
                     kodexTransaction {
-                        val now = Clock.System.now().toLocalDateTime(timeZone)
+                        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
                         event.email?.let { email ->
                             PasswordResetContacts.insert {
@@ -67,6 +67,56 @@ public class PasswordResetExtension internal constructor(
                                 it[PasswordResetContacts.contactValue] = phone
                                 it[PasswordResetContacts.createdAt] = now
                                 it[PasswordResetContacts.updatedAt] = now
+                            }
+                        }
+                    }
+                }
+            },
+            object : EventSubscriber<UserEvent.Updated> {
+                override val eventType = UserEvent.Updated::class
+
+                override suspend fun onEvent(event: UserEvent.Updated) {
+                    kodexTransaction {
+                        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
+
+                        event.fieldChanges.forEach { change ->
+                            when (change.fieldName) {
+                                "email" -> {
+                                    val newEmail = change.newValue as? String
+                                    if (newEmail != null) {
+                                        PasswordResetContacts.upsert(
+                                            keys = arrayOf(
+                                                PasswordResetContacts.realmId,
+                                                PasswordResetContacts.userId,
+                                                PasswordResetContacts.contactType
+                                            )
+                                        ) {
+                                            it[PasswordResetContacts.realmId] = event.realmId
+                                            it[PasswordResetContacts.userId] = event.userId
+                                            it[PasswordResetContacts.contactType] = "EMAIL"
+                                            it[PasswordResetContacts.contactValue] = newEmail
+                                            it[PasswordResetContacts.updatedAt] = now
+                                        }
+                                    }
+                                }
+                                "phone" -> {
+                                    val newPhone = change.newValue as? String
+                                    if (newPhone != null) {
+                                        PasswordResetContacts.upsert(
+                                            keys = arrayOf(
+                                                PasswordResetContacts.realmId,
+                                                PasswordResetContacts.userId,
+                                                PasswordResetContacts.contactType
+                                            )
+                                        ) {
+                                            it[PasswordResetContacts.realmId] = event.realmId
+                                            it[PasswordResetContacts.userId] = event.userId
+                                            it[PasswordResetContacts.contactType] = "PHONE"
+                                            it[PasswordResetContacts.contactValue] = newPhone
+                                            it[PasswordResetContacts.updatedAt] = now
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

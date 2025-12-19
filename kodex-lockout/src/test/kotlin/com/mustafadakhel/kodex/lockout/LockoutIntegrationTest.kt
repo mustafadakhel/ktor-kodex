@@ -5,7 +5,8 @@ import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.kodexTransaction
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -110,8 +111,8 @@ class LockoutIntegrationTest : FunSpec({
 
             // Wait for window to pass (simulate by clearing old attempts)
             // In real scenario, we'd wait 5 minutes - here we manually clean
-            transaction(database) {
-                val clockNow = Clock.System.now()
+            kodexTransaction {
+                val clockNow = CurrentKotlinInstant
                 val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
                 // Verify attempts exist
@@ -294,7 +295,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(policy, TimeZone.UTC)
 
             val userId = UUID.randomUUID()
-            val clockNow = Clock.System.now()
+            val clockNow = CurrentKotlinInstant
             val lockedUntil = (clockNow + 1.hours).toLocalDateTime(TimeZone.UTC)
 
             service.lockAccount(userId, lockedUntil, "Manual lock by admin")
@@ -308,7 +309,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(policy, TimeZone.UTC)
 
             val userId = UUID.randomUUID()
-            val clockNow = Clock.System.now()
+            val clockNow = CurrentKotlinInstant
             val lockedUntil = (clockNow + 1.hours).toLocalDateTime(TimeZone.UTC)
 
             // Lock account
@@ -325,7 +326,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(policy, TimeZone.UTC)
 
             val userId = UUID.randomUUID()
-            val clockNow = Clock.System.now()
+            val clockNow = CurrentKotlinInstant
             val lockedUntil = clockNow.toLocalDateTime(TimeZone.UTC)  // Expired immediately
 
             service.lockAccount(userId, lockedUntil, "Test lock")
@@ -348,11 +349,11 @@ class LockoutIntegrationTest : FunSpec({
                     it[AccountLocks.userId] = userId
                     it[AccountLocks.lockedUntil] = null  // Permanent lock
                     it[AccountLocks.reason] = "Permanent ban"
-                    it[AccountLocks.lockedAt] = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                    it[AccountLocks.lockedAt] = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
                 }
             }
 
-            val clockNow = Clock.System.now()
+            val clockNow = CurrentKotlinInstant
             val isLocked = service.isAccountLocked(userId, clockNow.toLocalDateTime(TimeZone.UTC))
             isLocked shouldBe true
         }
@@ -528,8 +529,8 @@ class LockoutIntegrationTest : FunSpec({
             }
 
             // Manually insert old attempt (outside window)
-            transaction(database) {
-                val clockNow = Clock.System.now()
+            kodexTransaction {
+                val clockNow = CurrentKotlinInstant
                 val oldTime = (clockNow - 10.minutes).toLocalDateTime(TimeZone.UTC)
 
                 FailedLoginAttempts.insert {
@@ -631,7 +632,7 @@ class LockoutIntegrationTest : FunSpec({
             result.shouldBeInstanceOf<LockAccountResult.NoAction>()
 
             // Check if locked
-            val clockNow = Clock.System.now()
+            val clockNow = CurrentKotlinInstant
             val isLocked = service.isAccountLocked(nonExistentUserId, clockNow.toLocalDateTime(TimeZone.UTC))
             isLocked shouldBe false
         }

@@ -11,7 +11,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 
@@ -31,7 +31,7 @@ class AnomalyDetectorTest : StringSpec({
         longitude: Double? = null,
         location: String? = null
     ): Session {
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         return Session(
             id = id,
             realmId = "test-realm",
