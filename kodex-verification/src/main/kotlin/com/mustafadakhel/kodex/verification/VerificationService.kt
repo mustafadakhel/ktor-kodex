@@ -10,8 +10,6 @@ import java.util.UUID
  */
 public interface VerificationService {
 
-    // === Contact Management ===
-
     /**
      * Set or update a contact for a user.
      * If the contact value changes, verification status is reset.
@@ -68,8 +66,6 @@ public interface VerificationService {
      */
     public fun getUserContacts(userId: UUID): List<ContactVerification>
 
-    // === Verification Status ===
-
     /**
      * Check if a specific contact is verified.
      *
@@ -104,8 +100,6 @@ public interface VerificationService {
      * @return List of contact identifiers that are required but not verified
      */
     public fun getMissingVerifications(userId: UUID): List<ContactIdentifier>
-
-    // === Token Operations ===
 
     /**
      * Send verification token for a specific contact.
@@ -158,8 +152,6 @@ public interface VerificationService {
         identifier: ContactIdentifier,
         ipAddress: String? = null
     ): VerificationSendResult
-
-    // === Manual Control ===
 
     /**
      * Manually mark a contact as verified (for admin/testing purposes).

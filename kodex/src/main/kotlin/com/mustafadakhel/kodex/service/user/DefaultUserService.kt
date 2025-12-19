@@ -37,8 +37,6 @@ internal class DefaultUserService(
     private val realm: Realm
 ) : UserService {
 
-    // ==================== Query Operations ====================
-
     override fun getAllUsers(): List<User> {
         return userRepository.getAll().map { it.toUser() }
     }
@@ -57,12 +55,12 @@ internal class DefaultUserService(
     }
 
     override fun getUserByEmail(email: String): User {
-        return userRepository.findByEmail(email)?.toUser()
+        return userRepository.findByEmail(email, realm.name)?.toUser()
             ?: throw KodexThrowable.UserNotFound("User with email $email not found")
     }
 
     override fun getUserByPhone(phone: String): User {
-        return userRepository.findByPhone(phone)?.toUser()
+        return userRepository.findByPhone(phone, realm.name)?.toUser()
             ?: throw KodexThrowable.UserNotFound("User with phone number $phone not found")
     }
 
@@ -88,8 +86,6 @@ internal class DefaultUserService(
         return userRepository.findCustomAttributesByUserId(userId)
     }
 
-    // ==================== Command Operations ====================
-
     override suspend fun createUser(
         email: String?,
         phone: String?,
@@ -112,7 +108,8 @@ internal class DefaultUserService(
                 roleNames = (listOf(realm.owner) + roleNames).distinct(),
                 currentTime = nowLocal(timeZone),
                 customAttributes = transformed.customAttributes,
-                profile = transformed.profile
+                profile = transformed.profile,
+                realmId = realm.name
             )
             val user = result.userOrThrow().toUser()
 
@@ -188,8 +185,6 @@ internal class DefaultUserService(
         return false
     }
 
-    // ==================== Role Management ====================
-
     override fun getSeededRoles(): List<String> {
         return userRepository.getAllRoles().map { it.name }
     }
@@ -223,8 +218,6 @@ internal class DefaultUserService(
             }
         }
     }
-
-    // ==================== Helper Functions ====================
 
     private fun UserRepository.CreateUserResult.userOrThrow() = when (this) {
         is UserRepository.CreateUserResult.EmailAlreadyExists ->

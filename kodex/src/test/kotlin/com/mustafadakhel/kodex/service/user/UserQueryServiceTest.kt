@@ -78,6 +78,8 @@ class UserQueryServiceTest : FunSpec({
         customAttributes = mapOf("key1" to "value1")
     )
 
+    val realmName = "test-realm"
+
     beforeEach {
         userRepository = mockk()
         hashingService = mockk(relaxed = true)
@@ -86,7 +88,8 @@ class UserQueryServiceTest : FunSpec({
         updateCommandProcessor = mockk(relaxed = true)
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns "test-realm"
+        every { realm.owner } returns realmName
+        every { realm.name } returns realmName
 
         userQueryService = DefaultUserService(
             userRepository,
@@ -165,7 +168,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserByEmail should return user when found") {
-        every { userRepository.findByEmail(testEmail) } returns testUserEntity
+        every { userRepository.findByEmail(testEmail, realmName) } returns testUserEntity
 
         val result = userQueryService.getUserByEmail(testEmail)
 
@@ -174,7 +177,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserByEmail should throw UserNotFound when user doesn't exist") {
-        every { userRepository.findByEmail(testEmail) } returns null
+        every { userRepository.findByEmail(testEmail, realmName) } returns null
 
         val exception = shouldThrow<KodexThrowable.UserNotFound> {
             userQueryService.getUserByEmail(testEmail)
@@ -183,7 +186,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserByPhone should return user when found") {
-        every { userRepository.findByPhone(testPhone) } returns testUserEntity
+        every { userRepository.findByPhone(testPhone, realmName) } returns testUserEntity
 
         val result = userQueryService.getUserByPhone(testPhone)
 
@@ -192,7 +195,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserByPhone should throw UserNotFound when user doesn't exist") {
-        every { userRepository.findByPhone(testPhone) } returns null
+        every { userRepository.findByPhone(testPhone, realmName) } returns null
 
         val exception = shouldThrow<KodexThrowable.UserNotFound> {
             userQueryService.getUserByPhone(testPhone)

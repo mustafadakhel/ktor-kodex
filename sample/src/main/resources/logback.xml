@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Session module logging -->
+    <logger name="com.mustafadakhel.kodex.sessions" level="DEBUG"/>
+
+    <!-- Event bus logging -->
+    <logger name="com.mustafadakhel.kodex.event" level="DEBUG"/>
+
+    <!-- Token service logging -->
+    <logger name="com.mustafadakhel.kodex.service.token" level="DEBUG"/>
+
+    <!-- Auth service logging -->
+    <logger name="com.mustafadakhel.kodex.service.auth" level="DEBUG"/>
+
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

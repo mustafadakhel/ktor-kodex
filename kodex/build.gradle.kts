@@ -7,6 +7,7 @@ version = libs.versions.kodex.get()
 
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
     id("com.vanniktech.maven.publish")
     jacoco
 }
@@ -17,6 +18,19 @@ java {
     }
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+sourceSets {
+    create("integrationTest") {
+        kotlin {
+            srcDir("src/integrationTest/kotlin")
+        }
+        resources {
+            srcDir("src/integrationTest/resources")
+        }
+        compileClasspath += sourceSets["main"].output + sourceSets["test"].output
+        runtimeClasspath += sourceSets["main"].output + sourceSets["test"].output
+    }
 }
 
 tasks {
@@ -57,6 +71,32 @@ tasks {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+
+    val integrationTest = register<Test>("integrationTest") {
+        description = "Runs integration tests."
+        group = "verification"
+
+        testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+        classpath = sourceSets["integrationTest"].runtimeClasspath
+
+        useJUnitPlatform()
+        shouldRunAfter(test)
+    }
+
+    named<Task>("compileIntegrationTestKotlin") {
+        (this as org.jetbrains.kotlin.gradle.tasks.KotlinCompile).compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xfriend-paths=${project.layout.buildDirectory.get()}/classes/kotlin/main")
+        }
+    }
+
+    named<Task>("check") {
+        dependsOn(integrationTest)
+    }
+}
+
+val integrationTestImplementation by configurations.getting {
+    extendsFrom(configurations.testImplementation.get())
 }
 
 dependencies {
@@ -70,6 +110,7 @@ dependencies {
     implementation(libs.bouncycastle.bcprov)
     implementation(libs.flyway.core)
     compileOnly(libs.micrometer.core)
+
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -77,6 +118,10 @@ dependencies {
     testImplementation(libs.ktor.client.mock)
     testImplementation(libs.micrometer.core)
     testImplementation(libs.logback.classic)
+
+    integrationTestImplementation(libs.h2.database)
+    integrationTestImplementation(libs.ktor.server.test.host)
+    integrationTestImplementation(libs.logback.classic)
 }
 
 mavenPublishing {

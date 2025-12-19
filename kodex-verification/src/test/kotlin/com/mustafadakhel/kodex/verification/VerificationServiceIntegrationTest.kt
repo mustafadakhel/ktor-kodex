@@ -17,7 +17,12 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.assertions.throwables.shouldThrow
+import com.mustafadakhel.kodex.extension.AuthenticatedUser
+import com.mustafadakhel.kodex.extension.LoginMetadata
+import com.mustafadakhel.kodex.model.UserStatus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Database
@@ -532,6 +537,251 @@ class VerificationServiceIntegrationTest : FunSpec({
             // Can also manually unverify
             verificationService.setVerified(userId, emailIdentifier, false)
             verificationService.isContactVerified(userId, emailIdentifier).shouldBeFalse()
+        }
+    }
+
+    context("Login Blocking") {
+        test("afterAuthentication should throw UnverifiedAccount when required contact not verified") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.VERIFY_REQUIRED_ONLY
+                email {
+                    required = true
+                    sender = mockSender
+                }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userId = UUID.randomUUID()
+            verificationService.setEmail(userId, "unverified@example.com")
+
+            // canLogin should return false
+            verificationService.canLogin(userId).shouldBeFalse()
+
+            // Simulate the afterAuthentication check with data classes
+            val authenticatedUser = AuthenticatedUser(
+                userId = userId,
+                email = "unverified@example.com",
+                phone = null,
+                roles = listOf("owner"),
+                status = UserStatus.ACTIVE
+            )
+
+            val loginMetadata = LoginMetadata(
+                ipAddress = "127.0.0.1",
+                userAgent = "Test"
+            )
+
+            // The extension should throw UnverifiedAccount
+            shouldThrow<VerificationThrowable.UnverifiedAccount> {
+                extension.afterAuthentication(authenticatedUser, loginMetadata)
+            }
+        }
+
+        test("afterAuthentication should succeed when required contact is verified") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.VERIFY_REQUIRED_ONLY
+                email {
+                    required = true
+                    sender = mockSender
+                }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userId = UUID.randomUUID()
+            val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
+            verificationService.setEmail(userId, "verified@example.com")
+
+            // Verify the email
+            verificationService.sendVerification(userId, emailIdentifier)
+            val token = mockSender.sentTokens.first().second
+            verificationService.verifyToken(userId, emailIdentifier, token)
+
+            // canLogin should return true
+            verificationService.canLogin(userId).shouldBeTrue()
+
+            // The extension should NOT throw
+            val authenticatedUser = AuthenticatedUser(
+                userId = userId,
+                email = "verified@example.com",
+                phone = null,
+                roles = listOf("owner"),
+                status = UserStatus.ACTIVE
+            )
+
+            val loginMetadata = LoginMetadata(
+                ipAddress = "127.0.0.1",
+                userAgent = "Test"
+            )
+
+            // Should not throw
+            extension.afterAuthentication(authenticatedUser, loginMetadata)
+        }
+
+        test("MANUAL strategy allows login when no contacts are marked as required") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email {
+                    // In MANUAL mode, required=false (default) means verification is optional
+                    sender = mockSender
+                }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userId = UUID.randomUUID()
+            verificationService.setEmail(userId, "unverified@example.com")
+
+            // canLogin should return true when no contacts are required
+            verificationService.canLogin(userId).shouldBeTrue()
+
+            val authenticatedUser = AuthenticatedUser(
+                userId = userId,
+                email = "unverified@example.com",
+                phone = null,
+                roles = listOf("owner"),
+                status = UserStatus.ACTIVE
+            )
+
+            val loginMetadata = LoginMetadata(
+                ipAddress = "127.0.0.1",
+                userAgent = "Test"
+            )
+
+            // Should not throw when no contacts are required
+            extension.afterAuthentication(authenticatedUser, loginMetadata)
+        }
+    }
+
+    context("Resend Verification") {
+        test("resendVerification should invalidate old token and send new one") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email { sender = mockSender }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userId = UUID.randomUUID()
+            val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
+            verificationService.setEmail(userId, "user@example.com")
+
+            // Send initial verification
+            val initialResult = verificationService.sendVerification(userId, emailIdentifier)
+            initialResult.shouldBeInstanceOf<VerificationSendResult.Success>()
+            val initialToken = mockSender.sentTokens.first().second
+
+            // Resend verification
+            val resendResult = verificationService.resendVerification(userId, emailIdentifier)
+            resendResult.shouldBeInstanceOf<VerificationSendResult.Success>()
+            mockSender.sentTokens shouldHaveSize 2
+            val newToken = mockSender.sentTokens.last().second
+
+            // Old token should be deleted (not work)
+            val oldTokenResult = verificationService.verifyToken(userId, emailIdentifier, initialToken)
+            oldTokenResult.shouldBeInstanceOf<VerificationResult.Invalid>()
+
+            // New token should work
+            val newTokenResult = verificationService.verifyToken(userId, emailIdentifier, newToken)
+            newTokenResult.shouldBeInstanceOf<VerificationResult.Success>()
+            verificationService.isContactVerified(userId, emailIdentifier).shouldBeTrue()
+        }
+
+        test("resendVerification should respect rate limits") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                maxSendAttemptsPerUser = 3
+                email { sender = mockSender }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userId = UUID.randomUUID()
+            val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
+            verificationService.setEmail(userId, "user@example.com")
+
+            // First send + 2 resends = 3 total (at limit)
+            verificationService.sendVerification(userId, emailIdentifier)
+            verificationService.resendVerification(userId, emailIdentifier)
+            verificationService.resendVerification(userId, emailIdentifier)
+
+            // 4th attempt should be rate limited
+            val result = verificationService.resendVerification(userId, emailIdentifier)
+            result.shouldBeInstanceOf<VerificationSendResult.RateLimitExceeded>()
+
+            mockSender.sentTokens shouldHaveSize 3
+        }
+    }
+
+    context("Security - Cross-User Token Theft Prevention") {
+        test("verification token should be bound to specific user") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email { sender = mockSender }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userA = UUID.randomUUID()
+            val userB = UUID.randomUUID()
+            val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
+
+            // Setup both users with email contacts
+            verificationService.setEmail(userA, "usera@example.com")
+            verificationService.setEmail(userB, "userb@example.com")
+
+            // Send verification to User A
+            verificationService.sendVerification(userA, emailIdentifier)
+            val tokenForUserA = mockSender.sentTokens.first().second
+
+            // User B tries to use User A's token - should fail
+            val attackResult = verificationService.verifyToken(userB, emailIdentifier, tokenForUserA)
+            attackResult.shouldBeInstanceOf<VerificationResult.Invalid>()
+            (attackResult as VerificationResult.Invalid).reason shouldContain "not found"
+
+            // User B should NOT be verified
+            verificationService.isContactVerified(userB, emailIdentifier).shouldBeFalse()
+
+            // User A should NOT be verified either (token not consumed by attack)
+            verificationService.isContactVerified(userA, emailIdentifier).shouldBeFalse()
+
+            // User A can still use their own token
+            val legitResult = verificationService.verifyToken(userA, emailIdentifier, tokenForUserA)
+            legitResult.shouldBeInstanceOf<VerificationResult.Success>()
+            verificationService.isContactVerified(userA, emailIdentifier).shouldBeTrue()
+        }
+
+        test("token cannot be reused after successful verification") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email { sender = mockSender }
+            }
+
+            val extension = config.build(testContext) as VerificationExtension
+            val verificationService = extension.verificationService
+
+            val userId = UUID.randomUUID()
+            val emailIdentifier = ContactIdentifier(ContactType.EMAIL)
+            verificationService.setEmail(userId, "user@example.com")
+
+            // Send and verify
+            verificationService.sendVerification(userId, emailIdentifier)
+            val token = mockSender.sentTokens.first().second
+
+            val firstResult = verificationService.verifyToken(userId, emailIdentifier, token)
+            firstResult.shouldBeInstanceOf<VerificationResult.Success>()
+
+            // Try to use the same token again - should fail
+            val secondResult = verificationService.verifyToken(userId, emailIdentifier, token)
+            secondResult.shouldBeInstanceOf<VerificationResult.Invalid>()
+            (secondResult as VerificationResult.Invalid).reason shouldContain "used"
         }
     }
 })

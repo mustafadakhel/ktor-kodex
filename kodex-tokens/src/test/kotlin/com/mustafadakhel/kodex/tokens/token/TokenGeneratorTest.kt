@@ -13,10 +13,6 @@ import java.util.UUID
 
 class TokenGeneratorTest : StringSpec({
 
-    // ========================================================================
-    // Strategy Pattern Tests
-    // ========================================================================
-
     "generate with UUIDv4Format returns UUID instance" {
         val uuid = TokenGenerator.generate(UUIDv4Format)
         uuid.shouldBeInstanceOf<UUID>()
@@ -53,18 +49,10 @@ class TokenGeneratorTest : StringSpec({
         token.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '-' || it == '_' }.shouldBeTrue()
     }
 
-    // ========================================================================
-    // UUIDv4Format Tests
-    // ========================================================================
-
     "UUIDv4Format produces unique UUIDs" {
         val tokens = (1..1000).map { TokenGenerator.generate(UUIDv4Format) }.toSet()
         tokens.size shouldBeExactly 1000
     }
-
-    // ========================================================================
-    // UUIDv7Format Tests
-    // ========================================================================
 
     "UUIDv7Format produces unique UUIDs" {
         val tokens = (1..1000).map { TokenGenerator.generate(UUIDv7Format) }.toSet()
@@ -79,10 +67,6 @@ class TokenGeneratorTest : StringSpec({
         // UUIDv7 embeds timestamp in most significant bits, so lexicographic sort = time sort
         (uuid1.toString() < uuid2.toString()).shouldBeTrue()
     }
-
-    // ========================================================================
-    // HexFormat Tests
-    // ========================================================================
 
     "HexFormat generates 32-character hex string by default" {
         val token = TokenGenerator.generate(HexFormat())
@@ -115,10 +99,6 @@ class TokenGeneratorTest : StringSpec({
             HexFormat(0)
         }
     }
-
-    // ========================================================================
-    // AlphanumericFormat Tests
-    // ========================================================================
 
     "AlphanumericFormat generates 32-character token by default" {
         val token = TokenGenerator.generate(AlphanumericFormat())
@@ -161,10 +141,6 @@ class TokenGeneratorTest : StringSpec({
         }
     }
 
-    // ========================================================================
-    // NumericFormat Tests
-    // ========================================================================
-
     "NumericFormat generates 6-digit code by default" {
         val code = TokenGenerator.generate(NumericFormat())
 
@@ -202,10 +178,6 @@ class TokenGeneratorTest : StringSpec({
         }
     }
 
-    // ========================================================================
-    // Base64UrlFormat Tests
-    // ========================================================================
-
     "Base64UrlFormat generates URL-safe tokens" {
         val token = TokenGenerator.generate(Base64UrlFormat())
 
@@ -238,10 +210,6 @@ class TokenGeneratorTest : StringSpec({
         }
     }
 
-    // ========================================================================
-    // UUID Extension Function Tests
-    // ========================================================================
-
     "toHexString converts UUID to 32-char hex" {
         val uuid = TokenGenerator.generate(UUIDv4Format)
         val hex = uuid.toHexString()
@@ -273,10 +241,6 @@ class TokenGeneratorTest : StringSpec({
         uuid.toHexString().length shouldBe 32
     }
 
-    // ========================================================================
-    // Thread Safety Tests
-    // ========================================================================
-
     "TokenGenerator is thread-safe" {
         val tokens = mutableSetOf<UUID>()
         val threads = (1..10).map {
@@ -294,10 +258,6 @@ class TokenGeneratorTest : StringSpec({
 
         tokens.size shouldBeExactly 1000
     }
-
-    // ========================================================================
-    // Custom Format Tests (Extensibility)
-    // ========================================================================
 
     "custom TokenFormat can be created and used" {
         val customFormat = object : TokenFormat<String> {

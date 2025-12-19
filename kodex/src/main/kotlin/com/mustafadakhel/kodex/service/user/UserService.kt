@@ -15,8 +15,6 @@ import java.util.UUID
  */
 public interface UserService {
 
-    // ==================== Query Operations ====================
-
     public fun getAllUsers(): List<User>
     public fun getAllFullUsers(): List<FullUser>
     public fun getUser(userId: UUID): User
@@ -28,8 +26,6 @@ public interface UserService {
     public fun getUserProfile(userId: UUID): UserProfile
     public fun getUserProfileOrNull(userId: UUID): UserProfile?
     public fun getCustomAttributes(userId: UUID): Map<String, String>
-
-    // ==================== Command Operations ====================
 
     public suspend fun createUser(
         email: String?,
@@ -43,8 +39,6 @@ public interface UserService {
     public suspend fun updateUser(command: UpdateCommand): UpdateResult
 
     public suspend fun deleteUser(userId: UUID): Boolean
-
-    // ==================== Role Management ====================
 
     public fun getSeededRoles(): List<String>
     public suspend fun updateUserRoles(userId: UUID, roleNames: List<String>)
