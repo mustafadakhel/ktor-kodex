@@ -3,7 +3,7 @@ package com.mustafadakhel.kodex.verification
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Database
@@ -43,7 +43,7 @@ class TokenCleanupServiceTest : FunSpec({
 
     context("Token Cleanup") {
         test("should delete used tokens older than retention period") {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
             val recentDate = now.minus(29.days).toLocalDateTime(timeZone)
 
@@ -82,7 +82,7 @@ class TokenCleanupServiceTest : FunSpec({
         }
 
         test("should delete expired tokens older than retention period") {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
             val expiredOldDate = now.minus(2.days).toLocalDateTime(timeZone)
 
@@ -121,7 +121,7 @@ class TokenCleanupServiceTest : FunSpec({
         }
 
         test("should not delete active tokens") {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val recentDate = now.minus(1.days).toLocalDateTime(timeZone)
 
             transaction(database) {
@@ -148,7 +148,7 @@ class TokenCleanupServiceTest : FunSpec({
         }
 
         test("should handle custom retention periods") {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val tenDaysOld = now.minus(10.days).toLocalDateTime(timeZone)
             val sixDaysOld = now.minus(6.days).toLocalDateTime(timeZone)
 
@@ -194,7 +194,7 @@ class TokenCleanupServiceTest : FunSpec({
         }
 
         test("should handle multiple token types") {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
 
             transaction(database) {
@@ -242,7 +242,7 @@ class TokenCleanupServiceTest : FunSpec({
         }
 
         test("STRESS TEST: should handle 2500+ tokens with batched deletion") {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val oldDate = now.minus(31.days).toLocalDateTime(timeZone)
 
             // Create 2500 expired tokens (simulating high volume)

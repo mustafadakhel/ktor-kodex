@@ -24,7 +24,7 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
@@ -212,7 +212,7 @@ class Phase3IntegrationTest : FunSpec({
 
             // Trust device with very short expiration (simulated via direct DB insert)
             kodexTransaction {
-                val now = Clock.System.now().toLocalDateTime(TimeZone.UTC)
+                val now = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
                 val expiredTime = now.toInstant(TimeZone.UTC).minus(1.days).toLocalDateTime(TimeZone.UTC)
 
                 MfaTrustedDevices.insert {
@@ -633,7 +633,7 @@ class Phase3IntegrationTest : FunSpec({
             // Manually expire the challenge
             kodexTransaction {
                 MfaChallenges.update({ MfaChallenges.id eq challengeId }) {
-                    it[expiresAt] = Clock.System.now().minus(1.milliseconds).toLocalDateTime(TimeZone.UTC)
+                    it[expiresAt] = CurrentKotlinInstant.minus(1.milliseconds).toLocalDateTime(TimeZone.UTC)
                 }
             }
 
@@ -690,12 +690,12 @@ class Phase3IntegrationTest : FunSpec({
                 digits = 6,
                 period = 30.seconds
             )
-            val enrollCode = totp.generateCode(secret, Clock.System.now())
+            val enrollCode = totp.generateCode(secret, CurrentKotlinInstant)
             val verifyResult = mfaService.verifyTotpEnrollment(testUserId, methodId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             // Generate valid TOTP code for authentication
-            val authCode = totp.generateCode(secret, Clock.System.now())
+            val authCode = totp.generateCode(secret, CurrentKotlinInstant)
 
             // Verify TOTP
             val result = mfaService.verifyTotp(testUserId, methodId, authCode, null)
@@ -715,7 +715,7 @@ class Phase3IntegrationTest : FunSpec({
                 digits = 6,
                 period = 30.seconds
             )
-            val enrollCode = totp.generateCode(secret, Clock.System.now())
+            val enrollCode = totp.generateCode(secret, CurrentKotlinInstant)
             val verifyResult = mfaService.verifyTotpEnrollment(testUserId, methodId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
@@ -737,7 +737,7 @@ class Phase3IntegrationTest : FunSpec({
                 digits = 6,
                 period = 30.seconds
             )
-            val enrollCode = totp.generateCode(secret, Clock.System.now())
+            val enrollCode = totp.generateCode(secret, CurrentKotlinInstant)
             val verifyResult = mfaService.verifyTotpEnrollment(testUserId, methodId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 

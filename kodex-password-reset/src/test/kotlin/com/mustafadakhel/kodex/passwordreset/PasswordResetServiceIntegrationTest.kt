@@ -14,7 +14,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Database
@@ -112,8 +112,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
-                    it[createdAt] = Clock.System.now().toLocalDateTime(timeZone)
-                    it[updatedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                    it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
+                    it[updatedAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
                 }
             }
 
@@ -184,7 +184,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
 
             // Manually insert an expired token
             val expiredToken = "expired-token-12345"
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val expiredTime = now.minus(2.hours).toLocalDateTime(timeZone)
 
             transaction(database) {
@@ -259,8 +259,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
-                    it[createdAt] = Clock.System.now().toLocalDateTime(timeZone)
-                    it[updatedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                    it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
+                    it[updatedAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
                 }
             }
 
@@ -359,8 +359,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
-                    it[createdAt] = Clock.System.now().toLocalDateTime(timeZone)
-                    it[updatedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                    it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
+                    it[updatedAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
                 }
             }
 
@@ -413,8 +413,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
-                    it[createdAt] = Clock.System.now().toLocalDateTime(timeZone)
-                    it[updatedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                    it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
+                    it[updatedAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
                 }
             }
 
@@ -453,8 +453,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
                     it[PasswordResetContacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
-                    it[createdAt] = Clock.System.now().toLocalDateTime(timeZone)
-                    it[updatedAt] = Clock.System.now().toLocalDateTime(timeZone)
+                    it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
+                    it[updatedAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
                 }
             }
 
