@@ -38,21 +38,13 @@ tasks {
 }
 
 dependencies {
-    // Depend on core kodex module
     api(project(":kodex"))
 
-    // Database dependencies (Exposed)
-    implementation(libs.exposed.dao)
-    implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.datetime)
+    implementation(libs.kotlinx.datetime)
 
-    // Ktor dependencies (for KtorDsl annotation)
-    implementation(libs.bundles.ktor.server)
-
-    // Test dependencies
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
-    testImplementation(libs.h2.database)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 mavenPublishing {
@@ -62,7 +54,7 @@ mavenPublishing {
     coordinates(group as String, project.name, version as String)
     pom {
         name.set(project.name)
-        description.set("Account lockout module for Kodex authentication library")
+        description.set("In-memory rate limiter module for Kodex authentication library")
         url.set("https://github.com/mustafadakhel/ktor-kodex")
         licenses {
             license {

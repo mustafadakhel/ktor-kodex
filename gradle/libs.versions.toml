@@ -7,15 +7,20 @@ kotest = "5.9.1"
 mockk = "1.14.4"
 coroutines = "1.10.2"
 kotlin = "2.1.21"
-kodex = "0.3.0"
+kodex = "0.3.1"
 bouncycastle = "1.79"
 libphonenumber = "8.13.27"
 jsoup = "1.17.2"
 kotlinx-datetime = "0.6.1"
+kotlinx-serialization = "1.7.3"
 flyway = "10.22.0"
 micrometer = "1.14.2"
 slf4j = "2.0.16"
 logback = "1.5.15"
+kotlin-otp = "2.4.1"
+qrcode-kotlin = "4.1.1"
+lettuce = "6.5.0.RELEASE"
+testcontainers = "1.20.4"
 
 [libraries]
 exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
@@ -41,8 +46,22 @@ flyway-core = { group = "org.flywaydb", name = "flyway-core", version.ref = "fly
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
 slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
+kotlin-otp = { group = "dev.turingcomplete", name = "kotlin-onetimepassword", version.ref = "kotlin-otp" }
+qrcode-kotlin = { group = "io.github.g0dkar", name = "qrcode-kotlin-jvm", version.ref = "qrcode-kotlin" }
+ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
+ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
+ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-server-status-pages = { group = "io.ktor", name = "ktor-server-status-pages", version.ref = "ktor" }
+ktor-server-content-negotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktor" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlinx-coroutines-reactive = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-reactive", version.ref = "coroutines" }
+lettuce-core = { group = "io.lettuce", name = "lettuce-core", version.ref = "lettuce" }
+testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
+testcontainers-junit = { group = "org.testcontainers", name = "junit-jupiter", version.ref = "testcontainers" }
 
 [bundles]
 exposed = ["exposed-dao", "exposed-jdbc", "exposed-datetime", "exposed-json"]
 ktor-server = ["ktor-server-netty", "ktor-server-auth", "ktor-server-auth-jwt"]
+ktor-client = ["ktor-client-core", "ktor-client-cio", "ktor-client-content-negotiation"]
 kotest = ["kotest-runner-junit5", "kotest-assertions-core"]
