@@ -8,7 +8,7 @@ import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Table
@@ -46,7 +46,7 @@ public class PasswordResetExtension internal constructor(
 
                 override suspend fun onEvent(event: UserEvent.Created) {
                     kodexTransaction {
-                        val now = Clock.System.now().toLocalDateTime(timeZone)
+                        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
                         event.email?.let { email ->
                             PasswordResetContacts.insert {
@@ -77,7 +77,7 @@ public class PasswordResetExtension internal constructor(
 
                 override suspend fun onEvent(event: UserEvent.Updated) {
                     kodexTransaction {
-                        val now = Clock.System.now().toLocalDateTime(timeZone)
+                        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
                         event.fieldChanges.forEach { change ->
                             when (change.fieldName) {

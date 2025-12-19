@@ -3,7 +3,7 @@ package com.mustafadakhel.kodex.mfa.totp
 import dev.turingcomplete.kotlinonetimepassword.HmacAlgorithm
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordConfig
 import dev.turingcomplete.kotlinonetimepassword.TimeBasedOneTimePasswordGenerator
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
@@ -49,7 +49,7 @@ public class TotpGenerator(
 
     public fun generateCode(
         secret: String,
-        timestamp: Instant = Clock.System.now()
+        timestamp: Instant = CurrentKotlinInstant
     ): String {
         val secretBytes = Base32.decode(secret)
 

@@ -5,7 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldHaveLength
 import io.kotest.matchers.string.shouldMatch
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlin.time.Duration.Companion.seconds
 
 class TotpTest : FunSpec({
@@ -43,7 +43,7 @@ class TotpTest : FunSpec({
     test("should generate same code for same timestamp") {
         val generator = TotpGenerator()
         val secret = generator.generateSecret()
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
 
         val code1 = generator.generateCode(secret, timestamp)
         val code2 = generator.generateCode(secret, timestamp)
@@ -55,7 +55,7 @@ class TotpTest : FunSpec({
         val generator = TotpGenerator()
         val validator = TotpValidator(generator)
         val secret = generator.generateSecret()
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
 
         val code = generator.generateCode(secret, timestamp)
         val isValid = validator.validate(secret, code, timestamp)
@@ -77,7 +77,7 @@ class TotpTest : FunSpec({
         val generator = TotpGenerator(period = 30.seconds)
         val validator = TotpValidator(generator, timeStepWindow = 1)
         val secret = generator.generateSecret()
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
 
         val code = generator.generateCode(secret, timestamp)
         val offsetTimestamp = timestamp + 29.seconds
@@ -90,7 +90,7 @@ class TotpTest : FunSpec({
         val generator = TotpGenerator(period = 30.seconds)
         val validator = TotpValidator(generator, timeStepWindow = 1)
         val secret = generator.generateSecret()
-        val timestamp = Clock.System.now()
+        val timestamp = CurrentKotlinInstant
 
         val code = generator.generateCode(secret, timestamp)
         val farFutureTimestamp = timestamp + 90.seconds

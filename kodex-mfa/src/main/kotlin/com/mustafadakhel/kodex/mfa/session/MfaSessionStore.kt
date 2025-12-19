@@ -1,6 +1,6 @@
 package com.mustafadakhel.kodex.mfa.session
 
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -34,7 +34,7 @@ public class MfaSessionStore(
         enforceLimits(userId)
 
         val sessionId = UUID.randomUUID().toString()
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val session = PendingMfaSession(
             sessionId = sessionId,
             userId = userId,
@@ -74,7 +74,7 @@ public class MfaSessionStore(
 
         val verifiedSession = session.copy(
             verified = true,
-            verifiedAt = Clock.System.now()
+            verifiedAt = CurrentKotlinInstant
         )
         sessions[sessionId] = verifiedSession
         return true
@@ -101,5 +101,5 @@ public class MfaSessionStore(
     }
 
     private fun PendingMfaSession.isExpired(): Boolean =
-        Clock.System.now() > expiresAt
+        CurrentKotlinInstant > expiresAt
 }

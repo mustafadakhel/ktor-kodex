@@ -13,7 +13,7 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.Database
@@ -58,7 +58,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "USER_LOGIN",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 actorId = eventId,
                 actorType = ActorType.USER,
                 targetId = null,
@@ -96,7 +96,7 @@ class AuditIntegrationTest : FunSpec({
             repeat(5) { i ->
                 val event = AuditEvent(
                     eventType = "TEST_EVENT_$i",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     actorId = UUID.randomUUID(),
                     result = EventResult.SUCCESS,
                     metadata = emptyMap(),
@@ -116,7 +116,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "ANONYMOUS_ACTION",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 actorId = null, // No actor
                 targetId = null, // No target
                 targetType = null,
@@ -150,7 +150,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "USER_INPUT",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 metadata = maliciousData,
                 realmId = "test"
             )
@@ -182,7 +182,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "TEST",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 metadata = data,
                 realmId = "test"
             )
@@ -211,7 +211,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "PASSWORD_CHANGE",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 metadata = sensitiveData,
                 realmId = "test"
             )
@@ -245,7 +245,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "TOKEN_REFRESH",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 metadata = sensitiveData,
                 realmId = "test"
             )
@@ -282,7 +282,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "TEST",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 metadata = data,
                 realmId = "test"
             )
@@ -313,7 +313,7 @@ class AuditIntegrationTest : FunSpec({
             listOf("USER_LOGIN", "USER_LOGOUT", "USER_LOGIN", "PASSWORD_CHANGE").forEach { eventType ->
                 provider.log(AuditEvent(
                     eventType = eventType,
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     metadata = emptyMap(),
                     realmId = "test"
                 ))
@@ -337,7 +337,7 @@ class AuditIntegrationTest : FunSpec({
             repeat(3) {
                 provider.log(AuditEvent(
                     eventType = "ACTION",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     actorId = actor1,
                     metadata = emptyMap(),
                     realmId = "test"
@@ -347,7 +347,7 @@ class AuditIntegrationTest : FunSpec({
             repeat(2) {
                 provider.log(AuditEvent(
                     eventType = "ACTION",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     actorId = actor2,
                     metadata = emptyMap(),
                     realmId = "test"
@@ -370,7 +370,7 @@ class AuditIntegrationTest : FunSpec({
             listOf("realm1", "realm2", "realm1", "realm1").forEach { realm ->
                 provider.log(AuditEvent(
                     eventType = "EVENT",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     metadata = emptyMap(),
                     realmId = realm
                 ))
@@ -392,7 +392,7 @@ class AuditIntegrationTest : FunSpec({
             repeat(3) {
                 provider.log(AuditEvent(
                     eventType = "EVENT",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     result = EventResult.SUCCESS,
                     metadata = emptyMap(),
                     realmId = "test"
@@ -402,7 +402,7 @@ class AuditIntegrationTest : FunSpec({
             repeat(2) {
                 provider.log(AuditEvent(
                     eventType = "EVENT",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     result = EventResult.FAILURE,
                     metadata = emptyMap(),
                     realmId = "test"
@@ -427,7 +427,7 @@ class AuditIntegrationTest : FunSpec({
             )
 
             // Create old and recent events
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val oldTimestamp = now.minus(45.days) // Older than retention period
             val recentTimestamp = now.minus(15.days) // Within retention period
 
@@ -468,7 +468,7 @@ class AuditIntegrationTest : FunSpec({
                 timeZone = timeZone
             )
 
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val cutoffDate = now.minus(60.days).toLocalDateTime(timeZone)
 
             // Create events using provider
@@ -523,7 +523,7 @@ class AuditIntegrationTest : FunSpec({
 
             val event = AuditEvent(
                 eventType = "TEST",
-                timestamp = Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 metadata = emptyMap(),
                 realmId = "test"
             )
@@ -545,7 +545,7 @@ class AuditIntegrationTest : FunSpec({
             ActorType.values().forEach { actorType ->
                 provider.log(AuditEvent(
                     eventType = "TEST",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     actorType = actorType,
                     metadata = emptyMap(),
                     realmId = "test"
@@ -576,7 +576,7 @@ class AuditIntegrationTest : FunSpec({
             EventResult.values().forEach { result ->
                 provider.log(AuditEvent(
                     eventType = "TEST",
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     result = result,
                     metadata = emptyMap(),
                     realmId = "test"

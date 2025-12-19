@@ -8,7 +8,7 @@ import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
 
 /**
@@ -17,7 +17,7 @@ import java.util.UUID
 class SessionHistoryPageTest : StringSpec({
 
     fun createEntry(userId: UUID = UUID.randomUUID()): SessionHistoryEntry {
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         return SessionHistoryEntry(
             id = UUID.randomUUID(),
             realmId = "test-realm",

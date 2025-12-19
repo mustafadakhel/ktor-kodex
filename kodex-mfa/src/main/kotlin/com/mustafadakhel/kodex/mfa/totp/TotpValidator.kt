@@ -1,6 +1,6 @@
 package com.mustafadakhel.kodex.mfa.totp
 
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.security.MessageDigest
 
@@ -16,7 +16,7 @@ public class TotpValidator(
     public fun validate(
         secret: String,
         code: String,
-        timestamp: Instant = Clock.System.now()
+        timestamp: Instant = CurrentKotlinInstant
     ): Boolean {
         val normalizedCode = code.padStart(generator.digits, '0')
 

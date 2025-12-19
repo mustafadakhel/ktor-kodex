@@ -13,7 +13,7 @@ import com.mustafadakhel.kodex.util.kodexTransaction
 import kotlinx.coroutines.delay
 import com.mustafadakhel.kodex.verification.database.VerifiableContacts
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -37,7 +37,7 @@ internal class DefaultVerificationService(
 
     override suspend fun setContact(userId: UUID, identifier: ContactIdentifier, value: String) {
         kodexTransaction {
-            val now = Clock.System.now().toLocalDateTime(timeZone)
+            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
             val existing = VerifiableContacts
                 .selectAll()
@@ -243,7 +243,7 @@ internal class DefaultVerificationService(
 
             eventBus?.publish(VerificationEvent.VerificationFailed(
                 eventId = UUID.randomUUID(),
-                timestamp = kotlinx.datetime.Clock.System.now(),
+                timestamp = CurrentKotlinInstant,
                 realmId = realm,
                 userId = userId,
                 verificationType = identifier.type.name,
@@ -257,7 +257,7 @@ internal class DefaultVerificationService(
 
         eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.EmailVerificationSent(
             eventId = UUID.randomUUID(),
-            timestamp = kotlinx.datetime.Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = realm,
             userId = userId,
             email = contact.contactValue,
@@ -287,7 +287,7 @@ internal class DefaultVerificationService(
         }
 
         val result = kodexTransaction {
-            val now = Clock.System.now().toLocalDateTime(timeZone)
+            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
             val tokenRecord = VerificationTokens
                 .selectAll()
@@ -338,7 +338,7 @@ internal class DefaultVerificationService(
                     ContactType.EMAIL -> {
                         eventBus?.publish(VerificationEvent.EmailVerified(
                             eventId = UUID.randomUUID(),
-                            timestamp = kotlinx.datetime.Clock.System.now(),
+                            timestamp = CurrentKotlinInstant,
                             realmId = realm,
                             userId = userId,
                             email = contactValue
@@ -347,7 +347,7 @@ internal class DefaultVerificationService(
                     ContactType.PHONE -> {
                         eventBus?.publish(VerificationEvent.PhoneVerified(
                             eventId = UUID.randomUUID(),
-                            timestamp = kotlinx.datetime.Clock.System.now(),
+                            timestamp = CurrentKotlinInstant,
                             realmId = realm,
                             userId = userId,
                             phone = contactValue
@@ -362,7 +362,7 @@ internal class DefaultVerificationService(
             is VerificationResult.Invalid -> {
                 eventBus?.publish(VerificationEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = kotlinx.datetime.Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm,
                     userId = userId,
                     verificationType = identifier.type.name,
@@ -406,7 +406,7 @@ internal class DefaultVerificationService(
 
     override fun setVerified(userId: UUID, identifier: ContactIdentifier, verified: Boolean) {
         kodexTransaction {
-            val now = Clock.System.now().toLocalDateTime(timeZone)
+            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
             VerifiableContacts.update({
                 (VerifiableContacts.realmId eq realm) and
@@ -425,7 +425,7 @@ internal class DefaultVerificationService(
 
     private fun storeToken(userId: UUID, identifier: ContactIdentifier, token: String) {
         kodexTransaction {
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val expiration = config.getTokenExpiration(identifier)
             val expiresAt = ExpirationCalculator.calculateExpiration(expiration, timeZone, now)
 

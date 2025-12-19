@@ -6,7 +6,7 @@ import com.mustafadakhel.kodex.mfa.database.MfaMethods
 import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -61,7 +61,7 @@ internal class DefaultMfaCleanupService(
 ) : MfaCleanupService {
 
     override suspend fun cleanupExpiredChallenges(): Int {
-        val now = Clock.System.now().toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         return kodexTransaction {
             MfaChallenges.deleteWhere {
@@ -75,7 +75,7 @@ internal class DefaultMfaCleanupService(
     }
 
     override suspend fun cleanupExpiredTrustedDevices(): Int {
-        val now = Clock.System.now().toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         return kodexTransaction {
             MfaTrustedDevices.deleteWhere {
@@ -87,7 +87,7 @@ internal class DefaultMfaCleanupService(
     }
 
     override suspend fun cleanupAbandonedEnrollments(): Int {
-        val cutoffTime = Clock.System.now().minus(inactiveEnrollmentExpiration).toLocalDateTime(timeZone)
+        val cutoffTime = CurrentKotlinInstant.minus(inactiveEnrollmentExpiration).toLocalDateTime(timeZone)
 
         return kodexTransaction {
             MfaMethods.deleteWhere {

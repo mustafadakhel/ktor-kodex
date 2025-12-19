@@ -12,7 +12,7 @@ import com.mustafadakhel.kodex.sessions.security.AnomalyDetector
 import com.mustafadakhel.kodex.sessions.security.GeoLocationService
 import com.mustafadakhel.kodex.util.kodexSuspendedTransaction
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.UUID
 
@@ -48,7 +48,7 @@ internal class DefaultSessionService(
             null
         }
 
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val (session, revokedEvent, anomalies) = kodexSuspendedTransaction {
             // Create session FIRST to avoid race condition
             val session = repository.create(
@@ -129,7 +129,7 @@ internal class DefaultSessionService(
         if (activeCount > config.maxConcurrentSessions) {
             val oldestSessionId = repository.findOldestActiveSessionId(userId, excludeSessionId = excludeSessionId)
             if (oldestSessionId != null) {
-                val now = Clock.System.now()
+                val now = CurrentKotlinInstant
                 repository.revoke(oldestSessionId, SessionEndReason.MAX_SESSIONS_EXCEEDED, now)
 
                 val session = repository.findById(oldestSessionId)
@@ -155,7 +155,7 @@ internal class DefaultSessionService(
     )
 
     override suspend fun revokeSession(sessionId: UUID, reason: String) {
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val session = kodexTransaction {
             val session = repository.findById(sessionId)
 
@@ -184,7 +184,7 @@ internal class DefaultSessionService(
     }
 
     override suspend fun revokeAllSessions(userId: UUID, exceptSessionId: UUID?) {
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val sessionsToRevoke = kodexTransaction {
             val sessionsToRevoke = if (exceptSessionId != null) {
                 repository.findActiveByUserId(userId).filter { it.id != exceptSessionId }
@@ -219,7 +219,7 @@ internal class DefaultSessionService(
     }
 
     override suspend fun updateActivity(tokenFamily: UUID, extendExpirationBy: kotlin.time.Duration) {
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val newExpiresAt = now + extendExpirationBy
         val session = kodexTransaction {
             val updated = repository.updateActivity(tokenFamily, now, newExpiresAt)
@@ -256,7 +256,7 @@ internal class DefaultSessionService(
     }
 
     override suspend fun archiveExpiredSessions(): Int {
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val expiredSessions = kodexTransaction {
             repository.markExpired(now)
 
@@ -288,7 +288,7 @@ internal class DefaultSessionService(
     }
 
     override suspend fun cleanupOldHistory(): Int = kodexTransaction {
-        val cutoffTime = Clock.System.now() - config.sessionHistoryRetention
+        val cutoffTime = CurrentKotlinInstant - config.sessionHistoryRetention
         repository.deleteOldHistory(cutoffTime)
     }
 }

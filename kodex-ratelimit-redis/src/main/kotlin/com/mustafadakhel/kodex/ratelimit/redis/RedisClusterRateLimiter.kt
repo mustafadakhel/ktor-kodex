@@ -6,7 +6,7 @@ import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import io.lettuce.core.ScriptOutputType
 import io.lettuce.core.cluster.api.StatefulRedisClusterConnection
 import kotlinx.coroutines.future.await
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.UUID
 import kotlin.time.Duration
@@ -34,7 +34,7 @@ public class RedisClusterRateLimiter(
         }
 
         val redisKey = "$keyPrefix$key"
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val windowStart = now - window
 
         return try {
@@ -72,7 +72,7 @@ public class RedisClusterRateLimiter(
         }
 
         val redisKey = "$keyPrefix$key"
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
         val windowStart = now - window
 
         return try {

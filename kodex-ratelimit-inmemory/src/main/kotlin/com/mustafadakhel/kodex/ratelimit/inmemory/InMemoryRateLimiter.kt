@@ -3,7 +3,7 @@ package com.mustafadakhel.kodex.ratelimit.inmemory
 import com.mustafadakhel.kodex.ratelimit.RateLimitResult
 import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
 import com.mustafadakhel.kodex.ratelimit.RateLimiter
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -46,7 +46,7 @@ public class InMemoryRateLimiter(
             }
 
             val attemptWindow = attempts.compute(key) { _, existing ->
-                val now = Clock.System.now()
+                val now = CurrentKotlinInstant
                 val windowCutoff = now - window
 
                 if (existing == null || existing.windowStart < windowCutoff) {
@@ -82,7 +82,7 @@ public class InMemoryRateLimiter(
                 }
             }
 
-            val now = Clock.System.now()
+            val now = CurrentKotlinInstant
             val windowCutoff = now - window
             val currentWindow = attempts[key]
 
@@ -141,9 +141,9 @@ public class InMemoryRateLimiter(
                 if (existing == null) {
                     null
                 } else if (existing.count <= 1) {
-                    existing.copy(count = 0, lastAccess = Clock.System.now())
+                    existing.copy(count = 0, lastAccess = CurrentKotlinInstant)
                 } else {
-                    existing.copy(count = existing.count - 1, lastAccess = Clock.System.now())
+                    existing.copy(count = existing.count - 1, lastAccess = CurrentKotlinInstant)
                 }
             }
         }
@@ -173,7 +173,7 @@ public class InMemoryRateLimiter(
             return
         }
 
-        val clockNow = Clock.System.now()
+        val clockNow = CurrentKotlinInstant
         val cleanupCutoff = clockNow - window - cleanupAge
 
         // Track keys being removed to clean up their locks

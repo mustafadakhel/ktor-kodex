@@ -1,6 +1,6 @@
 package com.mustafadakhel.kodex.ratelimit.redis
 
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -78,7 +78,7 @@ public class CircuitBreaker(
      * Record a failed Redis operation.
      */
     public fun recordFailure() {
-        lastFailureTime.set(Clock.System.now())
+        lastFailureTime.set(CurrentKotlinInstant)
 
         val currentState = state.get()
         when (currentState) {
@@ -113,7 +113,7 @@ public class CircuitBreaker(
         if (currentState != State.OPEN) return
 
         val lastFailure = lastFailureTime.get() ?: return
-        val now = Clock.System.now()
+        val now = CurrentKotlinInstant
 
         if (now - lastFailure >= timeout) {
             state.compareAndSet(State.OPEN, State.HALF_OPEN)

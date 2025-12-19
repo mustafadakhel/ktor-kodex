@@ -204,7 +204,7 @@ class VerificationServiceIntegrationTest : FunSpec({
             verificationService.setEmail(userId, "user@example.com")
 
             val expiredToken = "expired-token-12345"
-            val now = kotlinx.datetime.Clock.System.now()
+            val now = com.mustafadakhel.kodex.util.CurrentKotlinInstant
             val expiredTime = now.minus(2.hours).toLocalDateTime(timeZone)
 
             kodexTransaction {

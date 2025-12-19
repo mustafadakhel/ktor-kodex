@@ -7,7 +7,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
 
 /**
@@ -31,7 +31,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = AuthEvent.LoginSuccess(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             identifier = "user@example.com",
@@ -60,7 +60,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = AuthEvent.LoginFailed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             identifier = "user@example.com",
             reason = "invalid_credentials",
@@ -88,7 +88,7 @@ class AuditEventSubscriberTest : StringSpec({
 
         val event = AuthEvent.LoginFailed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             identifier = "nonexistent@example.com",
             reason = "user_not_found",
@@ -115,7 +115,7 @@ class AuditEventSubscriberTest : StringSpec({
         val tokenFamily = UUID.randomUUID()
         val event = TokenEvent.Issued(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             tokenId = tokenId,
@@ -144,7 +144,7 @@ class AuditEventSubscriberTest : StringSpec({
         val tokenFamily = UUID.randomUUID()
         val event = TokenEvent.Refreshed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             oldTokenId = oldTokenId,
@@ -171,7 +171,7 @@ class AuditEventSubscriberTest : StringSpec({
         val tokenId2 = UUID.randomUUID()
         val event = TokenEvent.Revoked(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             tokenIds = listOf(tokenId1, tokenId2),
@@ -197,7 +197,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = TokenEvent.RefreshFailed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             reason = "token_expired"
@@ -219,7 +219,7 @@ class AuditEventSubscriberTest : StringSpec({
 
         val event = TokenEvent.VerifyFailed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             reason = "invalid_signature"
         )
@@ -243,7 +243,7 @@ class AuditEventSubscriberTest : StringSpec({
         val tokenFamily = UUID.randomUUID()
         val event = SecurityEvent.TokenReplayDetected(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             tokenId = tokenId,
@@ -275,7 +275,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = UserEvent.Created(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             email = "user@example.com",
@@ -303,7 +303,7 @@ class AuditEventSubscriberTest : StringSpec({
         val actorId = UUID.randomUUID()
         val event = UserEvent.Updated(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             actorId = actorId,
@@ -328,7 +328,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = UserEvent.RolesUpdated(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             previousRoles = setOf("user"),
@@ -354,7 +354,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = AuthEvent.PasswordChanged(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             actorId = userId
@@ -377,7 +377,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = AuthEvent.PasswordChangeFailed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             actorId = userId,
@@ -403,7 +403,7 @@ class AuditEventSubscriberTest : StringSpec({
         val tokenFamily = UUID.randomUUID()
         val event = SessionEvent.SessionCreated(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             kodexSessionId = sessionId,
             userId = userId,
@@ -438,7 +438,7 @@ class AuditEventSubscriberTest : StringSpec({
         val sessionId = UUID.randomUUID()
         val event = SessionEvent.SessionRevoked(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             kodexSessionId = sessionId,
             userId = userId,
@@ -463,10 +463,10 @@ class AuditEventSubscriberTest : StringSpec({
 
         val userId = UUID.randomUUID()
         val sessionId = UUID.randomUUID()
-        val lastActivity = Clock.System.now()
+        val lastActivity = CurrentKotlinInstant
         val event = SessionEvent.SessionActivityUpdated(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             kodexSessionId = sessionId,
             userId = userId,
@@ -490,7 +490,7 @@ class AuditEventSubscriberTest : StringSpec({
         val sessionId = UUID.randomUUID()
         val event = SessionEvent.SessionAnomalyDetected(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             kodexSessionId = sessionId,
             userId = userId,
@@ -519,10 +519,10 @@ class AuditEventSubscriberTest : StringSpec({
 
         val userId = UUID.randomUUID()
         val sessionId = UUID.randomUUID()
-        val expiredAt = Clock.System.now()
+        val expiredAt = CurrentKotlinInstant
         val event = SessionEvent.SessionExpired(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             kodexSessionId = sessionId,
             userId = userId,
@@ -545,7 +545,7 @@ class AuditEventSubscriberTest : StringSpec({
 
         val event = SecurityEvent.RateLimitExceeded(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             identifier = "attacker@example.com",
             limitType = "login_attempts",
@@ -575,7 +575,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = SecurityEvent.AccountLocked(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             reason = "too_many_failed_attempts",
@@ -602,7 +602,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = SecurityEvent.AccountUnlocked(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             unlockedBy = "admin"
@@ -625,7 +625,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = VerificationEvent.EmailVerificationSent(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             email = "user@example.com"
@@ -648,7 +648,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = VerificationEvent.EmailVerified(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             email = "user@example.com"
@@ -671,7 +671,7 @@ class AuditEventSubscriberTest : StringSpec({
         val userId = UUID.randomUUID()
         val event = VerificationEvent.VerificationFailed(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = userId,
             verificationType = "email",
@@ -699,7 +699,7 @@ class AuditEventSubscriberTest : StringSpec({
 
         val event = AuthEvent.LoginSuccess(
             eventId = UUID.randomUUID(),
-            timestamp = Clock.System.now(),
+            timestamp = CurrentKotlinInstant,
             realmId = "test-realm",
             userId = UUID.randomUUID(),
             identifier = "user@example.com",

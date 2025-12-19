@@ -5,7 +5,7 @@ import com.mustafadakhel.kodex.event.TokenCleanupEvent
 import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -34,8 +34,8 @@ internal class DefaultTokenCleanupService(
 ) : TokenCleanupService {
 
     override suspend fun purgeExpiredTokens(retentionPeriod: Duration): Int {
-        val now = Clock.System.now().toLocalDateTime(timeZone)
-        val clockNow = Clock.System.now()
+        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
+        val clockNow = CurrentKotlinInstant
         val cutoff = clockNow.minus(retentionPeriod).toLocalDateTime(timeZone)
 
         val batchSize = 1000

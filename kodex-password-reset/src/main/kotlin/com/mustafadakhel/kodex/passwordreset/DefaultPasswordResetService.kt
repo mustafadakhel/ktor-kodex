@@ -12,7 +12,7 @@ import com.mustafadakhel.kodex.tokens.token.TokenValidator
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
 import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.datetime.Clock
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.and
@@ -72,7 +72,7 @@ internal class DefaultPasswordResetService(
             }
         }
 
-        val clockNow = Clock.System.now()
+        val clockNow = CurrentKotlinInstant
         val now = clockNow.toLocalDateTime(timeZone)
 
         val token = TokenGenerator.generate(HexFormat())
@@ -163,7 +163,7 @@ internal class DefaultPasswordResetService(
     }
 
     override suspend fun verifyResetToken(token: String): TokenVerificationResult {
-        val now = Clock.System.now().toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         val result = kodexTransaction {
             val resetToken = PasswordResetTokens
@@ -190,7 +190,7 @@ internal class DefaultPasswordResetService(
             is TokenVerificationResult.Valid -> {
                 eventBus?.publish(PasswordResetEvent.PasswordResetTokenVerified(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm,
                     userId = result.userId
                 ))
@@ -198,7 +198,7 @@ internal class DefaultPasswordResetService(
             is TokenVerificationResult.Invalid -> {
                 eventBus?.publish(PasswordResetEvent.PasswordResetTokenVerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm,
                     reason = result.reason
                 ))
@@ -209,7 +209,7 @@ internal class DefaultPasswordResetService(
     }
 
     override suspend fun consumeResetToken(token: String): TokenConsumptionResult {
-        val now = Clock.System.now().toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         val result = kodexTransaction {
             val resetToken = PasswordResetTokens
@@ -255,7 +255,7 @@ internal class DefaultPasswordResetService(
 
                 eventBus?.publish(PasswordResetEvent.PasswordResetCompleted(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm,
                     userId = result.userId
                 ))
@@ -263,7 +263,7 @@ internal class DefaultPasswordResetService(
             is TokenConsumptionResult.Invalid -> {
                 eventBus?.publish(PasswordResetEvent.PasswordResetCompletionFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = Clock.System.now(),
+                    timestamp = CurrentKotlinInstant,
                     realmId = realm,
                     reason = result.reason
                 ))
@@ -274,7 +274,7 @@ internal class DefaultPasswordResetService(
     }
 
     override suspend fun revokeAllResetTokens(userId: UUID) {
-        val now = Clock.System.now().toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         kodexTransaction {
             PasswordResetTokens.update({
