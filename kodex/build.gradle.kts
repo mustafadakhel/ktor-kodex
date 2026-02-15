@@ -16,8 +16,6 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
 }
 
 sourceSets {
@@ -100,7 +98,7 @@ val integrationTestImplementation by configurations.getting {
 }
 
 dependencies {
-    implementation(libs.h2.database)
+    implementation(kotlin("reflect"))
     api(libs.hikari)
     api(libs.kotlinx.datetime)
     implementation(project(":kodex-tokens"))
@@ -111,6 +109,7 @@ dependencies {
     implementation(libs.flyway.core)
     compileOnly(libs.micrometer.core)
 
+    testImplementation(libs.h2.database)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)

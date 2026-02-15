@@ -90,7 +90,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                     tokenFamily = null,
                     parentTokenId = null,
                     firstUsedAt = null,
-                    lastUsedAt = null
+                    lastUsedAt = null,
+                    realmId = "test-realm"
                 )
             )
 
@@ -126,7 +127,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                         tokenFamily = null,
                         parentTokenId = null,
                         firstUsedAt = null,
-                        lastUsedAt = null
+                        lastUsedAt = null,
+                        realmId = "test-realm"
                     )
                 )
                 tokenHash to tokenId
@@ -169,7 +171,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                         tokenFamily = null,
                         parentTokenId = null,
                         firstUsedAt = null,
-                        lastUsedAt = null
+                        lastUsedAt = null,
+                        realmId = "test-realm"
                     )
                 )
             }
@@ -210,7 +213,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                             tokenFamily = null,
                             parentTokenId = null,
                             firstUsedAt = null,
-                            lastUsedAt = null
+                            lastUsedAt = null,
+                            realmId = "test-realm"
                         )
                     )
                     userId to tokenId
@@ -255,7 +259,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                         tokenFamily = tokenFamily,
                         parentTokenId = if (index > 0) UUID.randomUUID() else null,
                         firstUsedAt = null,
-                        lastUsedAt = null
+                        lastUsedAt = null,
+                        realmId = "test-realm"
                     )
                 )
             }
@@ -298,7 +303,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                             tokenFamily = family,
                             parentTokenId = if (index > 0) UUID.randomUUID() else null,
                             firstUsedAt = null,
-                            lastUsedAt = null
+                            lastUsedAt = null,
+                            realmId = "test-realm"
                         )
                     )
                     family to tokenId
@@ -339,7 +345,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                     tokenFamily = null,
                     parentTokenId = null,
                     firstUsedAt = null,
-                    lastUsedAt = null
+                    lastUsedAt = null,
+                    realmId = "test-realm"
                 )
             )
 
@@ -381,7 +388,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                         tokenFamily = null,
                         parentTokenId = null,
                         firstUsedAt = null,
-                        lastUsedAt = null
+                        lastUsedAt = null,
+                        realmId = "test-realm"
                     )
                 )
             }
@@ -433,7 +441,8 @@ class TokenRepositoryConcurrencyTest : FunSpec({
                         tokenFamily = family,
                         parentTokenId = null,
                         firstUsedAt = null,
-                        lastUsedAt = null
+                        lastUsedAt = null,
+                        realmId = "test-realm"
                     )
                 )
                 Triple(tokenId, userId, family)

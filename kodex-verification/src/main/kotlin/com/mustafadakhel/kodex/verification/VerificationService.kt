@@ -20,23 +20,14 @@ public interface VerificationService {
      */
     public suspend fun setContact(userId: UUID, identifier: ContactIdentifier, value: String)
 
-    /**
-     * Set email contact for a user.
-     */
     public suspend fun setEmail(userId: UUID, email: String) {
         setContact(userId, ContactIdentifier(ContactType.EMAIL), email)
     }
 
-    /**
-     * Set phone contact for a user.
-     */
     public suspend fun setPhone(userId: UUID, phone: String) {
         setContact(userId, ContactIdentifier(ContactType.PHONE), phone)
     }
 
-    /**
-     * Set a custom attribute contact for a user.
-     */
     public suspend fun setCustomAttribute(userId: UUID, attributeKey: String, value: String) {
         setContact(userId, ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, attributeKey), value)
     }

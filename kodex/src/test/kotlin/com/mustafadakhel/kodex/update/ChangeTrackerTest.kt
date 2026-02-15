@@ -92,7 +92,7 @@ class ChangeTrackerTest : DescribeSpec({
 
             it("should not detect changes for NoChange") {
                 val updates = UserFieldUpdates(
-                    email = FieldUpdate.NoChange()
+                    email = FieldUpdate.NoChange
                 )
 
                 val changes = tracker.detectUserFieldChanges(baseUser, updates)
@@ -102,7 +102,7 @@ class ChangeTrackerTest : DescribeSpec({
 
             it("should detect clearing email to null") {
                 val updates = UserFieldUpdates(
-                    email = FieldUpdate.ClearValue()
+                    email = FieldUpdate.ClearValue
                 )
 
                 val changes = tracker.detectUserFieldChanges(baseUser, updates)
@@ -114,7 +114,7 @@ class ChangeTrackerTest : DescribeSpec({
 
             it("should detect clearing phone to null") {
                 val updates = UserFieldUpdates(
-                    phone = FieldUpdate.ClearValue()
+                    phone = FieldUpdate.ClearValue
                 )
 
                 val changes = tracker.detectUserFieldChanges(baseUser, updates)
@@ -140,7 +140,7 @@ class ChangeTrackerTest : DescribeSpec({
             it("should handle mix of SetValue, ClearValue, and NoChange") {
                 val updates = UserFieldUpdates(
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.ClearValue(),
+                    phone = FieldUpdate.ClearValue,
                     status = FieldUpdate.SetValue(UserStatus.SUSPENDED)
                 )
 
@@ -189,7 +189,7 @@ class ChangeTrackerTest : DescribeSpec({
 
             it("should detect clearing profile field") {
                 val updates = ProfileFieldUpdates(
-                    address = FieldUpdate.ClearValue()
+                    address = FieldUpdate.ClearValue
                 )
 
                 val changes = tracker.detectProfileFieldChanges(currentProfile, updates)
@@ -213,7 +213,7 @@ class ChangeTrackerTest : DescribeSpec({
 
             it("should handle NoChange fields") {
                 val updates = ProfileFieldUpdates(
-                    firstName = FieldUpdate.NoChange(),
+                    firstName = FieldUpdate.NoChange,
                     lastName = FieldUpdate.SetValue("Smith")
                 )
 

@@ -10,7 +10,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/** Policy for a verifiable contact type */
 public data class ContactVerificationPolicy(
     val identifier: ContactIdentifier,
     val required: Boolean = false,
@@ -19,7 +18,6 @@ public data class ContactVerificationPolicy(
     val sender: VerificationSender? = null
 )
 
-/** Builder for contact verification policies */
 public class ContactPolicyBuilder internal constructor(private val identifier: ContactIdentifier) {
     /** Whether verification of this contact is required before login (default: false) */
     public var required: Boolean = false
@@ -124,7 +122,6 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
     /** Minimum time between send requests, null to disable cooldown (default: null) */
     public var sendCooldownPeriod: Duration? = null
 
-    /** Configure policy for EMAIL contact */
     public fun email(block: ContactPolicyBuilder.() -> Unit) {
         val identifier = ContactIdentifier(ContactType.EMAIL)
         val builder = ContactPolicyBuilder(identifier)
@@ -132,7 +129,6 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         policies[identifier.key] = builder.build()
     }
 
-    /** Configure policy for PHONE contact */
     public fun phone(block: ContactPolicyBuilder.() -> Unit) {
         val identifier = ContactIdentifier(ContactType.PHONE)
         val builder = ContactPolicyBuilder(identifier)
@@ -140,7 +136,6 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         policies[identifier.key] = builder.build()
     }
 
-    /** Configure policy for a CUSTOM_ATTRIBUTE contact (e.g., "discord", "twitter") */
     public fun customAttribute(attributeKey: String, block: ContactPolicyBuilder.() -> Unit) {
         val identifier = ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, attributeKey)
         val builder = ContactPolicyBuilder(identifier)
@@ -148,14 +143,11 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         policies[identifier.key] = builder.build()
     }
 
-    /** Get the policy for a specific contact identifier */
     public fun getPolicy(identifier: ContactIdentifier): ContactVerificationPolicy? = policies[identifier.key]
 
-    /** Get all contact identifiers that are marked as required */
     public fun getRequiredContacts(): List<ContactIdentifier> =
         policies.values.filter { it.required }.map { it.identifier }
 
-    /** Get all configured policies */
     public fun getAllPolicies(): Map<String, ContactVerificationPolicy> = policies.toMap()
 
     /** Get the effective token expiration for a contact (policy-specific or default) */
@@ -164,7 +156,6 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         return policy?.tokenExpiration ?: defaultTokenExpiration
     }
 
-    /** Get the sender for a contact type */
     public fun getSender(identifier: ContactIdentifier): VerificationSender? {
         return getPolicy(identifier)?.sender
     }
@@ -244,10 +235,10 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
             config = this,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.owner,
+            realm = context.realm.name,
             rateLimiter = context.rateLimiter
         )
-        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.owner)
+        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.name)
         return VerificationExtension(service, cleanupService, this, context.timeZone)
     }
 }

@@ -96,9 +96,9 @@ class TokenTypesTest : DescribeSpec({
             validity.access shouldBe 2.hours
         }
 
-        it("should have default refresh duration of 90 days") {
+        it("should have default refresh duration of 30 days") {
             val validity = TokenValidity()
-            validity.refresh shouldBe 90.days
+            validity.refresh shouldBe 30.days
         }
 
         it("should allow custom access duration") {
@@ -120,12 +120,12 @@ class TokenTypesTest : DescribeSpec({
         it("should have Default constant with default values") {
             val validity = TokenValidity.Default
             validity.access shouldBe 2.hours
-            validity.refresh shouldBe 90.days
+            validity.refresh shouldBe 30.days
         }
 
         it("should support data class equality") {
-            val validity1 = TokenValidity(access = 2.hours, refresh = 90.days)
-            val validity2 = TokenValidity(access = 2.hours, refresh = 90.days)
+            val validity1 = TokenValidity(access = 2.hours, refresh = 30.days)
+            val validity2 = TokenValidity(access = 2.hours, refresh = 30.days)
 
             (validity1 == validity2) shouldBe true
         }
@@ -146,7 +146,7 @@ class TokenTypesTest : DescribeSpec({
         }
 
         it("should have different validity for different refresh durations") {
-            val validity1 = TokenValidity(refresh = 30.days)
+            val validity1 = TokenValidity(refresh = 7.days)
             val validity2 = TokenValidity(refresh = 90.days)
 
             (validity1 == validity2) shouldBe false

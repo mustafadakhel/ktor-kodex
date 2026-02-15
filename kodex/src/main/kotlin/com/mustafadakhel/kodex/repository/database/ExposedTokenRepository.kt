@@ -6,12 +6,13 @@ import com.mustafadakhel.kodex.model.database.TokenDao
 import com.mustafadakhel.kodex.model.database.Tokens
 import com.mustafadakhel.kodex.repository.TokenRepository
 import com.mustafadakhel.kodex.util.exposedTransaction
-import org.jetbrains.exposed.sql.insertAndGetId
-import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.and
+import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insertAndGetId
+import org.jetbrains.exposed.sql.update
 import java.util.*
 
 internal fun databaseTokenRepository(): TokenRepository = ExposedTokenRepository
@@ -29,6 +30,7 @@ private object ExposedTokenRepository : TokenRepository {
             it[Tokens.parentTokenId] = token.parentTokenId
             it[Tokens.firstUsedAt] = token.firstUsedAt
             it[Tokens.lastUsedAt] = token.lastUsedAt
+            it[Tokens.realmId] = token.realmId
         }
     }.value
 
@@ -66,7 +68,7 @@ private object ExposedTokenRepository : TokenRepository {
         Unit
     }
 
-    override fun markTokenAsUsedIfUnused(tokenId: UUID, now: kotlinx.datetime.LocalDateTime): Boolean = exposedTransaction {
+    override fun markTokenAsUsedIfUnused(tokenId: UUID, now: LocalDateTime): Boolean = exposedTransaction {
         val updated = Tokens.update({
             (Tokens.id eq tokenId) and Tokens.firstUsedAt.isNull()
         }) {
@@ -102,6 +104,7 @@ private object ExposedTokenRepository : TokenRepository {
         revoked = revoked,
         createdAt = createdAt,
         expiresAt = expiresAt,
+        realmId = realmId,
         tokenFamily = tokenFamily,
         parentTokenId = parentTokenId,
         firstUsedAt = firstUsedAt,

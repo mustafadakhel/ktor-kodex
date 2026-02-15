@@ -10,13 +10,8 @@ import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * Default implementation of TokenService that delegates to TokenManager.
- *
- * This is a simple facade over the existing TokenManager, providing a clean
- * service layer API for token operations.
- */
 internal class DefaultTokenService(
     private val tokenManager: TokenManager,
     private val eventBus: EventBus,
@@ -32,7 +27,7 @@ internal class DefaultTokenService(
             TokenEvent.Issued(
                 eventId = UUID.randomUUID(),
                 timestamp = CurrentKotlinInstant,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = userId,
                 tokenId = accessTokenId,
                 tokenFamily = result.tokenFamily,
@@ -45,6 +40,7 @@ internal class DefaultTokenService(
     }
 
     override suspend fun refresh(userId: UUID, refreshToken: String, sourceIp: String?, userAgent: String?): TokenPair {
+        val now = CurrentKotlinInstant
         return try {
             val oldTokenId = extractTokenId(refreshToken)
             val result = tokenManager.refreshTokensWithFamily(userId, refreshToken)
@@ -53,8 +49,8 @@ internal class DefaultTokenService(
             eventBus.publish(
                 TokenEvent.Refreshed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
-                    realmId = realm.owner,
+                    timestamp = now,
+                    realmId = realm.name,
                     userId = userId,
                     oldTokenId = oldTokenId,
                     newTokenId = newTokenId,
@@ -65,12 +61,14 @@ internal class DefaultTokenService(
             )
 
             result.tokenPair
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             eventBus.publish(
                 TokenEvent.RefreshFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
-                    realmId = realm.owner,
+                    timestamp = now,
+                    realmId = realm.name,
                     userId = userId,
                     reason = e.message ?: "Unknown error"
                 )
@@ -86,7 +84,7 @@ internal class DefaultTokenService(
             TokenEvent.Revoked(
                 eventId = UUID.randomUUID(),
                 timestamp = CurrentKotlinInstant,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = userId,
                 revokedCount = -1
             )
@@ -101,7 +99,7 @@ internal class DefaultTokenService(
             TokenEvent.Revoked(
                 eventId = UUID.randomUUID(),
                 timestamp = CurrentKotlinInstant,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = UUID(0, 0),
                 revokedCount = 1,
                 tokenIds = listOf(tokenId)
@@ -110,16 +108,18 @@ internal class DefaultTokenService(
     }
 
     override suspend fun verify(token: String): KodexPrincipal? {
-        return runCatching {
+        return try {
             val jwt = JWT.decode(token)
             tokenManager.verifyToken(jwt, TokenType.AccessToken)
-        }.getOrElse { exception ->
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             eventBus.publish(
                 TokenEvent.VerifyFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = CurrentKotlinInstant,
-                    realmId = realm.owner,
-                    reason = exception.message ?: "Unknown error"
+                    realmId = realm.name,
+                    reason = e.message ?: "Unknown error"
                 )
             )
             null

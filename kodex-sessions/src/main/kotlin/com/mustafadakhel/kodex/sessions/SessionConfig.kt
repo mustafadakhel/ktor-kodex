@@ -25,7 +25,7 @@ public class SessionConfig : ExtensionConfig() {
             config = this,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realmId = context.realm.owner
+            realmId = context.realm.name
         )
     }
 }

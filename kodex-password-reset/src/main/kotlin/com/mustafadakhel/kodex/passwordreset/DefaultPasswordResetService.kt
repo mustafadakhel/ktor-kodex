@@ -163,7 +163,8 @@ internal class DefaultPasswordResetService(
     }
 
     override suspend fun verifyResetToken(token: String): TokenVerificationResult {
-        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
 
         val result = kodexTransaction {
             val resetToken = PasswordResetTokens
@@ -176,7 +177,7 @@ internal class DefaultPasswordResetService(
             val validation = TokenValidator.validate(
                 expiresAt = resetToken[PasswordResetTokens.expiresAt],
                 usedAt = resetToken[PasswordResetTokens.usedAt],
-                now = now
+                now = nowLocal
             )
 
             if (!validation.isValid) {
@@ -190,7 +191,7 @@ internal class DefaultPasswordResetService(
             is TokenVerificationResult.Valid -> {
                 eventBus?.publish(PasswordResetEvent.PasswordResetTokenVerified(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realm,
                     userId = result.userId
                 ))
@@ -198,7 +199,7 @@ internal class DefaultPasswordResetService(
             is TokenVerificationResult.Invalid -> {
                 eventBus?.publish(PasswordResetEvent.PasswordResetTokenVerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realm,
                     reason = result.reason
                 ))
@@ -209,7 +210,8 @@ internal class DefaultPasswordResetService(
     }
 
     override suspend fun consumeResetToken(token: String): TokenConsumptionResult {
-        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
 
         val result = kodexTransaction {
             val resetToken = PasswordResetTokens
@@ -222,7 +224,7 @@ internal class DefaultPasswordResetService(
             val validation = TokenValidator.validate(
                 expiresAt = resetToken[PasswordResetTokens.expiresAt],
                 usedAt = resetToken[PasswordResetTokens.usedAt],
-                now = now
+                now = nowLocal
             )
 
             if (!validation.isValid) {
@@ -234,7 +236,7 @@ internal class DefaultPasswordResetService(
             PasswordResetTokens.update({
                 (PasswordResetTokens.realmId eq realm) and (PasswordResetTokens.token eq token)
             }) {
-                it[PasswordResetTokens.usedAt] = now
+                it[PasswordResetTokens.usedAt] = nowLocal
             }
 
             PasswordResetTokens.update({
@@ -243,7 +245,7 @@ internal class DefaultPasswordResetService(
                 (PasswordResetTokens.token neq token) and
                 (PasswordResetTokens.usedAt.isNull())
             }) {
-                it[PasswordResetTokens.usedAt] = now
+                it[PasswordResetTokens.usedAt] = nowLocal
             }
 
             TokenConsumptionResult.Success(userId)
@@ -255,7 +257,7 @@ internal class DefaultPasswordResetService(
 
                 eventBus?.publish(PasswordResetEvent.PasswordResetCompleted(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realm,
                     userId = result.userId
                 ))
@@ -263,7 +265,7 @@ internal class DefaultPasswordResetService(
             is TokenConsumptionResult.Invalid -> {
                 eventBus?.publish(PasswordResetEvent.PasswordResetCompletionFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realm,
                     reason = result.reason
                 ))

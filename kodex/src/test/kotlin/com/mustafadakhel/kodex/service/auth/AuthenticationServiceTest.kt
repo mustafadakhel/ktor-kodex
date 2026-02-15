@@ -68,7 +68,6 @@ class AuthServiceTest : FunSpec({
         eventBus = mockk(relaxed = true)
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns realmOwner
         every { realm.name } returns realmOwner
 
         authService = DefaultAuthService(
@@ -213,6 +212,7 @@ class AuthServiceTest : FunSpec({
         every { hashingService.verify(oldPassword, testHashedPassword) } returns true
         every { hashingService.hash(newPassword) } returns newHashedPassword
         every { userRepository.updatePassword(testUserId, realmOwner, newHashedPassword) } returns true
+        coEvery { tokenService.revoke(any()) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         authService.changePassword(testUserId, oldPassword, newPassword)
@@ -221,6 +221,7 @@ class AuthServiceTest : FunSpec({
         verify(exactly = 1) { hashingService.verify(oldPassword, testHashedPassword) }
         verify(exactly = 1) { hashingService.hash(newPassword) }
         verify(exactly = 1) { userRepository.updatePassword(testUserId, realmOwner, newHashedPassword) }
+        coVerify(exactly = 1) { tokenService.revoke(testUserId) }
 
         eventSlot.captured.apply {
             userId shouldBe testUserId
@@ -286,6 +287,7 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findById(testUserId, realmOwner) } returns testUserEntity
         every { hashingService.hash(newPassword) } returns newHashedPassword
         every { userRepository.updatePassword(testUserId, realmOwner, newHashedPassword) } returns true
+        coEvery { tokenService.revoke(any()) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         authService.resetPassword(testUserId, newPassword)
@@ -293,6 +295,7 @@ class AuthServiceTest : FunSpec({
         verify(exactly = 1) { userRepository.findById(testUserId, realmOwner) }
         verify(exactly = 1) { hashingService.hash(newPassword) }
         verify(exactly = 1) { userRepository.updatePassword(testUserId, realmOwner, newHashedPassword) }
+        coVerify(exactly = 1) { tokenService.revoke(testUserId) }
 
         eventSlot.captured.apply {
             userId shouldBe testUserId
@@ -330,6 +333,7 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findById(testUserId, realmOwner) } returns testUserEntity
         every { hashingService.hash(newPassword) } returns newHashedPassword
         every { userRepository.updatePassword(testUserId, realmOwner, newHashedPassword) } returns true
+        coEvery { tokenService.revoke(any()) } returns Unit
         coEvery { eventBus.publish(any<AuthEvent.PasswordReset>()) } returns Unit
 
         authService.resetPassword(testUserId, newPassword)

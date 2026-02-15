@@ -81,16 +81,7 @@ internal class ExposedDbEngine(
 
     override fun clear() {
         runner = null
-        transaction {
-            SchemaUtils.drop(
-                Users,
-                Tokens,
-                Roles,
-                UserRoles,
-                UserProfiles,
-                UserCustomAttributes
-            )
-        }
+        database = null
         dataSource.takeIf { it.isClosed.not() }?.close()
     }
 

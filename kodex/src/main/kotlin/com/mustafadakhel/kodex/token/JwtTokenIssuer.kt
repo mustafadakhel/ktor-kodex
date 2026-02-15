@@ -45,7 +45,7 @@ internal class JwtTokenIssuer internal constructor(
                 claims = buildMap {
                     tokenType.value?.let { put(Claim.TokenType.Key, it) }
                     put(Claim.Roles.Key, roles)
-                    put(Claim.Realm.Key, realm.owner)
+                    put(Claim.Realm.Key, realm.name)
                     tokenFamily?.let { put("tokenFamily", it.toString()) }
                     putAll(claimsConfig.additionalClaims)
                 }

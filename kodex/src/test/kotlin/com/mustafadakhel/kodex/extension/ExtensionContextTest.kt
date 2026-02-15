@@ -16,7 +16,7 @@ class ExtensionContextTest : DescribeSpec({
     describe("ExtensionContext") {
         describe("extensionContext factory") {
             it("should create context with provided realm and timezone") {
-                val realm = Realm(owner = "test-realm")
+                val realm = Realm(name = "test-realm")
                 val timeZone = TimeZone.of("America/New_York")
 
                 val context = extensionContext(realm, timeZone, mockEventBus, rateLimiter)
@@ -26,7 +26,7 @@ class ExtensionContextTest : DescribeSpec({
             }
 
             it("should create context with UTC timezone") {
-                val realm = Realm(owner = "utc-realm")
+                val realm = Realm(name = "utc-realm")
                 val timeZone = TimeZone.UTC
 
                 val context = extensionContext(realm, timeZone, mockEventBus, rateLimiter)
@@ -35,22 +35,22 @@ class ExtensionContextTest : DescribeSpec({
                 context.timeZone shouldBe TimeZone.UTC
             }
 
-            it("should handle different realm owners") {
-                val realm1 = Realm(owner = "realm-1")
-                val realm2 = Realm(owner = "realm-2")
+            it("should handle different realm names") {
+                val realm1 = Realm(name = "realm-1")
+                val realm2 = Realm(name = "realm-2")
                 val timeZone = TimeZone.UTC
 
                 val context1 = extensionContext(realm1, timeZone, mockEventBus, rateLimiter)
                 val context2 = extensionContext(realm2, timeZone, mockEventBus, rateLimiter)
 
-                context1.realm.owner shouldBe "realm-1"
-                context2.realm.owner shouldBe "realm-2"
+                context1.realm.name shouldBe "realm-1"
+                context2.realm.name shouldBe "realm-2"
             }
         }
 
         describe("ExtensionContextImpl") {
             it("should be a data class with equals") {
-                val realm = Realm(owner = "test-realm")
+                val realm = Realm(name = "test-realm")
                 val timeZone = TimeZone.UTC
 
                 val context1 = extensionContext(realm, timeZone, mockEventBus, rateLimiter) as ExtensionContextImpl
@@ -61,8 +61,8 @@ class ExtensionContextTest : DescribeSpec({
             }
 
             it("should have different instances for different realms") {
-                val realm1 = Realm(owner = "realm-1")
-                val realm2 = Realm(owner = "realm-2")
+                val realm1 = Realm(name = "realm-1")
+                val realm2 = Realm(name = "realm-2")
                 val timeZone = TimeZone.UTC
 
                 val context1 = extensionContext(realm1, timeZone, mockEventBus, rateLimiter)
@@ -72,7 +72,7 @@ class ExtensionContextTest : DescribeSpec({
             }
 
             it("should have different instances for different timezones") {
-                val realm = Realm(owner = "test-realm")
+                val realm = Realm(name = "test-realm")
                 val tz1 = TimeZone.UTC
                 val tz2 = TimeZone.of("America/Los_Angeles")
 
@@ -83,14 +83,14 @@ class ExtensionContextTest : DescribeSpec({
             }
 
             it("should provide access to realm properties") {
-                val realm = Realm(owner = "my-app")
+                val realm = Realm(name = "my-app")
                 val context = extensionContext(realm, TimeZone.UTC, mockEventBus, rateLimiter)
 
-                context.realm.owner shouldBe "my-app"
+                context.realm.name shouldBe "my-app"
             }
 
             it("should provide access to timezone") {
-                val realm = Realm(owner = "test")
+                val realm = Realm(name = "test")
                 val timeZone = TimeZone.of("Europe/London")
                 val context = extensionContext(realm, timeZone, mockEventBus, rateLimiter)
 

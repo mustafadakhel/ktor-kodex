@@ -19,7 +19,7 @@ public data class TokenRotationPolicy(
 
         public fun balanced(): TokenRotationPolicy = TokenRotationPolicy()
 
-        public fun lenient(): TokenRotationPolicy = TokenRotationPolicy(
+        public fun unsafe(): TokenRotationPolicy = TokenRotationPolicy(
             detectReplayAttacks = false,
             revokeOnReplay = false,
             gracePeriod = 10.seconds

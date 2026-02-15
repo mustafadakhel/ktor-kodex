@@ -3,7 +3,7 @@ package com.mustafadakhel.kodex.lockout
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import kotlinx.datetime.LocalDateTime
 
-public open class LockoutThrowable(
+public sealed class LockoutThrowable(
     message: String? = null,
     cause: Throwable? = null
 ) : KodexThrowable(message, cause) {

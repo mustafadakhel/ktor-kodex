@@ -74,9 +74,6 @@ public class CircuitBreaker(
         }
     }
 
-    /**
-     * Record a failed Redis operation.
-     */
     public fun recordFailure() {
         lastFailureTime.set(CurrentKotlinInstant)
 
@@ -98,14 +95,8 @@ public class CircuitBreaker(
         }
     }
 
-    /**
-     * Get current circuit state as string.
-     */
     public fun getState(): String = state.get().name
 
-    /**
-     * Get current failure count.
-     */
     public fun getFailureCount(): Int = failureCount.get()
 
     private fun checkForRecovery() {

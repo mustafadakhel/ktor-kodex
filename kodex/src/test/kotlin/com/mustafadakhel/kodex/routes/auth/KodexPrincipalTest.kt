@@ -99,7 +99,7 @@ class KodexPrincipalTest : DescribeSpec({
             )
 
             principal.realm shouldBe customRealm
-            principal.realm.owner shouldBe "custom-realm"
+            principal.realm.name shouldBe "custom-realm"
         }
 
         it("should store multiple roles correctly") {

@@ -46,7 +46,6 @@ class RoleServiceTest : FunSpec({
         updateCommandProcessor = mockk(relaxed = true)
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns realmOwner
         every { realm.name } returns realmOwner
 
         roleService = DefaultUserService(

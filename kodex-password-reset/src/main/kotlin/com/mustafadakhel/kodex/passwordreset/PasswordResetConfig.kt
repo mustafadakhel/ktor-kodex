@@ -10,7 +10,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/** Configuration for password reset functionality */
 public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
 
     /** How long reset tokens remain valid (default: 1 hour) */
@@ -31,7 +30,6 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
     /** Minimum time between password reset requests, null to disable cooldown (default: null) */
     public var cooldownPeriod: Duration? = null
 
-    /** Sender for password reset notifications */
     public var passwordResetSender: PasswordResetSender? = null
 
     override fun validate(): ConfigValidationResult = validate {
@@ -96,22 +94,20 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
             passwordResetSender = sender,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.owner,
+            realm = context.realm.name,
             rateLimiter = context.rateLimiter
         )
-        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.owner)
+        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.name)
 
         return PasswordResetExtension(service, cleanupService, context.timeZone)
     }
 }
 
-/** Immutable configuration data for password reset */
 internal data class PasswordResetConfigData(
     val tokenValidity: Duration,
     val rateLimit: RateLimitConfigData
 )
 
-/** Immutable rate limit configuration data */
 internal data class RateLimitConfigData(
     val maxAttemptsPerUser: Int,
     val maxAttemptsPerIdentifier: Int,

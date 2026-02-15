@@ -261,7 +261,7 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm,
                 FieldUpdate.SetValue("new@x"),
                 FieldUpdate.SetValue("+1"),
-                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange,
                 now
             ) shouldBe UpdateUserResult.Success
 
@@ -276,8 +276,8 @@ class ExposedUserRepositoryTest : FunSpec({
                 UUID.randomUUID(),
                 testRealm,
                 FieldUpdate.SetValue("x@x"),
-                FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange,
+                FieldUpdate.NoChange,
                 now
             ) shouldBe UpdateUserResult.NotFound
         }
@@ -308,17 +308,17 @@ class ExposedUserRepositoryTest : FunSpec({
             userRepository.updateById(
                 u2.id,
                 testRealm,
-                u1.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
+                u1.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange,
+                FieldUpdate.NoChange,
+                FieldUpdate.NoChange,
                 now
             ) shouldBe UpdateUserResult.EmailAlreadyExists
             userRepository.updateById(
                 u2.id,
                 testRealm,
-                FieldUpdate.NoChange(),
-                u1.phoneNumber?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
-                FieldUpdate.NoChange(),
+                FieldUpdate.NoChange,
+                u1.phoneNumber?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange,
+                FieldUpdate.NoChange,
                 now
             ) shouldBe UpdateUserResult.PhoneAlreadyExists
         }
@@ -576,9 +576,9 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateById(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.ClearValue(),
-                phone = FieldUpdate.NoChange(),
-                status = FieldUpdate.NoChange(),
+                email = FieldUpdate.ClearValue,
+                phone = FieldUpdate.NoChange,
+                status = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -602,9 +602,9 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateById(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.ClearValue(),
-                status = FieldUpdate.NoChange(),
+                email = FieldUpdate.NoChange,
+                phone = FieldUpdate.ClearValue,
+                status = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -630,8 +630,8 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateById(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.NoChange(),
+                email = FieldUpdate.NoChange,
+                phone = FieldUpdate.NoChange,
                 status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
                 currentTime = now
             )
@@ -689,11 +689,11 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateBatch(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.ClearValue(),
-                phone = FieldUpdate.NoChange(),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.NoChange(),
-                customAttributes = FieldUpdate.NoChange(),
+                email = FieldUpdate.ClearValue,
+                phone = FieldUpdate.NoChange,
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.NoChange,
+                customAttributes = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -717,11 +717,11 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateBatch(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.ClearValue(),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.NoChange(),
-                customAttributes = FieldUpdate.NoChange(),
+                email = FieldUpdate.NoChange,
+                phone = FieldUpdate.ClearValue,
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.NoChange,
+                customAttributes = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -745,11 +745,11 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateBatch(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.NoChange(),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.ClearValue(),
-                customAttributes = FieldUpdate.NoChange(),
+                email = FieldUpdate.NoChange,
+                phone = FieldUpdate.NoChange,
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.ClearValue,
+                customAttributes = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -773,11 +773,11 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateBatch(
                 userId = user.id,
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.NoChange(),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.NoChange(),
-                customAttributes = FieldUpdate.ClearValue(),
+                email = FieldUpdate.NoChange,
+                phone = FieldUpdate.NoChange,
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.NoChange,
+                customAttributes = FieldUpdate.ClearValue,
                 currentTime = now
             )
 
@@ -789,11 +789,11 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateBatch(
                 userId = UUID.randomUUID(),
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
-                phone = FieldUpdate.NoChange(),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.NoChange(),
-                customAttributes = FieldUpdate.NoChange(),
+                email = FieldUpdate.NoChange,
+                phone = FieldUpdate.NoChange,
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.NoChange,
+                customAttributes = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -828,10 +828,10 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user2.id,
                 realmId = testRealm,
                 email = FieldUpdate.SetValue("user1@example.com"),
-                phone = FieldUpdate.NoChange(),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.NoChange(),
-                customAttributes = FieldUpdate.NoChange(),
+                phone = FieldUpdate.NoChange,
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.NoChange,
+                customAttributes = FieldUpdate.NoChange,
                 currentTime = now
             )
 
@@ -865,11 +865,11 @@ class ExposedUserRepositoryTest : FunSpec({
             val result = userRepository.updateBatch(
                 userId = user2.id,
                 realmId = testRealm,
-                email = FieldUpdate.NoChange(),
+                email = FieldUpdate.NoChange,
                 phone = FieldUpdate.SetValue("+1111111111"),
-                status = FieldUpdate.NoChange(),
-                profile = FieldUpdate.NoChange(),
-                customAttributes = FieldUpdate.NoChange(),
+                status = FieldUpdate.NoChange,
+                profile = FieldUpdate.NoChange,
+                customAttributes = FieldUpdate.NoChange,
                 currentTime = now
             )
 

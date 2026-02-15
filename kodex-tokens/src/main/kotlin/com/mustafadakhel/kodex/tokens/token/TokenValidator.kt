@@ -2,9 +2,6 @@ package com.mustafadakhel.kodex.tokens.token
 
 import kotlinx.datetime.LocalDateTime
 
-/**
- * Token validation utility.
- */
 public object TokenValidator {
 
     public data class ValidationResult(

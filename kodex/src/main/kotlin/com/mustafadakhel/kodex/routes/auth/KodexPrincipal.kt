@@ -11,26 +11,20 @@ import java.util.*
  * Principal attached to calls authenticated with Kodex.
  */
 public interface KodexPrincipal {
-    /** Identifier of the authenticated user. */
     public val userId: UUID
 
-    /** Type of token used for authentication. */
     public val type: TokenType
 
-    /** Realm the principal belongs to. */
     public val realm: Realm
 
-    /** Roles granted to the user. */
     public val roles: List<Role>
 
-    /** Raw token string if present. */
     public val token: String?
 
     /** Token family ID for session tracking. */
     public val tokenFamily: UUID?
 }
 
-/** Default [KodexPrincipal] implementation. */
 public class DefaultKodexPrincipal(
     override val userId: UUID,
     override val type: TokenType,
@@ -40,5 +34,4 @@ public class DefaultKodexPrincipal(
     override val tokenFamily: UUID?
 ) : KodexPrincipal
 
-/** Returns the [KodexPrincipal] from this call if present. */
 public val ApplicationCall.kodex: KodexPrincipal? get() = principal()

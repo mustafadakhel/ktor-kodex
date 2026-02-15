@@ -5,7 +5,6 @@ import com.mustafadakhel.kodex.extension.ExtensionContext
 import io.ktor.utils.io.*
 import kotlinx.datetime.TimeZone
 
-/** Configuration for the account lockout extension */
 @KtorDsl
 public class AccountLockoutConfig : ExtensionConfig() {
 
@@ -13,7 +12,7 @@ public class AccountLockoutConfig : ExtensionConfig() {
     public var policy: AccountLockoutPolicy = AccountLockoutPolicy.moderate()
 
     override fun build(context: ExtensionContext): AccountLockoutExtension {
-        val service = accountLockoutService(policy, context.timeZone, context.realm.owner)
+        val service = accountLockoutService(policy, context.timeZone, context.realm.name)
         return AccountLockoutExtension(service, context.timeZone)
     }
 }

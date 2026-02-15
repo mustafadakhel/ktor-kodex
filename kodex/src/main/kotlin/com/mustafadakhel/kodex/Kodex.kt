@@ -65,6 +65,12 @@ public class Kodex private constructor(
 
             configureAuthentication(pipeline, realmConfigs, realmServicesMap)
 
+            val eventBuses = realmConfigs.map { it.eventBus }
+            pipeline.monitor.subscribe(ApplicationStopping) {
+                eventBuses.forEach { bus -> bus.shutdown() }
+                Db.clearEngine()
+            }
+
             return Kodex(
                 realmConfigs = realmConfigs,
                 realmServices = realmServicesMap
@@ -225,7 +231,7 @@ public class Kodex private constructor(
                     val realm = realmConfig.realm
                     realmServicesMap[realm]?.let { realmServices ->
                         bearer(realm.authProviderName) {
-                            this.realm = realm.owner
+                            this.realm = realm.displayName
                             authenticate { token ->
                                 realmServices.tokens.verify(token.token)
                             }

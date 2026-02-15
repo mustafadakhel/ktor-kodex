@@ -81,9 +81,12 @@ internal class DefaultMfaService(
         email: String,
         ipAddress: String?
     ): EnrollmentResult {
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
+
         eventBus.publish(MfaEvent.EnrollmentStarted(
             eventId = UUID.randomUUID(),
-            timestamp = CurrentKotlinInstant,
+            timestamp = now,
             realmId = realmId,
             userId = userId,
             methodType = MfaMethodType.EMAIL,
@@ -110,7 +113,7 @@ internal class DefaultMfaService(
             }
             eventBus.publish(MfaEvent.RateLimitExceeded(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -140,7 +143,7 @@ internal class DefaultMfaService(
             }
             eventBus.publish(MfaEvent.RateLimitExceeded(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -172,7 +175,7 @@ internal class DefaultMfaService(
             }
             eventBus.publish(MfaEvent.RateLimitExceeded(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -197,7 +200,7 @@ internal class DefaultMfaService(
             ipReservation?.let { rateLimiter.releaseReservation(it.reservationId) }
             eventBus.publish(MfaEvent.EnrollmentFailed(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -209,8 +212,7 @@ internal class DefaultMfaService(
         }
 
         val challengeId = kodexTransaction {
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
-            val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, CurrentKotlinInstant)
+            val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, now)
             val codeHash = hashingService.hash(code)
 
             // Create the MFA method record (inactive) to store the email
@@ -223,7 +225,7 @@ internal class DefaultMfaService(
                 it[MfaMethods.encryptionNonce] = null
                 it[MfaMethods.isActive] = false  // Inactive until verification
                 it[MfaMethods.isPrimary] = false
-                it[MfaMethods.enrolledAt] = now
+                it[MfaMethods.enrolledAt] = nowLocal
             }.value
 
             MfaChallenges.insert {
@@ -232,7 +234,7 @@ internal class DefaultMfaService(
                 it[MfaChallenges.methodId] = methodId
                 it[MfaChallenges.codeHash] = codeHash
                 it[MfaChallenges.expiresAt] = expiresAt
-                it[MfaChallenges.createdAt] = now
+                it[MfaChallenges.createdAt] = nowLocal
                 it[MfaChallenges.attempts] = 0
                 it[MfaChallenges.maxAttempts] = config.maxVerifyAttempts
             }[MfaChallenges.id].value
@@ -246,7 +248,10 @@ internal class DefaultMfaService(
         challengeId: UUID,
         code: String
     ): EnrollmentVerificationResult {
-        return ensureMinimumResponseTime(100.milliseconds) {
+        return ensureMinimumResponseTime(250.milliseconds) {
+            val now = CurrentKotlinInstant
+            val nowLocal = now.toLocalDateTime(timeZone)
+
             val challenge = kodexTransaction {
                 MfaChallenges
                     .selectAll()
@@ -259,13 +264,12 @@ internal class DefaultMfaService(
             val maxAttempts = challenge[MfaChallenges.maxAttempts]
             val expiresAt = challenge[MfaChallenges.expiresAt]
             val verifiedAt = challenge[MfaChallenges.verifiedAt]
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
             if (verifiedAt != null) {
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Challenge already verified")
             }
 
-            if (now > expiresAt) {
+            if (nowLocal > expiresAt) {
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Expired("Code has expired")
             }
 
@@ -286,7 +290,7 @@ internal class DefaultMfaService(
                 }
                 eventBus.publish(MfaEvent.EnrollmentFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodType = MfaMethodType.EMAIL,
@@ -300,7 +304,7 @@ internal class DefaultMfaService(
                 MfaChallenges.update({
                     (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
                 }) {
-                    it[MfaChallenges.verifiedAt] = now
+                    it[MfaChallenges.verifiedAt] = nowLocal
                 }
 
                 // Activate the method that was created during enrollment
@@ -320,7 +324,7 @@ internal class DefaultMfaService(
 
             eventBus.publish(MfaEvent.EnrollmentCompleted(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodId = methodId,
@@ -333,9 +337,11 @@ internal class DefaultMfaService(
     }
 
     override suspend fun enrollTotp(userId: UUID, accountName: String): TotpEnrollmentResult {
+        val now = CurrentKotlinInstant
+
         eventBus.publish(MfaEvent.EnrollmentStarted(
             eventId = UUID.randomUUID(),
-            timestamp = CurrentKotlinInstant,
+            timestamp = now,
             realmId = realmId,
             userId = userId,
             methodType = MfaMethodType.TOTP,
@@ -353,7 +359,7 @@ internal class DefaultMfaService(
         val encrypted = secretEncryption.encrypt(secret)
 
         val methodId = kodexTransaction {
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
+            val nowLocal = now.toLocalDateTime(timeZone)
 
             MfaMethods.insertAndGetId {
                 it[MfaMethods.realmId] = this@DefaultMfaService.realmId
@@ -364,7 +370,7 @@ internal class DefaultMfaService(
                 it[encryptionNonce] = encrypted.nonce
                 it[isActive] = false
                 it[isPrimary] = false
-                it[enrolledAt] = now
+                it[enrolledAt] = nowLocal
             }.value
         }
 
@@ -382,7 +388,10 @@ internal class DefaultMfaService(
         methodId: UUID,
         code: String
     ): EnrollmentVerificationResult {
-        return ensureMinimumResponseTime(100.milliseconds) {
+        return ensureMinimumResponseTime(250.milliseconds) {
+            val now = CurrentKotlinInstant
+            val nowLocal = now.toLocalDateTime(timeZone)
+
             val method = kodexTransaction {
                 MfaMethods
                     .selectAll()
@@ -408,7 +417,7 @@ internal class DefaultMfaService(
             if (!isValid) {
                 eventBus.publish(MfaEvent.EnrollmentFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodType = MfaMethodType.TOTP,
@@ -419,15 +428,13 @@ internal class DefaultMfaService(
             }
 
             kodexTransaction {
-                val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
-
                 MfaMethods.update({
                     (MfaMethods.realmId eq realmId) and
                     (MfaMethods.id eq methodId)
                 }) {
                     it[isActive] = true
                     it[isPrimary] = !hasAnyMethod(userId)
-                    it[lastUsedAt] = now
+                    it[lastUsedAt] = nowLocal
                 }
             }
 
@@ -435,7 +442,7 @@ internal class DefaultMfaService(
 
             eventBus.publish(MfaEvent.EnrollmentCompleted(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodId = methodId,
@@ -452,6 +459,9 @@ internal class DefaultMfaService(
         methodId: UUID,
         ipAddress: String?
     ): ChallengeResult {
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
+
         // Retrieve the MFA method to get the email address
         val method = kodexTransaction {
             MfaMethods
@@ -491,7 +501,7 @@ internal class DefaultMfaService(
             }
             eventBus.publish(MfaEvent.RateLimitExceeded(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -521,7 +531,7 @@ internal class DefaultMfaService(
             }
             eventBus.publish(MfaEvent.RateLimitExceeded(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -553,7 +563,7 @@ internal class DefaultMfaService(
             }
             eventBus.publish(MfaEvent.RateLimitExceeded(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodType = MfaMethodType.EMAIL,
@@ -580,8 +590,7 @@ internal class DefaultMfaService(
         }
 
         val challengeId = kodexTransaction {
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
-            val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, CurrentKotlinInstant)
+            val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, now)
             val codeHash = hashingService.hash(code)
 
             MfaChallenges.insert {
@@ -590,7 +599,7 @@ internal class DefaultMfaService(
                 it[MfaChallenges.methodId] = methodId
                 it[MfaChallenges.codeHash] = codeHash
                 it[MfaChallenges.expiresAt] = expiresAt
-                it[MfaChallenges.createdAt] = now
+                it[MfaChallenges.createdAt] = nowLocal
                 it[MfaChallenges.attempts] = 0
                 it[MfaChallenges.maxAttempts] = config.maxVerifyAttempts
             }[MfaChallenges.id].value
@@ -598,7 +607,7 @@ internal class DefaultMfaService(
 
         eventBus.publish(MfaEvent.ChallengeSent(
             eventId = UUID.randomUUID(),
-            timestamp = CurrentKotlinInstant,
+            timestamp = now,
             realmId = realmId,
             userId = userId,
             methodId = methodId,
@@ -616,7 +625,10 @@ internal class DefaultMfaService(
         code: String,
         ipAddress: String?
     ): VerificationResult {
-        return ensureMinimumResponseTime(100.milliseconds) {
+        return ensureMinimumResponseTime(250.milliseconds) {
+            val now = CurrentKotlinInstant
+            val nowLocal = now.toLocalDateTime(timeZone)
+
             val challenge = kodexTransaction {
                 MfaChallenges
                     .selectAll()
@@ -633,16 +645,15 @@ internal class DefaultMfaService(
             val maxAttempts = challenge[MfaChallenges.maxAttempts]
             val expiresAt = challenge[MfaChallenges.expiresAt]
             val verifiedAt = challenge[MfaChallenges.verifiedAt]
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
             if (verifiedAt != null) {
                 return@ensureMinimumResponseTime VerificationResult.Invalid("Challenge already verified")
             }
 
-            if (now > expiresAt) {
+            if (nowLocal > expiresAt) {
                 eventBus.publish(MfaEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodId = methodId,
@@ -659,7 +670,7 @@ internal class DefaultMfaService(
             if (attempts >= maxAttempts) {
                 eventBus.publish(MfaEvent.RateLimitExceeded(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodType = MfaMethodType.EMAIL,
@@ -685,7 +696,7 @@ internal class DefaultMfaService(
                 val remainingAttempts = maxAttempts - (attempts + 1)
                 eventBus.publish(MfaEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodId = methodId,
@@ -703,19 +714,19 @@ internal class DefaultMfaService(
                 MfaChallenges.update({
                     (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
                 }) {
-                    it[MfaChallenges.verifiedAt] = now
+                    it[MfaChallenges.verifiedAt] = nowLocal
                 }
 
                 MfaMethods.update({
                     (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
                 }) {
-                    it[MfaMethods.lastUsedAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
+                    it[MfaMethods.lastUsedAt] = nowLocal
                 }
             }
 
             eventBus.publish(MfaEvent.VerificationSuccess(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodId = methodId,
@@ -734,7 +745,9 @@ internal class DefaultMfaService(
         code: String,
         ipAddress: String?
     ): VerificationResult {
-        return ensureMinimumResponseTime(100.milliseconds) {
+        return ensureMinimumResponseTime(250.milliseconds) {
+            val now = CurrentKotlinInstant
+            val nowLocal = now.toLocalDateTime(timeZone)
             val codeHash = hashingService.hash(code)
 
             val method = kodexTransaction {
@@ -773,7 +786,7 @@ internal class DefaultMfaService(
             if (codeAlreadyUsed) {
                 eventBus.publish(MfaEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodId = methodId,
@@ -792,7 +805,7 @@ internal class DefaultMfaService(
             if (!isValid) {
                 eventBus.publish(MfaEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realmId,
                     userId = userId,
                     methodId = methodId,
@@ -807,26 +820,24 @@ internal class DefaultMfaService(
             }
 
             kodexTransaction {
-                val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
-
                 // Record the used code
                 MfaTotpUsedCodes.insert {
                     it[MfaTotpUsedCodes.realmId] = this@DefaultMfaService.realmId
                     it[MfaTotpUsedCodes.userId] = userId
                     it[MfaTotpUsedCodes.methodId] = methodId
                     it[MfaTotpUsedCodes.codeHash] = codeHash
-                    it[MfaTotpUsedCodes.usedAt] = now
+                    it[MfaTotpUsedCodes.usedAt] = nowLocal
                 }
 
                 // Update last used timestamp
                 MfaMethods.update({
                     (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
                 }) {
-                    it[MfaMethods.lastUsedAt] = now
+                    it[MfaMethods.lastUsedAt] = nowLocal
                 }
 
                 // Clean up old used codes (keep only last 3 time windows = 90 seconds with 30s period)
-                val cutoffTime = CurrentKotlinInstant.minus(90.seconds).toLocalDateTime(timeZone)
+                val cutoffTime = now.minus(90.seconds).toLocalDateTime(timeZone)
                 MfaTotpUsedCodes.deleteWhere {
                     (MfaTotpUsedCodes.realmId eq this@DefaultMfaService.realmId) and
                     (MfaTotpUsedCodes.usedAt less cutoffTime)
@@ -835,7 +846,7 @@ internal class DefaultMfaService(
 
             eventBus.publish(MfaEvent.VerificationSuccess(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realmId,
                 userId = userId,
                 methodId = methodId,
@@ -967,14 +978,14 @@ internal class DefaultMfaService(
             )
         }
 
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
         val codes = mutableListOf<String>()
 
         kodexTransaction {
             MfaBackupCodes.deleteWhere {
                 (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.userId eq userId)
             }
-
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
             repeat(config.backupCodesCount) {
                 val code = TokenGenerator.generate(AlphanumericFormat(config.backupCodeLength, true))
@@ -985,7 +996,7 @@ internal class DefaultMfaService(
                     it[MfaBackupCodes.userId] = userId
                     it[MfaBackupCodes.codeHash] = codeHash
                     it[usedAt] = null
-                    it[createdAt] = now
+                    it[createdAt] = nowLocal
                 }
 
                 codes.add(code)
@@ -994,7 +1005,7 @@ internal class DefaultMfaService(
 
         eventBus.publish(MfaEvent.BackupCodesGenerated(
             eventId = UUID.randomUUID(),
-            timestamp = CurrentKotlinInstant,
+            timestamp = now,
             realmId = realmId,
             userId = userId,
             codeCount = config.backupCodesCount,
@@ -1009,7 +1020,10 @@ internal class DefaultMfaService(
         code: String,
         ipAddress: String?
     ): VerificationResult {
-        return ensureMinimumResponseTime(100.milliseconds) {
+        return ensureMinimumResponseTime(250.milliseconds) {
+            val now = CurrentKotlinInstant
+            val nowLocal = now.toLocalDateTime(timeZone)
+
             // Check rate limits for backup code verification
             val userLimit = rateLimiter.checkLimit(
                 key = "mfa:backup_code_verify:user:$userId",
@@ -1059,11 +1073,10 @@ internal class DefaultMfaService(
                 if (hashingService.verify(code, codeHash)) {
                     val codeId = backupCode[MfaBackupCodes.id].value
                     kodexTransaction {
-                        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
                         MfaBackupCodes.update({
                             (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.id eq codeId)
                         }) {
-                            it[usedAt] = now
+                            it[usedAt] = nowLocal
                         }
                     }
 
@@ -1081,7 +1094,7 @@ internal class DefaultMfaService(
 
                     eventBus.publish(MfaEvent.BackupCodeUsed(
                         eventId = UUID.randomUUID(),
-                        timestamp = CurrentKotlinInstant,
+                        timestamp = now,
                         realmId = realmId,
                         userId = userId,
                         codeId = codeId,

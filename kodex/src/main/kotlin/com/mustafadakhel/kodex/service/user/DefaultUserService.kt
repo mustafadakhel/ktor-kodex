@@ -21,12 +21,6 @@ import com.mustafadakhel.kodex.util.now as nowLocal
 import kotlinx.datetime.TimeZone
 import java.util.UUID
 
-/**
- * Default implementation of UserService.
- *
- * Consolidates user queries, commands, profile management, role assignments,
- * verification, and custom attributes into a single cohesive service.
- */
 internal class DefaultUserService(
     private val userRepository: UserRepository,
     private val hashingService: HashingService,
@@ -105,7 +99,7 @@ internal class DefaultUserService(
                 email = transformed.email,
                 phone = transformed.phone,
                 hashedPassword = hashingService.hash(password),
-                roleNames = (listOf(realm.owner) + roleNames).distinct(),
+                roleNames = (listOf(realm.name) + roleNames).distinct(),
                 currentTime = nowLocal(timeZone),
                 customAttributes = transformed.customAttributes,
                 profile = transformed.profile,
@@ -117,7 +111,7 @@ internal class DefaultUserService(
                 UserEvent.Created(
                     eventId = UUID.randomUUID(),
                     timestamp = timestamp,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     userId = user.id,
                     email = email,
                     phone = phone
@@ -146,7 +140,7 @@ internal class DefaultUserService(
                         UserEvent.Updated(
                             eventId = UUID.randomUUID(),
                             timestamp = result.changes.timestamp,
-                            realmId = realm.owner,
+                            realmId = realm.name,
                             userId = command.userId,
                             actorId = command.userId,
                             changes = changeMetadata
@@ -172,7 +166,7 @@ internal class DefaultUserService(
                 UserEvent.Deleted(
                     eventId = UUID.randomUUID(),
                     timestamp = CurrentKotlinInstant,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     userId = userId,
                     actorId = userId
                 )
@@ -203,7 +197,7 @@ internal class DefaultUserService(
                     UserEvent.RolesUpdated(
                         eventId = UUID.randomUUID(),
                         timestamp = timestamp,
-                        realmId = realm.owner,
+                        realmId = realm.name,
                         userId = userId,
                         actorType = "ADMIN",
                         previousRoles = currentRoles.toSet(),

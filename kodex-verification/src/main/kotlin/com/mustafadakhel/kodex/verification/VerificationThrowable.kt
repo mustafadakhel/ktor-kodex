@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 
-public open class VerificationThrowable(
+public sealed class VerificationThrowable(
     message: String? = null,
     cause: Throwable? = null
 ) : KodexThrowable(message, cause) {

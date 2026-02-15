@@ -359,9 +359,9 @@ internal class UpdateCommandProcessor(
         val repositoryResult = userRepository.updateBatch(
             userId = current.id,
             realmId = realmId,
-            email = batch.userFields?.email ?: FieldUpdate.NoChange(),
-            phone = batch.userFields?.phone ?: FieldUpdate.NoChange(),
-            status = batch.userFields?.status ?: FieldUpdate.NoChange(),
+            email = batch.userFields?.email ?: FieldUpdate.NoChange,
+            phone = batch.userFields?.phone ?: FieldUpdate.NoChange,
+            status = batch.userFields?.status ?: FieldUpdate.NoChange,
             profile = if (batch.profileFields?.hasChanges() == true) {
                 val currentProfile = current.profile
                 FieldUpdate.SetValue(
@@ -389,7 +389,7 @@ internal class UpdateCommandProcessor(
                     )
                 )
             } else {
-                FieldUpdate.NoChange()
+                FieldUpdate.NoChange
             },
             customAttributes = if (batch.attributeChanges?.hasChanges() == true) {
                 val currentAttrs = current.customAttributes ?: emptyMap()
@@ -407,7 +407,7 @@ internal class UpdateCommandProcessor(
                 }
                 FieldUpdate.SetValue(newAttrs)
             } else {
-                FieldUpdate.NoChange()
+                FieldUpdate.NoChange
             },
             currentTime = now(timeZone)
         )

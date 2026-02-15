@@ -11,7 +11,6 @@ public sealed interface VerificationEvent : KodexEvent {
         override val realmId: String,
         val userId: UUID,
         val email: String,
-        val verificationCode: String? = null,
         override val requestId: UUID? = null,
         override val correlationId: UUID? = requestId,
         override val tags: Map<String, String> = emptyMap()
@@ -38,7 +37,6 @@ public sealed interface VerificationEvent : KodexEvent {
         override val realmId: String,
         val userId: UUID,
         val phone: String,
-        val verificationCode: String? = null,
         override val requestId: UUID? = null,
         override val correlationId: UUID? = requestId,
         override val tags: Map<String, String> = emptyMap()

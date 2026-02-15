@@ -7,7 +7,6 @@ import com.mustafadakhel.kodex.model.database.toFullUser
 import com.mustafadakhel.kodex.model.database.toUserProfile
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 
-/** Detects and tracks changes to user data. */
 internal class ChangeTracker {
 
     fun detectUserFieldChanges(

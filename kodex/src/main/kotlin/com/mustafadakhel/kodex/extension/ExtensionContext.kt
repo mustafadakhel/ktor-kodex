@@ -5,7 +5,6 @@ import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import kotlinx.datetime.TimeZone
 
-/** Context provided to extensions during initialization. */
 public interface ExtensionContext {
     public val realm: Realm
     public val timeZone: TimeZone

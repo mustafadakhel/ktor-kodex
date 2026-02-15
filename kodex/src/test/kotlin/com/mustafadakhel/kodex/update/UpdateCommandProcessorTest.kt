@@ -91,8 +91,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                     userId = testUserId,
                     realmId = testRealmId,
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.NoChange(),
-                    status = FieldUpdate.NoChange(),
+                    phone = FieldUpdate.NoChange,
+                    status = FieldUpdate.NoChange,
                     currentTime = any()
                 )}
             }
@@ -161,7 +161,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
 
                 val command = UpdateUserFields(
                     userId = testUserId,
-                    fields = UserFieldUpdates(email = FieldUpdate.ClearValue())
+                    fields = UserFieldUpdates(email = FieldUpdate.ClearValue)
                 )
 
                 val result = processor.execute(command)
@@ -170,9 +170,9 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 verify { mockRepository.updateById(
                     userId = testUserId,
                     realmId = testRealmId,
-                    email = FieldUpdate.ClearValue(),
-                    phone = FieldUpdate.NoChange(),
-                    status = FieldUpdate.NoChange(),
+                    email = FieldUpdate.ClearValue,
+                    phone = FieldUpdate.NoChange,
+                    status = FieldUpdate.NoChange,
                     currentTime = any()
                 )}
             }
@@ -192,8 +192,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 verify { mockRepository.updateById(
                     userId = testUserId,
                     realmId = testRealmId,
-                    email = FieldUpdate.NoChange(),
-                    phone = FieldUpdate.NoChange(),
+                    email = FieldUpdate.NoChange,
+                    phone = FieldUpdate.NoChange,
                     status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
                     currentTime = any()
                 )}
@@ -241,8 +241,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 val command = UpdateProfileFields(
                     userId = testUserId,
                     fields = ProfileFieldUpdates(
-                        address = FieldUpdate.ClearValue(),
-                        profilePicture = FieldUpdate.ClearValue()
+                        address = FieldUpdate.ClearValue,
+                        profilePicture = FieldUpdate.ClearValue
                     )
                 )
 
@@ -394,8 +394,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                     userId = testUserId,
                     realmId = testRealmId,
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.NoChange(),
-                    status = FieldUpdate.NoChange(),
+                    phone = FieldUpdate.NoChange,
+                    status = FieldUpdate.NoChange,
                     profile = any(),
                     customAttributes = FieldUpdate.SetValue(mapOf("key" to "value")),
                     currentTime = any()

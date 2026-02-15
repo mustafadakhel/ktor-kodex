@@ -2,7 +2,6 @@ package com.mustafadakhel.kodex.update
 
 import java.util.UUID
 
-/** Base interface for user update commands. */
 public sealed interface UpdateCommand {
     public val userId: UUID
 }

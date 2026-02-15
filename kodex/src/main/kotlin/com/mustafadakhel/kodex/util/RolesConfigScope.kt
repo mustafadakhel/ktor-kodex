@@ -20,8 +20,8 @@ internal class RolesConfig(
 
     internal val roles: MutableList<Role> = mutableListOf(
         Role(
-            name = realm.owner,
-            description = realm.name
+            name = realm.name,
+            description = realm.displayName
         )
     )
 

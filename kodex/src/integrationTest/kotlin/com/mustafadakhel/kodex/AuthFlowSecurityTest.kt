@@ -430,8 +430,8 @@ class AuthFlowSecurityTest : FunSpec({
                 val principal = services.tokens.verify(tokens.access)
                 principal.shouldNotBeNull()
                 principal.userId shouldBe user.id
-                principal.realm.owner shouldBe "test-realm"
-                // Roles should include realm owner role (auto-added with name = realm.owner)
+                principal.realm.name shouldBe "test-realm"
+                // Roles should include realm owner role (auto-added with name = realm.name)
                 principal.roles.any { it.name == "test-realm" } shouldBe true
             }
         }

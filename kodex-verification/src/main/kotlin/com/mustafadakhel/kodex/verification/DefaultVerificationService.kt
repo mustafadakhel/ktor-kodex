@@ -24,9 +24,6 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
-/**
- * Default implementation of VerificationService.
- */
 internal class DefaultVerificationService(
     private val config: VerificationConfig,
     private val timeZone: TimeZone,
@@ -175,6 +172,8 @@ internal class DefaultVerificationService(
         identifier: ContactIdentifier,
         ipAddress: String?
     ): VerificationSendResult {
+        val now = CurrentKotlinInstant
+
         val contact = getContact(userId, identifier)
             ?: error("Contact not found for user $userId: ${identifier.key}")
 
@@ -243,7 +242,7 @@ internal class DefaultVerificationService(
 
             eventBus?.publish(VerificationEvent.VerificationFailed(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realm,
                 userId = userId,
                 verificationType = identifier.type.name,
@@ -257,11 +256,10 @@ internal class DefaultVerificationService(
 
         eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.EmailVerificationSent(
             eventId = UUID.randomUUID(),
-            timestamp = CurrentKotlinInstant,
+            timestamp = now,
             realmId = realm,
             userId = userId,
-            email = contact.contactValue,
-            verificationCode = null
+            email = contact.contactValue
         ))
 
         return VerificationSendResult.Success(token)
@@ -273,6 +271,8 @@ internal class DefaultVerificationService(
         token: String,
         ipAddress: String?
     ): VerificationResult {
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
         val startTime = System.nanoTime()
 
         val rateLimitKey = "verify:attempt:user:$userId:ip:${ipAddress ?: "unknown"}"
@@ -287,8 +287,6 @@ internal class DefaultVerificationService(
         }
 
         val result = kodexTransaction {
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
-
             val tokenRecord = VerificationTokens
                 .selectAll()
                 .where {
@@ -307,7 +305,7 @@ internal class DefaultVerificationService(
             val validation = TokenValidator.validate(
                 expiresAt = tokenRecord[VerificationTokens.expiresAt],
                 usedAt = tokenRecord[VerificationTokens.usedAt],
-                now = now
+                now = nowLocal
             )
 
             if (!validation.isValid) {
@@ -317,7 +315,7 @@ internal class DefaultVerificationService(
             VerificationTokens.update({
                 (VerificationTokens.realmId eq realm) and (VerificationTokens.token eq token)
             }) {
-                it[VerificationTokens.usedAt] = now
+                it[VerificationTokens.usedAt] = nowLocal
             }
 
             setVerified(userId, identifier, true)
@@ -338,7 +336,7 @@ internal class DefaultVerificationService(
                     ContactType.EMAIL -> {
                         eventBus?.publish(VerificationEvent.EmailVerified(
                             eventId = UUID.randomUUID(),
-                            timestamp = CurrentKotlinInstant,
+                            timestamp = now,
                             realmId = realm,
                             userId = userId,
                             email = contactValue
@@ -347,7 +345,7 @@ internal class DefaultVerificationService(
                     ContactType.PHONE -> {
                         eventBus?.publish(VerificationEvent.PhoneVerified(
                             eventId = UUID.randomUUID(),
-                            timestamp = CurrentKotlinInstant,
+                            timestamp = now,
                             realmId = realm,
                             userId = userId,
                             phone = contactValue
@@ -362,7 +360,7 @@ internal class DefaultVerificationService(
             is VerificationResult.Invalid -> {
                 eventBus?.publish(VerificationEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realm,
                     userId = userId,
                     verificationType = identifier.type.name,

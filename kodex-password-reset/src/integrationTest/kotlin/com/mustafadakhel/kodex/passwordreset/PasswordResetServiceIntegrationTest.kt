@@ -51,7 +51,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
     }
 
     val testContext = object : ExtensionContext {
-        override val realm = Realm(owner = "test-realm")
+        override val realm = Realm(name = "test-realm")
         override val timeZone = timeZone
         override val eventBus = mockEventBus
         override val rateLimiter = com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter()

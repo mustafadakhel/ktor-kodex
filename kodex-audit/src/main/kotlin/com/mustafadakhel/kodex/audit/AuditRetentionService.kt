@@ -7,48 +7,23 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
-/**
- * Service for managing audit log retention and cleanup.
- */
 public interface AuditRetentionService {
-
-    /**
-     * Deletes audit log entries older than the configured retention period.
-     *
-     * @return Number of audit log entries deleted
-     */
     public fun cleanupOldAuditLogs(): Int
-
-    /**
-     * Deletes audit logs older than a specific cutoff date.
-     *
-     * @param cutoffDate Delete all audit logs with timestamp before this date
-     * @return Number of audit log entries deleted
-     */
     public fun cleanupAuditLogsOlderThan(cutoffDate: LocalDateTime): Int
-
-    /**
-     * Gets the current retention period configuration.
-     *
-     * @return Retention period duration
-     */
     public fun getRetentionPeriod(): Duration
 }
 
-/**
- * Default implementation of audit retention service.
- *
- * @property retentionPeriod How long to keep audit logs before deletion
- * @property timeZone Time zone used for timestamp calculations
- */
 internal class DefaultAuditRetentionService(
     private val retentionPeriod: Duration,
-    private val timeZone: TimeZone
+    private val timeZone: TimeZone,
+    private val realmId: String
 ) : AuditRetentionService {
 
     override fun cleanupOldAuditLogs(): Int {
@@ -60,7 +35,7 @@ internal class DefaultAuditRetentionService(
         return kodexTransaction {
             val cutoffInstant = cutoffDate.toInstant(timeZone)
             AuditLogs.deleteWhere {
-                AuditLogs.timestamp less cutoffInstant
+                (AuditLogs.realmId eq realmId) and (AuditLogs.timestamp less cutoffInstant)
             }
         }
     }
@@ -91,15 +66,18 @@ public data class AuditRetentionConfig(
  * Creates an audit retention service with the specified configuration.
  *
  * @param config Retention policy configuration
+ * @param realmId The realm whose audit logs should be cleaned up
  * @param timeZone Time zone for timestamp calculations
  * @return Configured audit retention service
  */
 public fun auditRetentionService(
     config: AuditRetentionConfig,
+    realmId: String,
     timeZone: TimeZone = TimeZone.UTC
 ): AuditRetentionService {
     return DefaultAuditRetentionService(
         retentionPeriod = config.retentionPeriod,
-        timeZone = timeZone
+        timeZone = timeZone,
+        realmId = realmId
     )
 }

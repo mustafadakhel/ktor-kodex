@@ -11,6 +11,7 @@ import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
 import com.mustafadakhel.kodex.validation.validate
 import io.ktor.utils.io.*
+import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -69,7 +70,7 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
     public var hashingService: HashingService? = null
 
     /** Function to check if a user has a specific role (required for admin operations) */
-    public var userHasRole: (suspend (userId: java.util.UUID, role: String) -> Boolean)? = null
+    public var userHasRole: (suspend (userId: UUID, role: String) -> Boolean)? = null
 
     /** Function to get the total number of users (used for MFA statistics) */
     public var getTotalUsers: (suspend () -> Long)? = null
@@ -138,7 +139,7 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
             hashingService = hashingService!!,
             secretEncryption = secretEncryption!!,
             eventBus = context.eventBus,
-            realmId = context.realm.owner,
+            realmId = context.realm.name,
             rateLimiter = context.rateLimiter
         )
     }

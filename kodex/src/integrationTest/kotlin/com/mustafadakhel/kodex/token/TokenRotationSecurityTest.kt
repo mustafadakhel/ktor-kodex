@@ -120,12 +120,12 @@ class TokenRotationSecurityTest : FunSpec({
         tokenRepository = databaseTokenRepository()
 
         exposedTransaction {
-            userRepository.seedRoles(listOf(Role(realm.owner, "Test realm")))
+            userRepository.seedRoles(listOf(Role(realm.name, "Test realm")))
             val result = userRepository.create(
                 email = "test@example.com",
                 phone = null,
                 hashedPassword = "hashed",
-                roleNames = listOf(realm.owner),
+                roleNames = listOf(realm.name),
                 customAttributes = null,
                 profile = null,
                 currentTime = now(TimeZone.UTC),
@@ -177,7 +177,7 @@ class TokenRotationSecurityTest : FunSpec({
         }
 
         test("should allow single use within grace period with lenient policy") {
-            tokenManager = createTokenManager(TokenRotationPolicy.lenient())
+            tokenManager = createTokenManager(TokenRotationPolicy.unsafe())
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             val tokenPair2 = tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
@@ -448,7 +448,7 @@ class TokenRotationSecurityTest : FunSpec({
                     email = "user2@example.com",
                     phone = null,
                     hashedPassword = "hashed",
-                    roleNames = listOf(realm.owner),
+                    roleNames = listOf(realm.name),
                     customAttributes = null,
                     profile = null,
                     currentTime = now(TimeZone.UTC),
@@ -465,7 +465,7 @@ class TokenRotationSecurityTest : FunSpec({
         }
 
         test("should handle concurrent refresh attempts gracefully") {
-            tokenManager = createTokenManager(TokenRotationPolicy.lenient())
+            tokenManager = createTokenManager(TokenRotationPolicy.unsafe())
 
             val tokenPair = tokenManager.issueNewTokens(testUserId)
 

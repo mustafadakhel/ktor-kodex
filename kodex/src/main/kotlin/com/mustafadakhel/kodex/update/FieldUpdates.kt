@@ -7,9 +7,9 @@ import com.mustafadakhel.kodex.model.UserStatus
  * Only fields with non-NoChange updates will be modified.
  */
 public data class UserFieldUpdates(
-    val email: FieldUpdate<String> = FieldUpdate.NoChange(),
-    val phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-    val status: FieldUpdate<UserStatus> = FieldUpdate.NoChange()
+    val email: FieldUpdate<String> = FieldUpdate.NoChange,
+    val phone: FieldUpdate<String> = FieldUpdate.NoChange,
+    val status: FieldUpdate<UserStatus> = FieldUpdate.NoChange
 ) {
     /**
      * Returns true if any field has a change.
@@ -32,10 +32,10 @@ public data class UserFieldUpdates(
  * Only fields with non-NoChange updates will be modified.
  */
 public data class ProfileFieldUpdates(
-    val firstName: FieldUpdate<String> = FieldUpdate.NoChange(),
-    val lastName: FieldUpdate<String> = FieldUpdate.NoChange(),
-    val address: FieldUpdate<String> = FieldUpdate.NoChange(),
-    val profilePicture: FieldUpdate<String> = FieldUpdate.NoChange()
+    val firstName: FieldUpdate<String> = FieldUpdate.NoChange,
+    val lastName: FieldUpdate<String> = FieldUpdate.NoChange,
+    val address: FieldUpdate<String> = FieldUpdate.NoChange,
+    val profilePicture: FieldUpdate<String> = FieldUpdate.NoChange
 ) {
     /**
      * Returns true if any field has a change.

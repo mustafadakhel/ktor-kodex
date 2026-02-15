@@ -24,10 +24,6 @@ internal class CustomAttributeValidator(
         // Null byte character (potential SQL injection vector)
         const val NULL_BYTE = '\u0000'
     }
-    /**
-     * Validates a map of custom attributes.
-     * Returns ValidationResult with sanitized attributes if valid.
-     */
     public fun validate(attributes: Map<String, String>, field: String = "customAttributes"): ValidationResult {
         val errors = mutableListOf<ValidationError>()
         val sanitized = mutableMapOf<String, String>()
@@ -93,9 +89,6 @@ internal class CustomAttributeValidator(
         }
     }
 
-    /**
-     * Validates a single key-value pair.
-     */
     public fun validateSingle(key: String, value: String, field: String = "attribute"): ValidationResult {
         return validate(mapOf(key to value), field)
     }

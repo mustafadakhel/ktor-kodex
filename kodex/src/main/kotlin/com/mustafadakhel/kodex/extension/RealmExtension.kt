@@ -3,19 +3,15 @@ package com.mustafadakhel.kodex.extension
 import org.jetbrains.exposed.sql.Table
 import kotlin.reflect.KClass
 
-/** Base interface for realm extensions. */
 public interface RealmExtension {
     /** Execution priority. Lower values run first. */
     public val priority: Int get() = 100
 }
 
-/** Extension that requires database tables. */
 public interface PersistentExtension : RealmExtension {
-    /** Returns database tables required by this extension. */
     public fun tables(): List<Table>
 }
 
-/** Registry for looking up extensions by type. */
 public class ExtensionRegistry internal constructor(
     private val extensions: Map<KClass<out RealmExtension>, List<RealmExtension>>
 ) {

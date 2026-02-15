@@ -140,13 +140,14 @@ private object ExposedUserRepository : UserRepository {
     }
 
     override fun seedRoles(roles: List<Role>) = exposedTransaction {
-        UserRoles.deleteAll()
-        RoleDao.all().forEach {
-            it.delete()
-        }
         roles.forEach { role ->
-            RoleDao.new(role.name) {
-                description = role.description
+            val existing = RoleDao.findById(role.name)
+            if (existing != null) {
+                existing.description = role.description
+            } else {
+                RoleDao.new(role.name) {
+                    description = role.description
+                }
             }
         }
     }

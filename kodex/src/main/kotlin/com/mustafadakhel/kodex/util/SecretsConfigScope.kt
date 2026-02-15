@@ -4,19 +4,17 @@ import com.mustafadakhel.kodex.model.Secrets
 import com.mustafadakhel.kodex.routes.auth.RealmConfigScope
 import io.ktor.server.config.*
 import io.ktor.utils.io.*
+import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
  * Scope used to provide secrets for JWT signing and verification.
  */
 public interface SecretsConfigScope {
-    /** Supplies secrets directly in the configuration. */
     public fun RealmConfigScope.raw(vararg secrets: String)
 
-    /** Reads secrets from [applicationConfig] using the provided [keys]. */
     public fun RealmConfigScope.fromEnv(applicationConfig: ApplicationConfig, vararg keys: String)
 
-    /** Provider that exposes the list of secrets to the plugin. */
     public interface Provider {
         public val secrets: List<String>
     }
@@ -43,6 +41,12 @@ internal class SecretsConfig : SecretsConfigScope {
     }
 
     override fun RealmConfigScope.raw(vararg secrets: String) {
+        require(secrets.isNotEmpty()) { "At least one secret must be provided" }
+        secrets.forEachIndexed { index, secret ->
+            require(secret.length >= 32) {
+                "Secret at index $index is ${secret.length} characters. JWT secrets must be at least 32 characters for adequate security."
+            }
+        }
         this@SecretsConfig.provider = RawProvider(Secrets.Raw(secrets.toList()))
     }
 
@@ -56,12 +60,17 @@ internal class SecretsConfig : SecretsConfigScope {
         val secrets = secrets()
         val index = secureRandom.nextInt(secrets.size)
         val secret = secrets[index]
-        return secret to index.toString()
+        val kid = sha256Kid(secret)
+        return secret to kid
     }
 
     internal fun secretForKid(kid: String): String? {
-        val index = kid.toIntOrNull() ?: return null
-        return secrets().getOrNull(index)
+        return secrets().firstOrNull { sha256Kid(it) == kid }
+    }
+
+    private fun sha256Kid(secret: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(secret.toByteArray(Charsets.UTF_8))
+        return hash.take(8).joinToString("") { "%02x".format(it) }
     }
 }
-

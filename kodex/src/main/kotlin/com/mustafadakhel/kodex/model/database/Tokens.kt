@@ -19,6 +19,7 @@ internal object Tokens : UUIDTable() {
     val parentTokenId = uuid("parent_token_id").nullable()
     val firstUsedAt = datetime("first_used_at").nullable()
     val lastUsedAt = datetime("last_used_at").nullable()
+    val realmId = varchar("realm_id", 50).index()
 }
 
 internal class TokenDao(id: EntityID<UUID>) : UUIDEntity(id) {
@@ -34,4 +35,5 @@ internal class TokenDao(id: EntityID<UUID>) : UUIDEntity(id) {
     var parentTokenId by Tokens.parentTokenId
     var firstUsedAt by Tokens.firstUsedAt
     var lastUsedAt by Tokens.lastUsedAt
+    var realmId by Tokens.realmId
 }

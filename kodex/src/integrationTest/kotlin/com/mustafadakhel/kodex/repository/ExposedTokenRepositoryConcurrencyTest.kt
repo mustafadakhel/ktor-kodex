@@ -398,6 +398,7 @@ private fun createToken(
         revoked = revoked,
         createdAt = now,
         expiresAt = now,
+        realmId = "test-realm",
         tokenFamily = tokenFamily,
         parentTokenId = null,
         firstUsedAt = null,

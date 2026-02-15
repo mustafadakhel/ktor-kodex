@@ -29,7 +29,7 @@ class VerificationConfigTest : FunSpec({
     }
 
     val testContext = object : ExtensionContext {
-        override val realm = Realm(owner = "test")
+        override val realm = Realm(name = "test")
         override val timeZone = TimeZone.UTC
         override val eventBus = mockEventBus
         override val rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()

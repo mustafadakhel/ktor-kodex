@@ -42,7 +42,8 @@ class JwtTokenVerifierTest : FunSpec({
             type = TokenType.RefreshToken,
             createdAt = now(timeZone),
             expiresAt = CurrentKotlinInstant.plus(3600.minutes).toLocalDateTime(timeZone),
-            revoked = false
+            revoked = false,
+            realmId = "test-realm"
         )
     }
     val realm = Realm("test-realm")

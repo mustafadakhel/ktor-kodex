@@ -426,7 +426,7 @@ class ExtensionRegistryTest : DescribeSpec({
             class ContextAwareConfig : ExtensionConfig() {
                 override fun build(context: ExtensionContext): RealmExtension {
                     return object : RealmExtension {
-                        val realmOwner = context.realm.owner
+                        val realmOwner = context.realm.name
                         val timeZone = context.timeZone
                     }
                 }

@@ -10,16 +10,15 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.reflect.KClass
+import kotlin.reflect.full.superclasses
 
-/**
- * Default implementation of EventBus using coroutines and channels.
- */
 internal class DefaultEventBus() : EventBus {
 
     private val logger = LoggerFactory.getLogger(DefaultEventBus::class.java)
-    private val subscribers = ConcurrentHashMap<KClass<*>, MutableList<EventSubscriber<*>>>()
-    private val eventQueue = Channel<KodexEvent>(Channel.UNLIMITED)
+    private val subscribers = ConcurrentHashMap<KClass<*>, CopyOnWriteArrayList<EventSubscriber<*>>>()
+    private val eventQueue = Channel<KodexEvent>(capacity = 1024)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val allowedSubscribers = ConcurrentHashMap.newKeySet<EventSubscriber<*>>()
@@ -60,12 +59,14 @@ internal class DefaultEventBus() : EventBus {
 
     private fun <T : KodexEvent> subscribeInternal(subscriber: EventSubscriber<T>) {
         val subscriberList = subscribers.computeIfAbsent(subscriber.eventType) {
-            mutableListOf()
+            CopyOnWriteArrayList()
         }
 
         subscriberList.add(subscriber)
 
-        subscriberList.sortByDescending { it.priority }
+        val sorted = subscriberList.sortedByDescending { it.priority }
+        subscriberList.clear()
+        subscriberList.addAll(sorted)
     }
 
     override fun <T : KodexEvent> unsubscribe(subscriber: EventSubscriber<T>) {
@@ -73,9 +74,7 @@ internal class DefaultEventBus() : EventBus {
     }
 
     private suspend fun processEvent(event: KodexEvent) {
-        val eventClass = event::class
-
-        val subscribersForEvent = findSubscribersFor(eventClass)
+        val subscribersForEvent = findSubscribersFor(event::class)
 
         subscribersForEvent.forEach { subscriber ->
             scope.launch {
@@ -95,18 +94,24 @@ internal class DefaultEventBus() : EventBus {
 
     private fun findSubscribersFor(eventClass: KClass<out KodexEvent>): List<EventSubscriber<*>> {
         val result = mutableListOf<EventSubscriber<*>>()
+        val visited = mutableSetOf<KClass<*>>()
 
-        subscribers[eventClass]?.let { result.addAll(it) }
-
-        if (eventClass != KodexEvent::class) {
-            subscribers[KodexEvent::class]?.let { result.addAll(it) }
+        fun collectFrom(cls: KClass<*>) {
+            if (!visited.add(cls)) return
+            subscribers[cls]?.let { result.addAll(it) }
+            for (superclass in cls.superclasses) {
+                if (KodexEvent::class.java.isAssignableFrom(superclass.java)) {
+                    collectFrom(superclass)
+                }
+            }
         }
 
+        collectFrom(eventClass)
         return result.distinctBy { it }
     }
 
     override fun shutdown() {
-        scope.cancel()
         eventQueue.close()
+        scope.cancel()
     }
 }

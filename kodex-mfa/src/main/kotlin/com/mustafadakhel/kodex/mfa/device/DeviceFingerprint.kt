@@ -4,9 +4,6 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 
-/**
- * Generates device fingerprints for trusted device recognition using IP address and user agent.
- */
 internal object DeviceFingerprint {
 
     /**

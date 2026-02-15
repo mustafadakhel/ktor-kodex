@@ -88,7 +88,6 @@ class UserQueryServiceTest : FunSpec({
         updateCommandProcessor = mockk(relaxed = true)
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns realmName
         every { realm.name } returns realmName
 
         userQueryService = DefaultUserService(

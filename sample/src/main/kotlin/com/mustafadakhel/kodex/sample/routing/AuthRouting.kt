@@ -14,7 +14,7 @@ import io.ktor.server.routing.*
 fun Application.setupAuthRouting() = routing {
     DefaultRealms.forEach { realm ->
         val services = kodex.servicesOf(realm)
-        route("/${realm.owner}/auth") {
+        route("/${realm.name}/auth") {
             post("/register") {
                 val params = call.receiveParameters()
                 val password = params["password"] ?: return@post call.respondText(

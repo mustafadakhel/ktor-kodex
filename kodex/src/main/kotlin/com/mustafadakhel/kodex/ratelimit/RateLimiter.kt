@@ -32,53 +32,20 @@ public interface RateLimiter {
      */
     public suspend fun releaseReservation(reservationId: String?)
 
-    /**
-     * Clear rate limit for a specific key.
-     *
-     * @param key The key to clear
-     */
     public suspend fun clear(key: String)
 
-    /**
-     * Clear all rate limits.
-     */
     public suspend fun clearAll()
 }
 
-/**
- * Result of a rate limit check.
- */
 public sealed interface RateLimitResult {
-    /**
-     * Request is allowed.
-     */
     public data object Allowed : RateLimitResult
-
-    /**
-     * Request exceeded the rate limit.
-     *
-     * @param reason Human-readable reason for the limit
-     */
     public data class Exceeded(val reason: String) : RateLimitResult
-
-    /**
-     * Request is in cooldown period.
-     *
-     * @param reason Human-readable reason for the cooldown
-     * @param retryAfter When the cooldown expires
-     */
     public data class Cooldown(
         val reason: String,
         val retryAfter: Instant? = null
     ) : RateLimitResult
 }
 
-/**
- * Result of a rate limit reservation.
- *
- * @param result The rate limit result
- * @param reservationId Optional ID to release the reservation if needed
- */
 public data class RateLimitReservation(
     val result: RateLimitResult,
     val reservationId: String?

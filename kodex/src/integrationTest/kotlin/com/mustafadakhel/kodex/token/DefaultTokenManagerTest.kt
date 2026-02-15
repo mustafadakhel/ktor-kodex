@@ -124,12 +124,12 @@ class DefaultTokenManagerTest : FunSpec({
 
         // Seed test role and create test user
         exposedTransaction {
-            userRepository.seedRoles(listOf(Role(realm.owner, "Test realm")))
+            userRepository.seedRoles(listOf(Role(realm.name, "Test realm")))
             val result = userRepository.create(
                 email = "test@example.com",
                 phone = null,
                 hashedPassword = "hashed",
-                roleNames = listOf(realm.owner),
+                roleNames = listOf(realm.name),
                 customAttributes = null,
                 profile = null,
                 currentTime = now(TimeZone.UTC),
@@ -191,7 +191,7 @@ class DefaultTokenManagerTest : FunSpec({
             val roles = decoded.getClaim("roles").asList(String::class.java)
 
             roles shouldNotBe null
-            roles.contains(realm.owner) shouldBe true
+            roles.contains(realm.name) shouldBe true
         }
     }
 
@@ -243,7 +243,7 @@ class DefaultTokenManagerTest : FunSpec({
 
         test("should allow refresh within grace period") {
             // Create token manager with lenient policy (10s grace period)
-            tokenManager = createTokenManager(TokenRotationPolicy.lenient())
+            tokenManager = createTokenManager(TokenRotationPolicy.unsafe())
 
             val originalTokenPair = tokenManager.issueNewTokens(testUserId)
 

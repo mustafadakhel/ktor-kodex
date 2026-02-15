@@ -30,7 +30,7 @@ internal class JwtClaimsValidator(
                 }
 
                 is Claim.Subject -> claim.value?.toUuidOrNull() != null
-                is Claim.Realm -> claim.value == realm.owner
+                is Claim.Realm -> claim.value == realm.name
                 is Claim.Unknown -> {
                     true
                 }

@@ -146,12 +146,6 @@ internal class DefaultValidationService(
     }
 }
 
-/**
- * Factory function to create a configured ValidationService instance.
- *
- * @param config Validation configuration implementation
- * @return Configured validation service
- */
 internal fun validationService(config: ValidationConfigImpl): ValidationService {
     return DefaultValidationService(config)
 }

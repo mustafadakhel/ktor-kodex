@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.validation
 
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 
-public open class ValidationThrowable(
+public sealed class ValidationThrowable(
     message: String? = null,
     cause: Throwable? = null
 ) : KodexThrowable.Validation(message, cause) {

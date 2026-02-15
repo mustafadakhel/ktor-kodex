@@ -3,12 +3,14 @@ package com.mustafadakhel.kodex.audit.database
 import com.mustafadakhel.kodex.audit.ActorType
 import com.mustafadakhel.kodex.audit.EventResult
 import com.mustafadakhel.kodex.audit.MetadataSanitizer
+import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.dao.UUIDEntity
 import org.jetbrains.exposed.dao.UUIDEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 import java.util.*
 
@@ -24,41 +26,36 @@ import java.util.*
 internal object AuditLogs : UUIDTable("audit_events") {
 
     // Event identification
-    public val eventType: org.jetbrains.exposed.sql.Column<String> = varchar("event_type", 100).index()
-    public val timestamp: org.jetbrains.exposed.sql.Column<kotlinx.datetime.Instant> = timestamp("timestamp").index()
+    public val eventType: Column<String> = varchar("event_type", 100).index()
+    public val timestamp: Column<Instant> = timestamp("timestamp").index()
 
     // Actor (who performed the action)
-    public val actorId: org.jetbrains.exposed.sql.Column<UUID?> = uuid("actor_id").nullable().index()
-    public val actorType: org.jetbrains.exposed.sql.Column<ActorType> = enumerationByName<ActorType>("actor_type", 20)
+    public val actorId: Column<UUID?> = uuid("actor_id").nullable().index()
+    public val actorType: Column<ActorType> = enumerationByName<ActorType>("actor_type", 20)
 
     // Target (what was acted upon)
-    public val targetId: org.jetbrains.exposed.sql.Column<UUID?> = uuid("target_id").nullable().index()
-    public val targetType: org.jetbrains.exposed.sql.Column<String?> = varchar("target_type", 100).nullable()
+    public val targetId: Column<UUID?> = uuid("target_id").nullable().index()
+    public val targetType: Column<String?> = varchar("target_type", 100).nullable()
 
     // Result
-    public val result: org.jetbrains.exposed.sql.Column<EventResult> = enumerationByName<EventResult>("result", 20)
+    public val result: Column<EventResult> = enumerationByName<EventResult>("result", 20)
 
     // Flexible metadata stored as JSON
     // Note: For PostgreSQL, this will use JSONB. For H2/SQLite, it uses JSON or TEXT.
-    public val metadata: org.jetbrains.exposed.sql.Column<String> = text("metadata")
+    public val metadata: Column<String> = text("metadata")
 
     // Context
-    public val realmId: org.jetbrains.exposed.sql.Column<String> = varchar("realm_id", 50).index()
-    public val sessionId: org.jetbrains.exposed.sql.Column<UUID?> = uuid("session_id").nullable()
+    public val realmId: Column<String> = varchar("realm_id", 50).index()
+    public val sessionId: Column<UUID?> = uuid("session_id").nullable()
 }
 
-/**
- * DAO entity for audit log entries.
- *
- * Provides object-relational mapping for audit events.
- */
 internal class AuditLogDao(id: EntityID<UUID>) : UUIDEntity(id) {
     public companion object : UUIDEntityClass<AuditLogDao>(AuditLogs) {
         private val json = Json { ignoreUnknownKeys = true }
     }
 
     public var eventType: String by AuditLogs.eventType
-    public var timestamp: kotlinx.datetime.Instant by AuditLogs.timestamp
+    public var timestamp: Instant by AuditLogs.timestamp
     public var actorId: UUID? by AuditLogs.actorId
     public var actorType: ActorType by AuditLogs.actorType
     public var targetId: UUID? by AuditLogs.targetId

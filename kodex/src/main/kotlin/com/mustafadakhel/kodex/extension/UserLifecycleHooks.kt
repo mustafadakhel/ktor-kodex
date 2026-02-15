@@ -4,7 +4,6 @@ import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.UserStatus
 import java.util.UUID
 
-/** Hook interface for user lifecycle events. */
 public interface UserLifecycleHooks : RealmExtension {
 
     /** Called before user creation. Can validate or transform data. */
@@ -38,7 +37,6 @@ public interface UserLifecycleHooks : RealmExtension {
         return UserProfileUpdateData(firstName, lastName, address, profilePicture)
     }
 
-    /** Called before custom attributes update. */
     public suspend fun beforeCustomAttributesUpdate(
         userId: UUID,
         customAttributes: Map<String, String>
@@ -51,7 +49,6 @@ public interface UserLifecycleHooks : RealmExtension {
         return identifier
     }
 
-    /** Called after failed login attempt. */
     public suspend fun afterLoginFailure(
         identifier: String,
         userId: UUID?,

@@ -41,30 +41,18 @@ public class ValidationConfig : ExtensionConfig() {
     private val passwordConfig = PasswordConfigScope()
     private val customAttributesConfig = CustomAttributesConfigScope()
 
-    /**
-     * Configure email validation settings.
-     */
     public fun email(block: EmailConfigScope.() -> Unit) {
         emailConfig.apply(block)
     }
 
-    /**
-     * Configure phone validation settings.
-     */
     public fun phone(block: PhoneConfigScope.() -> Unit) {
         phoneConfig.apply(block)
     }
 
-    /**
-     * Configure password validation settings.
-     */
     public fun password(block: PasswordConfigScope.() -> Unit) {
         passwordConfig.apply(block)
     }
 
-    /**
-     * Configure custom attribute validation settings.
-     */
     public fun customAttributes(block: CustomAttributesConfigScope.() -> Unit) {
         customAttributesConfig.apply(block)
     }
@@ -81,9 +69,6 @@ public class ValidationConfig : ExtensionConfig() {
     }
 }
 
-/**
- * DSL scope for email validation configuration.
- */
 @KtorDsl
 public class EmailConfigScope internal constructor() {
 
@@ -95,9 +80,6 @@ public class EmailConfigScope internal constructor() {
     )
 }
 
-/**
- * DSL scope for phone validation configuration.
- */
 @KtorDsl
 public class PhoneConfigScope internal constructor() {
 
@@ -113,17 +95,14 @@ public class PhoneConfigScope internal constructor() {
     )
 }
 
-/**
- * DSL scope for password validation configuration.
- */
 @KtorDsl
 public class PasswordConfigScope internal constructor() {
 
-    /** Minimum password length (default: 8) */
-    public var minLength: Int = 8
+    /** Minimum password length (default: 12) */
+    public var minLength: Int = 12
 
-    /** Minimum strength score, 0-4 scale (default: 2) */
-    public var minScore: Int = 2
+    /** Minimum strength score, 0-4 scale (default: 3) */
+    public var minScore: Int = 3
 
     /** Common passwords to reject (default: ~170 from breach data) */
     public var commonPasswords: Set<String> = CommonPasswords.default
@@ -135,9 +114,6 @@ public class PasswordConfigScope internal constructor() {
     )
 }
 
-/**
- * DSL scope for custom attribute validation configuration.
- */
 @KtorDsl
 public class CustomAttributesConfigScope internal constructor() {
 
@@ -194,9 +170,6 @@ public class CustomAttributesConfigScope internal constructor() {
     )
 }
 
-/**
- * DSL scope for configuring validation rules for a specific custom attribute.
- */
 @KtorDsl
 public class AttributeRuleScope internal constructor(
     private val key: String

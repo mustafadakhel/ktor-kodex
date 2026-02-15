@@ -2,10 +2,11 @@ package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.TokenCleanupEvent
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.verification.database.VerificationTokens
+import java.util.UUID
 import kotlinx.coroutines.delay
-import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -17,16 +18,10 @@ import org.jetbrains.exposed.sql.or
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
-/**
- * Service for cleaning up expired and used verification tokens.
- */
 public interface TokenCleanupService {
     public suspend fun purgeExpiredTokens(retentionPeriod: Duration = 30.days): Int
 }
 
-/**
- * Default implementation of token cleanup service.
- */
 internal class DefaultTokenCleanupService(
     private val timeZone: TimeZone,
     private val eventBus: EventBus?,
@@ -34,8 +29,8 @@ internal class DefaultTokenCleanupService(
 ) : TokenCleanupService {
 
     override suspend fun purgeExpiredTokens(retentionPeriod: Duration): Int {
-        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
         val clockNow = CurrentKotlinInstant
+        val now = clockNow.toLocalDateTime(timeZone)
         val cutoff = clockNow.minus(retentionPeriod).toLocalDateTime(timeZone)
 
         val batchSize = 1000
@@ -60,7 +55,7 @@ internal class DefaultTokenCleanupService(
 
         if (totalDeleted > 0) {
             eventBus?.publish(TokenCleanupEvent.TokensCleanedUp(
-                eventId = java.util.UUID.randomUUID(),
+                eventId = UUID.randomUUID(),
                 timestamp = clockNow,
                 realmId = realm,
                 tokenType = "verification",

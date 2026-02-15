@@ -3,9 +3,10 @@ package com.mustafadakhel.kodex.passwordreset
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.TokenCleanupEvent
 import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
-import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.coroutines.delay
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.util.kodexTransaction
+import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -34,8 +35,8 @@ internal class DefaultTokenCleanupService(
 ) : TokenCleanupService {
 
     override suspend fun purgeExpiredTokens(retentionPeriod: Duration): Int {
-        val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
         val clockNow = CurrentKotlinInstant
+        val now = clockNow.toLocalDateTime(timeZone)
         val cutoff = clockNow.minus(retentionPeriod).toLocalDateTime(timeZone)
 
         val batchSize = 1000
@@ -60,7 +61,7 @@ internal class DefaultTokenCleanupService(
 
         if (totalDeleted > 0) {
             eventBus?.publish(TokenCleanupEvent.TokensCleanedUp(
-                eventId = java.util.UUID.randomUUID(),
+                eventId = UUID.randomUUID(),
                 timestamp = clockNow,
                 realmId = realm,
                 tokenType = "password_reset",

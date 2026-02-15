@@ -19,7 +19,7 @@ import java.util.UUID
 fun Application.setupVerificationRouting() = routing {
     DefaultRealms.forEach { realm ->
         authenticateFor(realm) {
-            authorizedRoute("/${realm.owner}/verification", KodexId) {
+            authorizedRoute("/${realm.name}/verification", KodexId) {
                 post("/send") { userId: UUID ->
                     val verificationService = call.extensionService<VerificationService>(realm)
                         ?: return@post call.respondText(
@@ -156,7 +156,7 @@ fun Application.setupVerificationRouting() = routing {
                 }
             }
 
-            route("/${realm.owner}/verification") {
+            route("/${realm.name}/verification") {
                 get("/status") {
                     val userId = with(KodexId) { call.idOrFail() }
                     val verificationService = call.extensionService<VerificationService>(realm)

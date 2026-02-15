@@ -11,8 +11,8 @@ import kotlin.time.Duration.Companion.seconds
  * Scores passwords 0-4 based on entropy, patterns, and dictionary attacks.
  */
 internal class PasswordValidator(
-    private val minLength: Int = 8,
-    private val minScore: Int = 2,
+    private val minLength: Int = 12,
+    private val minScore: Int = 3,
     private val commonPasswords: Set<String> = CommonPasswords.default
 ) {
     private companion object {

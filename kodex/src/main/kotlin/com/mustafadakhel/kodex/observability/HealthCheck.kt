@@ -16,10 +16,7 @@ public data class HealthCheckResult(
     public fun isHealthy(): Boolean = status == HealthStatus.UP || status == HealthStatus.DEGRADED
 }
 
-/** Health check for Kodex services. */
 public object KodexHealth {
-
-    /** Checks database connectivity. */
     public fun checkDatabase(): HealthCheckResult {
         return try {
             // Simple query to check database connectivity
@@ -47,7 +44,6 @@ public object KodexHealth {
         }
     }
 
-    /** Checks overall system health. */
     public fun checkOverall(): HealthCheckResult {
         val databaseHealth = checkDatabase()
 

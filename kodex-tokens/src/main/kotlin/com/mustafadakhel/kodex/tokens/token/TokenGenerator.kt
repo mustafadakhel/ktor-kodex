@@ -1,11 +1,9 @@
 package com.mustafadakhel.kodex.tokens.token
 
 import java.security.SecureRandom
+import java.util.Base64
 import java.util.UUID
 
-/**
- * Format-agnostic token generator using pluggable strategies.
- */
 public object TokenGenerator {
     private val secureRandom = SecureRandom()
 
@@ -59,7 +57,7 @@ public data class HexFormat(val length: Int = 32) : TokenFormat<String> {
 
 public data class AlphanumericFormat(
     val length: Int = 32,
-    val uppercase: Boolean = false
+    val includeUppercase: Boolean = false
 ) : TokenFormat<String> {
     init {
         require(length > 0) { "Token length must be positive" }
@@ -67,7 +65,7 @@ public data class AlphanumericFormat(
 
     override fun generate(random: SecureRandom): String {
         val tokenLength = length
-        val chars = if (uppercase) {
+        val chars = if (includeUppercase) {
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
         } else {
             "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -102,7 +100,7 @@ public data class Base64UrlFormat(val byteLength: Int = 32) : TokenFormat<String
         val bytes = ByteArray(byteLength)
         random.nextBytes(bytes)
 
-        return java.util.Base64.getUrlEncoder()
+        return Base64.getUrlEncoder()
             .withoutPadding()
             .encodeToString(bytes)
     }
@@ -122,7 +120,7 @@ public fun UUID.toBase64Url(): String {
         leastSig = leastSig shr 8
     }
 
-    return java.util.Base64.getUrlEncoder()
+    return Base64.getUrlEncoder()
         .withoutPadding()
         .encodeToString(bytes)
 }

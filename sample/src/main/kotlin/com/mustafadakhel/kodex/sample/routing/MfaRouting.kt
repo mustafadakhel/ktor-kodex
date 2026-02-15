@@ -16,7 +16,7 @@ import java.util.UUID
 fun Application.setupMfaRouting() = routing {
     DefaultRealms.forEach { realm ->
         // Public MFA verification endpoint (no authentication required)
-        route("/${realm.owner}/mfa") {
+        route("/${realm.name}/mfa") {
             post("/verify") {
                 val mfaService = call.extensionService<MfaService>(realm)
                     ?: return@post call.respondText("MFA not configured", status = HttpStatusCode.InternalServerError)
@@ -76,7 +76,7 @@ fun Application.setupMfaRouting() = routing {
         }
 
         authenticateFor(realm) {
-            authorizedRoute("/${realm.owner}/mfa", KodexId) {
+            authorizedRoute("/${realm.name}/mfa", KodexId) {
                 post("/enroll/email") { userId: UUID ->
                     val mfaService = call.extensionService<MfaService>(realm)
                         ?: return@post call.respondText(
@@ -171,7 +171,7 @@ fun Application.setupMfaRouting() = routing {
                 }
             }
 
-            route("/${realm.owner}/mfa") {
+            route("/${realm.name}/mfa") {
                 get("/methods") {
                     val userId = with(KodexId) { call.idOrFail() }
                     val mfaService = call.extensionService<MfaService>(realm)
@@ -199,7 +199,7 @@ fun Application.setupMfaRouting() = routing {
                 }
             }
 
-            authorizedRoute("/${realm.owner}/mfa", KodexId) {
+            authorizedRoute("/${realm.name}/mfa", KodexId) {
                 post("/methods/{methodId}/primary") { userId: UUID ->
                     val mfaService = call.extensionService<MfaService>(realm)
                         ?: return@post call.respondText("MFA not configured", status = HttpStatusCode.InternalServerError)
@@ -325,7 +325,7 @@ fun Application.setupMfaRouting() = routing {
                 }
             }
 
-            route("/${realm.owner}/mfa") {
+            route("/${realm.name}/mfa") {
                 delete("/methods/{methodId}") {
                     val userId = with(KodexId) { call.idOrFail() }
                     val mfaService = call.extensionService<MfaService>(realm)

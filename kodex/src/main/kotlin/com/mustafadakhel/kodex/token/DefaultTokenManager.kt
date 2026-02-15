@@ -17,11 +17,9 @@ import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.now
 import com.mustafadakhel.kodex.util.toUuidOrNull
 import com.mustafadakhel.kodex.util.tokenId
 import io.ktor.server.auth.jwt.*
-import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
@@ -76,6 +74,7 @@ internal class DefaultTokenManager(
         parentTokenId: UUID? = null,
         roles: List<String>? = null
     ): GeneratedToken {
+        val clockNow = CurrentKotlinInstant
         val token = jwtTokenIssuer.issue(
             userId = userId,
             validityMs = validityMs.inWholeMilliseconds,
@@ -91,8 +90,9 @@ internal class DefaultTokenManager(
                     tokenHash = hashingService.hash(token.token),
                     type = tokenType,
                     revoked = false,
-                    createdAt = now(timeZone),
-                    expiresAt = ExpirationCalculator.calculateExpiration(validityMs, timeZone, CurrentKotlinInstant),
+                    createdAt = clockNow.toLocalDateTime(timeZone),
+                    expiresAt = ExpirationCalculator.calculateExpiration(validityMs, timeZone, clockNow),
+                    realmId = realm.name,
                     tokenFamily = tokenFamily,
                     parentTokenId = parentTokenId,
                     firstUsedAt = null,
@@ -176,7 +176,7 @@ internal class DefaultTokenManager(
                     SecurityEvent.TokenReplayDetected(
                         eventId = UUID.randomUUID(),
                         timestamp = clockNow,
-                        realmId = realm.owner,
+                        realmId = realm.name,
                         userId = userId,
                         tokenId = tokenId,
                         tokenFamily = tokenFamily,

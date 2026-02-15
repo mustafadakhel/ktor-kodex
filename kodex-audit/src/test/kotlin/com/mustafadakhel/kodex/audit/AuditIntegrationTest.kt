@@ -423,7 +423,8 @@ class AuditIntegrationTest : FunSpec({
         test("should delete old audit logs") {
             val retentionService = DefaultAuditRetentionService(
                 retentionPeriod = 30.days,
-                timeZone = timeZone
+                timeZone = timeZone,
+                realmId = "test"
             )
 
             // Create old and recent events
@@ -465,7 +466,8 @@ class AuditIntegrationTest : FunSpec({
         test("should cleanup logs older than specific cutoff date") {
             val retentionService = DefaultAuditRetentionService(
                 retentionPeriod = 90.days,
-                timeZone = timeZone
+                timeZone = timeZone,
+                realmId = "test"
             )
 
             val now = CurrentKotlinInstant
@@ -504,7 +506,8 @@ class AuditIntegrationTest : FunSpec({
         test("should return retention period") {
             val retentionService = DefaultAuditRetentionService(
                 retentionPeriod = 90.days,
-                timeZone = timeZone
+                timeZone = timeZone,
+                realmId = "test"
             )
 
             retentionService.getRetentionPeriod() shouldBe 90.days

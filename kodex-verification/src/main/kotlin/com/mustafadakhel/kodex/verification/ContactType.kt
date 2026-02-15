@@ -1,17 +1,8 @@
 package com.mustafadakhel.kodex.verification
 
-/**
- * Strictly typed contact types supported by the verification system.
- */
 public enum class ContactType {
-    /**
-     * Email address contact.
-     */
     EMAIL,
 
-    /**
-     * Phone number contact.
-     */
     PHONE,
 
     /**

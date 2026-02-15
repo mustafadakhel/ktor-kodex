@@ -136,14 +136,15 @@ public class InMemoryRateLimiter(
         val key = reservationId.substringBeforeLast(":")
         val lock = keyLocks.computeIfAbsent(key) { Any() }
 
+        val now = CurrentKotlinInstant
         synchronized(lock) {
             attempts.compute(key) { _, existing ->
                 if (existing == null) {
                     null
                 } else if (existing.count <= 1) {
-                    existing.copy(count = 0, lastAccess = CurrentKotlinInstant)
+                    existing.copy(count = 0, lastAccess = now)
                 } else {
-                    existing.copy(count = existing.count - 1, lastAccess = CurrentKotlinInstant)
+                    existing.copy(count = existing.count - 1, lastAccess = now)
                 }
             }
         }

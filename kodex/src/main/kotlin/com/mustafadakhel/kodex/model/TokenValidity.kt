@@ -6,7 +6,7 @@ import kotlin.time.Duration.Companion.hours
 
 public data class TokenValidity(
     val access: Duration = 2.hours,
-    val refresh: Duration = 90.days
+    val refresh: Duration = 30.days
 ) {
     internal companion object {
         val Default: TokenValidity = TokenValidity()

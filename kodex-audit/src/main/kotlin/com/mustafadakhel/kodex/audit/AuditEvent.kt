@@ -20,9 +20,6 @@ public data class AuditEvent(
     val sessionId: UUID? = null
 )
 
-/**
- * Type of actor performing the action.
- */
 public enum class ActorType {
     USER,
     ADMIN,
@@ -40,9 +37,6 @@ public enum class ActorType {
     }
 }
 
-/**
- * Result of the audited operation.
- */
 public enum class EventResult {
     SUCCESS,
     FAILURE,

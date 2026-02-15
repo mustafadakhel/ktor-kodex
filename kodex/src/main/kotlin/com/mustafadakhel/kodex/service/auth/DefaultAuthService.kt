@@ -36,7 +36,7 @@ internal class DefaultAuthService(
     private val realm: Realm
 ) : AuthService {
 
-    private val dummyHash = hashingService.hash("dummy-password-for-timing-attack-prevention")
+    private val dummyHash by lazy { hashingService.hash("dummy-password-for-timing-attack-prevention") }
 
     override suspend fun login(
         email: String,
@@ -79,7 +79,7 @@ internal class DefaultAuthService(
                 AuthEvent.PasswordChangeFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = timestamp,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     userId = userId,
                     actorId = userId,
                     reason = "Invalid old password"
@@ -95,11 +95,13 @@ internal class DefaultAuthService(
             throw KodexThrowable.UserNotFound("User with id $userId not found")
         }
 
+        tokenService.revoke(userId)
+
         eventBus.publish(
             AuthEvent.PasswordChanged(
                 eventId = UUID.randomUUID(),
                 timestamp = timestamp,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = userId,
                 actorId = userId
             )
@@ -119,11 +121,13 @@ internal class DefaultAuthService(
             throw KodexThrowable.UserNotFound("User with id $userId not found")
         }
 
+        tokenService.revoke(userId)
+
         eventBus.publish(
             AuthEvent.PasswordReset(
                 eventId = UUID.randomUUID(),
                 timestamp = timestamp,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = userId,
                 actorType = "ADMIN"
             )
@@ -164,7 +168,7 @@ internal class DefaultAuthService(
                 AuthEvent.LoginFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = timestamp,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     identifier = identifier,
                     reason = actualReason,
                     method = identifierType,
@@ -192,7 +196,7 @@ internal class DefaultAuthService(
             AuthEvent.LoginSuccess(
                 eventId = UUID.randomUUID(),
                 timestamp = timestamp,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = user.id,
                 identifier = identifier,
                 method = identifierType

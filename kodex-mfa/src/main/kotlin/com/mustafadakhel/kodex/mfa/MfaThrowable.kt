@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 
-public open class MfaThrowable(
+public sealed class MfaThrowable(
     message: String? = null,
     cause: Throwable? = null
 ) : KodexThrowable(message, cause) {

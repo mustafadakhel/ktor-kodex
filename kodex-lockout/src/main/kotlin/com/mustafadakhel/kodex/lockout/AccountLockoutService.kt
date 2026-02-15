@@ -29,25 +29,19 @@ internal interface AccountLockoutService {
     /** Check if IP address should be throttled (Layer 1 - before auth) */
     fun shouldThrottleIp(ipAddress: String): ThrottleResult
 
-    /** Record failed attempt with all metadata (identifier, userId, IP) */
     fun recordFailedAttempt(identifier: String, userId: UUID?, ipAddress: String, reason: String)
 
     /** Check if account should be locked based on failed attempts (Layer 2 - real accounts only) */
     fun shouldLockAccount(userId: UUID): LockAccountResult
 
-    /** Clear failed attempts for identifier */
     fun clearFailedAttemptsForIdentifier(identifier: String)
 
-    /** Clear failed attempts for user */
     fun clearFailedAttemptsForUser(userId: UUID)
 
-    /** Lock an account until specified time */
     fun lockAccount(userId: UUID, lockedUntil: LocalDateTime, reason: String)
 
-    /** Unlock an account */
     fun unlockAccount(userId: UUID)
 
-    /** Check if account is currently locked */
     fun isAccountLocked(userId: UUID, currentTime: LocalDateTime): Boolean
 }
 

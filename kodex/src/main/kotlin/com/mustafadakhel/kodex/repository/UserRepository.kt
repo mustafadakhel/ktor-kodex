@@ -39,9 +39,9 @@ public interface UserRepository {
     public fun updateById(
         userId: UUID,
         realmId: String,
-        email: FieldUpdate<String> = FieldUpdate.NoChange(),
-        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
+        email: FieldUpdate<String> = FieldUpdate.NoChange,
+        phone: FieldUpdate<String> = FieldUpdate.NoChange,
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange,
         currentTime: LocalDateTime,
     ): UpdateUserResult
 
@@ -82,11 +82,11 @@ public interface UserRepository {
     public fun updateBatch(
         userId: UUID,
         realmId: String,
-        email: FieldUpdate<String> = FieldUpdate.NoChange(),
-        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
-        profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange(),
-        customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange(),
+        email: FieldUpdate<String> = FieldUpdate.NoChange,
+        phone: FieldUpdate<String> = FieldUpdate.NoChange,
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange,
+        profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange,
+        customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange,
         currentTime: LocalDateTime
     ): UpdateUserResult
 

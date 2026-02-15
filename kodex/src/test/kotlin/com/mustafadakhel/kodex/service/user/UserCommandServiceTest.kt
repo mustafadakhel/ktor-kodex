@@ -75,7 +75,6 @@ class UserCommandServiceTest : FunSpec({
         updateCommandProcessor = mockk()
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns realmOwner
         every { realm.name } returns realmOwner
 
         userCommandService = DefaultUserService(

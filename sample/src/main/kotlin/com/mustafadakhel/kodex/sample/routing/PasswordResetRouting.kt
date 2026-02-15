@@ -18,7 +18,7 @@ import java.util.UUID
 
 fun Application.setupPasswordResetRouting() = routing {
     DefaultRealms.forEach { realm ->
-        route("/${realm.owner}/password-reset") {
+        route("/${realm.name}/password-reset") {
             post("/initiate") {
                 val resetService = call.extensionService<PasswordResetService>(realm)
                     ?: return@post call.respondText(
@@ -121,7 +121,7 @@ fun Application.setupPasswordResetRouting() = routing {
         }
 
         authenticateFor(realm) {
-            authorizedRoute("/${realm.owner}/password-reset", KodexId) {
+            authorizedRoute("/${realm.name}/password-reset", KodexId) {
                 post("/revoke") { userId: UUID ->
                     val resetService = call.extensionService<PasswordResetService>(realm)
                         ?: return@post call.respondText(

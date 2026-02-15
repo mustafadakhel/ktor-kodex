@@ -29,7 +29,7 @@ class TokenServiceTest : FunSpec({
         tokenManager = mockk()
         eventBus = mockk(relaxed = true)
         realm = mockk()
-        every { realm.owner } returns "test-realm"
+        every { realm.name } returns "test-realm"
         tokenService = DefaultTokenService(tokenManager, eventBus, realm)
     }
 

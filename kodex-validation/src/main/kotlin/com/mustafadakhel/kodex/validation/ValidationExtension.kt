@@ -131,7 +131,7 @@ public class ValidationExtension internal constructor(
 
     override suspend fun afterLoginFailure(
         identifier: String,
-        userId: java.util.UUID?,
+        userId: UUID?,
         identifierType: String,
         metadata: LoginMetadata
     ) {
