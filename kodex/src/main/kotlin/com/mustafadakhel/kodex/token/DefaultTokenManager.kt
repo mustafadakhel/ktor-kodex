@@ -46,7 +46,7 @@ internal class DefaultTokenManager(
     }
 
     override suspend fun issueNewTokensWithFamily(userId: UUID): TokenPairWithFamily {
-        val roles = userRepository.findRoles(userId).map { it.name }
+        val roles = userRepository.findRoles(userId, realm.name).map { it.name }
         val tokenFamily = UUID.randomUUID()
         val accessToken = issueToken(
             userId = userId,

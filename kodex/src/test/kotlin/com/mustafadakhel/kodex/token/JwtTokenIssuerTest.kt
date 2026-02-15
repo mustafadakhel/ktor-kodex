@@ -26,7 +26,7 @@ class JwtTokenIssuerTest : FunSpec({
         )
 
         val userRepository = mockk<UserRepository>()
-        every { userRepository.findRoles(userId) } returns roles
+        every { userRepository.findRoles(userId, realm.name) } returns roles
 
         val secretsConfig = SecretsConfig()
         with(RealmConfigScope(realm)) {

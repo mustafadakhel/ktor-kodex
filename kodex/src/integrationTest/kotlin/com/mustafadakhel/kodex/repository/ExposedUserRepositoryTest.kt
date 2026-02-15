@@ -84,9 +84,9 @@ class ExposedUserRepositoryTest : FunSpec({
             user.updatedAt shouldBe now
 
             // verify profile & attrs persisted
-            val foundProfile = userRepository.findProfileByUserId(user.id)!!
+            val foundProfile = userRepository.findProfileByUserId(user.id, testRealm)!!
             foundProfile.firstName shouldBe "John"
-            userRepository.findCustomAttributesByUserId(user.id) shouldContainExactly attrs
+            userRepository.findCustomAttributesByUserId(user.id, testRealm) shouldContainExactly attrs
         }
 
         test("should create user by phone successfully") {
@@ -211,12 +211,12 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            userRepository.findById(r1.id)!!.email shouldBe "a@x"
+            userRepository.findById(r1.id, testRealm)!!.email shouldBe "a@x"
             userRepository.findByEmail("a@x", testRealm)!!.id shouldBe r1.id
             userRepository.findByPhone("999", testRealm)!!.id shouldBe r2.id
-            userRepository.findById(UUID.randomUUID()).shouldBeNull()
+            userRepository.findById(UUID.randomUUID(), testRealm).shouldBeNull()
 
-            userRepository.getAll().map { it.id }
+            userRepository.getAll(testRealm).map { it.id }
                 .shouldContainExactlyInAnyOrder(listOf(r1.id, r2.id))
         }
     }
@@ -230,7 +230,7 @@ class ExposedUserRepositoryTest : FunSpec({
             val u =
                 (userRepository.create("f@x", null, "pw", roles, attrs, profile, now, testRealm) as CreateUserResult.Success).user
 
-            val full = userRepository.findFullById(u.id)!!
+            val full = userRepository.findFullById(u.id, testRealm)!!
             full.roles.map(RoleEntity::name)
                 .shouldContainExactlyInAnyOrder(*roles.toTypedArray())
             full.profile!!.address shouldBe "Addr"
@@ -238,7 +238,7 @@ class ExposedUserRepositoryTest : FunSpec({
         }
 
         test("findFullById returns null when no user") {
-            userRepository.findFullById(UUID.randomUUID()).shouldBeNull()
+            userRepository.findFullById(UUID.randomUUID(), testRealm).shouldBeNull()
         }
     }
 
@@ -258,13 +258,14 @@ class ExposedUserRepositoryTest : FunSpec({
 
             userRepository.updateById(
                 u.id,
+                testRealm,
                 FieldUpdate.SetValue("new@x"),
                 FieldUpdate.SetValue("+1"),
                 FieldUpdate.NoChange(),
                 now
             ) shouldBe UpdateUserResult.Success
 
-            val updated = userRepository.findById(u.id)!!
+            val updated = userRepository.findById(u.id, testRealm)!!
             updated.email shouldBe "new@x"
             updated.phoneNumber shouldBe "+1"
             updated.updatedAt shouldBe now
@@ -273,6 +274,7 @@ class ExposedUserRepositoryTest : FunSpec({
         test("updateById reports NotFound if user absent") {
             userRepository.updateById(
                 UUID.randomUUID(),
+                testRealm,
                 FieldUpdate.SetValue("x@x"),
                 FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
@@ -305,6 +307,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             userRepository.updateById(
                 u2.id,
+                testRealm,
                 u1.email?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
@@ -312,6 +315,7 @@ class ExposedUserRepositoryTest : FunSpec({
             ) shouldBe UpdateUserResult.EmailAlreadyExists
             userRepository.updateById(
                 u2.id,
+                testRealm,
                 FieldUpdate.NoChange(),
                 u1.phoneNumber?.let { FieldUpdate.SetValue(it) } ?: FieldUpdate.NoChange(),
                 FieldUpdate.NoChange(),
@@ -334,7 +338,7 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            userRepository.findRoles(u.id).map(RoleEntity::name) shouldContainExactly listOf("A")
+            userRepository.findRoles(u.id, testRealm).map(RoleEntity::name) shouldContainExactly listOf("A")
         }
 
         test("findRoles returns empty if none") {
@@ -350,7 +354,7 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            userRepository.findRoles(u.id).shouldBeEmpty()
+            userRepository.findRoles(u.id, testRealm).shouldBeEmpty()
         }
 
         test("updateRolesForUser works and rejects invalid") {
@@ -366,10 +370,10 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            userRepository.updateRolesForUser(u.id, listOf("Y")) shouldBe UpdateRolesResult.Success
-            userRepository.findRoles(u.id).map(RoleEntity::name) shouldContainExactly listOf("Y")
+            userRepository.updateRolesForUser(u.id, testRealm, listOf("Y")) shouldBe UpdateRolesResult.Success
+            userRepository.findRoles(u.id, testRealm).map(RoleEntity::name) shouldContainExactly listOf("Y")
 
-            userRepository.updateRolesForUser(u.id, listOf("Z")) shouldBe UpdateRolesResult.InvalidRole("Z")
+            userRepository.updateRolesForUser(u.id, testRealm, listOf("Z")) shouldBe UpdateRolesResult.InvalidRole("Z")
         }
     }
 
@@ -388,16 +392,16 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            userRepository.findProfileByUserId(u.id)!!.lastName shouldBe "Doe"
+            userRepository.findProfileByUserId(u.id, testRealm)!!.lastName shouldBe "Doe"
 
             val upd = UserProfile("Janet", "Smith", "34 Ave", "new.png")
-            val result = userRepository.updateProfileByUserId(u.id, upd)
+            val result = userRepository.updateProfileByUserId(u.id, testRealm, upd)
             result.shouldBeInstanceOf<UpdateProfileResult.Success>()
-            userRepository.findProfileByUserId(u.id)!!.firstName shouldBe "Janet"
+            userRepository.findProfileByUserId(u.id, testRealm)!!.firstName shouldBe "Janet"
         }
 
         test("updateProfileByUserId returns NotFound if user absent") {
-            userRepository.updateProfileByUserId(UUID.randomUUID(), UserProfile("", "", "", "")) shouldBe UpdateProfileResult.NotFound
+            userRepository.updateProfileByUserId(UUID.randomUUID(), testRealm, UserProfile("", "", "", "")) shouldBe UpdateProfileResult.NotFound
         }
     }
 
@@ -416,22 +420,22 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            userRepository.findCustomAttributesByUserId(u.id) shouldContainExactly orig
+            userRepository.findCustomAttributesByUserId(u.id, testRealm) shouldContainExactly orig
 
-            userRepository.replaceAllCustomAttributesByUserId(u.id, mapOf("x" to "y")) shouldBe UpdateUserResult.Success
-            userRepository.findCustomAttributesByUserId(u.id) shouldContainExactly mapOf("x" to "y")
+            userRepository.replaceAllCustomAttributesByUserId(u.id, testRealm, mapOf("x" to "y")) shouldBe UpdateUserResult.Success
+            userRepository.findCustomAttributesByUserId(u.id, testRealm) shouldContainExactly mapOf("x" to "y")
 
             userRepository.updateCustomAttributesByUserId(
-                u.id,
+                u.id, testRealm,
                 mapOf("x" to "z", "new" to "v")
             ) shouldBe UpdateUserResult.Success
-            userRepository.findCustomAttributesByUserId(u.id) shouldContainExactly mapOf("x" to "z", "new" to "v")
+            userRepository.findCustomAttributesByUserId(u.id, testRealm) shouldContainExactly mapOf("x" to "z", "new" to "v")
 
             userRepository.replaceAllCustomAttributesByUserId(
-                UUID.randomUUID(),
+                UUID.randomUUID(), testRealm,
                 mapOf()
             ) shouldBe UpdateUserResult.NotFound
-            userRepository.updateCustomAttributesByUserId(UUID.randomUUID(), mapOf()) shouldBe UpdateUserResult.NotFound
+            userRepository.updateCustomAttributesByUserId(UUID.randomUUID(), testRealm, mapOf()) shouldBe UpdateUserResult.NotFound
         }
     }
 
@@ -448,11 +452,11 @@ class ExposedUserRepositoryTest : FunSpec({
                 now,
                 testRealm
             ) as CreateUserResult.Success).user
-            userRepository.getHashedPassword(u.id) shouldBe "pw"
+            userRepository.getHashedPassword(u.id, testRealm) shouldBe "pw"
         }
 
         test("getHashedPassword returns null for non‑existent user") {
-            userRepository.getHashedPassword(UUID.randomUUID()) shouldBe null
+            userRepository.getHashedPassword(UUID.randomUUID(), testRealm) shouldBe null
         }
     }
 
@@ -496,7 +500,7 @@ class ExposedUserRepositoryTest : FunSpec({
                 realmId = testRealm
             ) as CreateUserResult.Success
 
-            val allFull = userRepository.getAllFull()
+            val allFull = userRepository.getAllFull(testRealm)
 
             allFull.size shouldBe 3
 
@@ -524,7 +528,7 @@ class ExposedUserRepositoryTest : FunSpec({
         }
 
         test("should return empty list when no users exist") {
-            val allFull = userRepository.getAllFull()
+            val allFull = userRepository.getAllFull(testRealm)
             allFull.shouldBeEmpty()
         }
     }
@@ -543,14 +547,14 @@ class ExposedUserRepositoryTest : FunSpec({
                 testRealm
             ) as CreateUserResult.Success).user
 
-            val result = userRepository.updatePassword(user.id, "newHash")
+            val result = userRepository.updatePassword(user.id, testRealm, "newHash")
 
             result shouldBe true
-            userRepository.getHashedPassword(user.id) shouldBe "newHash"
+            userRepository.getHashedPassword(user.id, testRealm) shouldBe "newHash"
         }
 
         test("should return false when user not found") {
-            val result = userRepository.updatePassword(UUID.randomUUID(), "newHash")
+            val result = userRepository.updatePassword(UUID.randomUUID(), testRealm, "newHash")
             result shouldBe false
         }
     }
@@ -571,6 +575,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateById(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.ClearValue(),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
@@ -578,7 +583,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.email.shouldBeNull()
+            userRepository.findById(user.id, testRealm)!!.email.shouldBeNull()
         }
 
         test("should clear phone when ClearValue is used") {
@@ -596,6 +601,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateById(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.ClearValue(),
                 status = FieldUpdate.NoChange(),
@@ -603,7 +609,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.phoneNumber.shouldBeNull()
+            userRepository.findById(user.id, testRealm)!!.phoneNumber.shouldBeNull()
         }
     }
 
@@ -623,6 +629,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateById(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
@@ -630,7 +637,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
+            userRepository.findById(user.id, testRealm)!!.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
         }
     }
 
@@ -650,6 +657,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.SetValue("new@example.com"),
                 phone = FieldUpdate.SetValue("+2222222222"),
                 status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
@@ -659,7 +667,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            val updated = userRepository.findById(user.id)!!
+            val updated = userRepository.findById(user.id, testRealm)!!
             updated.email shouldBe "new@example.com"
             updated.phoneNumber shouldBe "+2222222222"
             updated.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
@@ -680,6 +688,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.ClearValue(),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
@@ -689,7 +698,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.email.shouldBeNull()
+            userRepository.findById(user.id, testRealm)!!.email.shouldBeNull()
         }
 
         test("should handle ClearValue for phone in batch update") {
@@ -707,6 +716,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.ClearValue(),
                 status = FieldUpdate.NoChange(),
@@ -716,7 +726,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.phoneNumber.shouldBeNull()
+            userRepository.findById(user.id, testRealm)!!.phoneNumber.shouldBeNull()
         }
 
         test("should handle ClearValue for profile in batch update") {
@@ -734,6 +744,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
@@ -743,7 +754,7 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findProfileByUserId(user.id).shouldBeNull()
+            userRepository.findProfileByUserId(user.id, testRealm).shouldBeNull()
         }
 
         test("should handle ClearValue for customAttributes in batch update") {
@@ -761,6 +772,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user.id,
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
@@ -770,12 +782,13 @@ class ExposedUserRepositoryTest : FunSpec({
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findCustomAttributesByUserId(user.id) shouldBe emptyMap()
+            userRepository.findCustomAttributesByUserId(user.id, testRealm) shouldBe emptyMap()
         }
 
         test("should return NotFound when user doesn't exist in batch update") {
             val result = userRepository.updateBatch(
                 userId = UUID.randomUUID(),
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
@@ -813,6 +826,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user2.id,
+                realmId = testRealm,
                 email = FieldUpdate.SetValue("user1@example.com"),
                 phone = FieldUpdate.NoChange(),
                 status = FieldUpdate.NoChange(),
@@ -850,6 +864,7 @@ class ExposedUserRepositoryTest : FunSpec({
 
             val result = userRepository.updateBatch(
                 userId = user2.id,
+                realmId = testRealm,
                 email = FieldUpdate.NoChange(),
                 phone = FieldUpdate.SetValue("+1111111111"),
                 status = FieldUpdate.NoChange(),

@@ -38,20 +38,20 @@ internal class DefaultUserService(
 ) : UserService {
 
     override fun getAllUsers(): List<User> {
-        return userRepository.getAll().map { it.toUser() }
+        return userRepository.getAll(realm.name).map { it.toUser() }
     }
 
     override fun getAllFullUsers(): List<FullUser> {
-        return userRepository.getAllFull().map { it.toFullUser() }
+        return userRepository.getAllFull(realm.name).map { it.toFullUser() }
     }
 
     override fun getUser(userId: UUID): User {
-        return userRepository.findById(userId)?.toUser()
+        return userRepository.findById(userId, realm.name)?.toUser()
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
     }
 
     override fun getUserOrNull(userId: UUID): User? {
-        return userRepository.findById(userId)?.toUser()
+        return userRepository.findById(userId, realm.name)?.toUser()
     }
 
     override fun getUserByEmail(email: String): User {
@@ -70,7 +70,7 @@ internal class DefaultUserService(
     }
 
     override fun getFullUserOrNull(userId: UUID): FullUser? {
-        return userRepository.findFullById(userId)?.toFullUser()
+        return userRepository.findFullById(userId, realm.name)?.toFullUser()
     }
 
     override fun getUserProfile(userId: UUID): UserProfile {
@@ -79,11 +79,11 @@ internal class DefaultUserService(
     }
 
     override fun getUserProfileOrNull(userId: UUID): UserProfile? {
-        return userRepository.findProfileByUserId(userId)?.toUserProfile()
+        return userRepository.findProfileByUserId(userId, realm.name)?.toUserProfile()
     }
 
     override fun getCustomAttributes(userId: UUID): Map<String, String> {
-        return userRepository.findCustomAttributesByUserId(userId)
+        return userRepository.findCustomAttributesByUserId(userId, realm.name)
     }
 
     override suspend fun createUser(
@@ -165,7 +165,7 @@ internal class DefaultUserService(
     override suspend fun deleteUser(userId: UUID): Boolean {
         hookExecutor.executeBeforeUserDelete(userId)
 
-        val result = userRepository.deleteUser(userId)
+        val result = userRepository.deleteUser(userId, realm.name)
 
         if (result is UserRepository.DeleteResult.Success) {
             eventBus.publish(
@@ -190,12 +190,12 @@ internal class DefaultUserService(
     override suspend fun updateUserRoles(userId: UUID, roleNames: List<String>) {
         val timestamp = CurrentKotlinInstant
 
-        userRepository.findById(userId)
+        userRepository.findById(userId, realm.name)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
-        val currentRoles = userRepository.findRoles(userId).map { it.name }
+        val currentRoles = userRepository.findRoles(userId, realm.name).map { it.name }
 
-        val result = userRepository.updateRolesForUser(userId, roleNames)
+        val result = userRepository.updateRolesForUser(userId, realm.name, roleNames)
 
         when (result) {
             is UserRepository.UpdateRolesResult.Success -> {

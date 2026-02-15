@@ -104,7 +104,7 @@ class UserQueryServiceTest : FunSpec({
 
     test("getAllUsers should return list of users") {
         val entities = listOf(testUserEntity)
-        every { userRepository.getAll() } returns entities
+        every { userRepository.getAll(realmName) } returns entities
 
         val result = userQueryService.getAllUsers()
 
@@ -114,7 +114,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getAllUsers should return empty list when no users exist") {
-        every { userRepository.getAll() } returns emptyList()
+        every { userRepository.getAll(realmName) } returns emptyList()
 
         val result = userQueryService.getAllUsers()
 
@@ -122,7 +122,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getAllFullUsers should return list of full users") {
-        every { userRepository.getAllFull() } returns listOf(testFullUserEntity)
+        every { userRepository.getAllFull(realmName) } returns listOf(testFullUserEntity)
 
         val result = userQueryService.getAllFullUsers()
 
@@ -133,7 +133,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUser should return user when found") {
-        every { userRepository.findById(testUserId) } returns testUserEntity
+        every { userRepository.findById(testUserId, realmName) } returns testUserEntity
 
         val result = userQueryService.getUser(testUserId)
 
@@ -142,7 +142,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUser should throw UserNotFound when user doesn't exist") {
-        every { userRepository.findById(testUserId) } returns null
+        every { userRepository.findById(testUserId, realmName) } returns null
 
         val exception = shouldThrow<KodexThrowable.UserNotFound> {
             userQueryService.getUser(testUserId)
@@ -151,7 +151,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserOrNull should return user when found") {
-        every { userRepository.findById(testUserId) } returns testUserEntity
+        every { userRepository.findById(testUserId, realmName) } returns testUserEntity
 
         val result = userQueryService.getUserOrNull(testUserId)
 
@@ -160,7 +160,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserOrNull should return null when user doesn't exist") {
-        every { userRepository.findById(testUserId) } returns null
+        every { userRepository.findById(testUserId, realmName) } returns null
 
         val result = userQueryService.getUserOrNull(testUserId)
 
@@ -204,7 +204,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getFullUser should return full user when found") {
-        every { userRepository.findFullById(testUserId) } returns testFullUserEntity
+        every { userRepository.findFullById(testUserId, realmName) } returns testFullUserEntity
 
         val result = userQueryService.getFullUser(testUserId)
 
@@ -215,7 +215,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getFullUser should throw UserNotFound when user doesn't exist") {
-        every { userRepository.findFullById(testUserId) } returns null
+        every { userRepository.findFullById(testUserId, realmName) } returns null
 
         val exception = shouldThrow<KodexThrowable.UserNotFound> {
             userQueryService.getFullUser(testUserId)
@@ -224,7 +224,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getFullUserOrNull should return full user when found") {
-        every { userRepository.findFullById(testUserId) } returns testFullUserEntity
+        every { userRepository.findFullById(testUserId, realmName) } returns testFullUserEntity
 
         val result = userQueryService.getFullUserOrNull(testUserId)
 
@@ -233,7 +233,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getFullUserOrNull should return null when user doesn't exist") {
-        every { userRepository.findFullById(testUserId) } returns null
+        every { userRepository.findFullById(testUserId, realmName) } returns null
 
         val result = userQueryService.getFullUserOrNull(testUserId)
 
@@ -241,7 +241,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserProfile should return profile when found") {
-        every { userRepository.findProfileByUserId(testUserId) } returns testProfileEntity
+        every { userRepository.findProfileByUserId(testUserId, realmName) } returns testProfileEntity
 
         val result = userQueryService.getUserProfile(testUserId)
 
@@ -250,7 +250,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserProfile should throw ProfileNotFound when profile doesn't exist") {
-        every { userRepository.findProfileByUserId(testUserId) } returns null
+        every { userRepository.findProfileByUserId(testUserId, realmName) } returns null
 
         val exception = shouldThrow<KodexThrowable.ProfileNotFound> {
             userQueryService.getUserProfile(testUserId)
@@ -259,7 +259,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserProfileOrNull should return profile when found") {
-        every { userRepository.findProfileByUserId(testUserId) } returns testProfileEntity
+        every { userRepository.findProfileByUserId(testUserId, realmName) } returns testProfileEntity
 
         val result = userQueryService.getUserProfileOrNull(testUserId)
 
@@ -268,7 +268,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getUserProfileOrNull should return null when profile doesn't exist") {
-        every { userRepository.findProfileByUserId(testUserId) } returns null
+        every { userRepository.findProfileByUserId(testUserId, realmName) } returns null
 
         val result = userQueryService.getUserProfileOrNull(testUserId)
 
@@ -277,7 +277,7 @@ class UserQueryServiceTest : FunSpec({
 
     test("getCustomAttributes should return attributes when found") {
         val attributes = mapOf("key1" to "value1", "key2" to "value2")
-        every { userRepository.findCustomAttributesByUserId(testUserId) } returns attributes
+        every { userRepository.findCustomAttributesByUserId(testUserId, realmName) } returns attributes
 
         val result = userQueryService.getCustomAttributes(testUserId)
 
@@ -286,7 +286,7 @@ class UserQueryServiceTest : FunSpec({
     }
 
     test("getCustomAttributes should return empty map when no attributes exist") {
-        every { userRepository.findCustomAttributesByUserId(testUserId) } returns emptyMap()
+        every { userRepository.findCustomAttributesByUserId(testUserId, realmName) } returns emptyMap()
 
         val result = userQueryService.getCustomAttributes(testUserId)
 

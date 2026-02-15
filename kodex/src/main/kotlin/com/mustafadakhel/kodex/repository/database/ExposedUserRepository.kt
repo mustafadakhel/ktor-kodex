@@ -22,12 +22,12 @@ internal fun databaseUserRepository(): UserRepository = ExposedUserRepository
 
 private object ExposedUserRepository : UserRepository {
 
-    override fun getAll(): List<UserEntity> = exposedTransaction {
-        UserDao.all().map { it.toEntity() }
+    override fun getAll(realmId: String): List<UserEntity> = exposedTransaction {
+        UserDao.find { Users.realmId eq realmId }.map { it.toEntity() }
     }
 
-    override fun getAllFull(): List<FullUserEntity> = exposedTransaction {
-        val users = UserDao.all().toList()
+    override fun getAllFull(realmId: String): List<FullUserEntity> = exposedTransaction {
+        val users = UserDao.find { Users.realmId eq realmId }.toList()
 
         if (users.isEmpty()) return@exposedTransaction emptyList()
 
@@ -72,8 +72,8 @@ private object ExposedUserRepository : UserRepository {
         }
     }
 
-    override fun findById(userId: UUID): UserEntity? = exposedTransaction {
-        UserDao.findById(userId)?.toEntity()
+    override fun findById(userId: UUID, realmId: String): UserEntity? = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()?.toEntity()
     }
 
     override fun findByPhone(phone: String, realmId: String): UserEntity? = exposedTransaction {
@@ -84,8 +84,8 @@ private object ExposedUserRepository : UserRepository {
         UserDao.find { (Users.email eq email) and (Users.realmId eq realmId) }.firstOrNull()?.toEntity()
     }
 
-    override fun findFullById(userId: UUID): FullUserEntity? = exposedTransaction {
-        UserDao.findById(userId)?.toFullEntity()
+    override fun findFullById(userId: UUID, realmId: String): FullUserEntity? = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()?.toFullEntity()
     }
 
     override fun create(
@@ -135,8 +135,8 @@ private object ExposedUserRepository : UserRepository {
         UserRepository.CreateUserResult.Success(newUser.toEntity())
     }
 
-    override fun getHashedPassword(userId: UUID): String? = exposedTransaction {
-        UserDao.findById(userId)?.passwordHash
+    override fun getHashedPassword(userId: UUID, realmId: String): String? = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()?.passwordHash
     }
 
     override fun seedRoles(roles: List<Role>) = exposedTransaction {
@@ -153,12 +153,13 @@ private object ExposedUserRepository : UserRepository {
 
     override fun updateById(
         userId: UUID,
+        realmId: String,
         email: FieldUpdate<String>,
         phone: FieldUpdate<String>,
         status: FieldUpdate<UserStatus>,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
-        val user = UserDao.findById(userId) ?: run {
+        val user = UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull() ?: run {
             return@exposedTransaction UserRepository.UpdateUserResult.NotFound
         }
 
@@ -232,6 +233,7 @@ private object ExposedUserRepository : UserRepository {
 
     override fun updateRolesForUser(
         userId: UUID,
+        realmId: String,
         roleNames: List<String>
     ): UserRepository.UpdateRolesResult = exposedTransaction {
         updateRolesForUserInternal(userId, roleNames)
@@ -246,8 +248,8 @@ private object ExposedUserRepository : UserRepository {
         }
     }
 
-    override fun findRoles(userId: UUID): List<RoleEntity> = exposedTransaction {
-        UserDao.findById(userId)?.roles?.map { it.toEntity() }?.toList()
+    override fun findRoles(userId: UUID, realmId: String): List<RoleEntity> = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()?.roles?.map { it.toEntity() }?.toList()
             ?: emptyList()
     }
 
@@ -255,11 +257,12 @@ private object ExposedUserRepository : UserRepository {
         RoleDao.all().map { it.toEntity() }
     }
 
-    override fun findProfileByUserId(userId: UUID): UserProfileEntity? = exposedTransaction {
+    override fun findProfileByUserId(userId: UUID, realmId: String): UserProfileEntity? = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull() ?: return@exposedTransaction null
         UserProfileDao.findById(userId)?.toEntity()
     }
 
-    override fun updateProfileByUserId(userId: UUID, profile: UserProfile) = exposedTransaction {
+    override fun updateProfileByUserId(userId: UUID, realmId: String, profile: UserProfile) = exposedTransaction {
         val profileDao = UserProfileDao.findByIdAndUpdate(userId) {
             it.firstName = profile.firstName
             it.lastName = profile.lastName
@@ -279,14 +282,15 @@ private object ExposedUserRepository : UserRepository {
         }
     }
 
-    override fun findCustomAttributesByUserId(userId: UUID): Map<String, String> = exposedTransaction {
+    override fun findCustomAttributesByUserId(userId: UUID, realmId: String): Map<String, String> = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull() ?: return@exposedTransaction emptyMap()
         UserCustomAttributesDao.findByUserId(userId).associate { it.key to it.value }
     }
 
     override fun replaceAllCustomAttributesByUserId(
-        userId: UUID, customAttributes: Map<String, String>
+        userId: UUID, realmId: String, customAttributes: Map<String, String>
     ) = exposedTransaction {
-        UserDao.findById(userId) ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull() ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
 
         UserCustomAttributesDao.replaceAllForUser(userId, customAttributes)
         UserRepository.UpdateUserResult.Success
@@ -294,30 +298,31 @@ private object ExposedUserRepository : UserRepository {
 
     override fun updateCustomAttributesByUserId(
         userId: UUID,
+        realmId: String,
         customAttributes: Map<String, String>
     ) = exposedTransaction {
-        UserDao.findById(userId) ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull() ?: run { return@exposedTransaction UserRepository.UpdateUserResult.NotFound }
 
         UserCustomAttributesDao.updateForUser(userId, customAttributes)
         UserRepository.UpdateUserResult.Success
     }
 
-    override fun updateLastLogin(userId: UUID, loginTime: LocalDateTime) = exposedTransaction {
-        UserDao.findById(userId)?.let {
+    override fun updateLastLogin(userId: UUID, realmId: String, loginTime: LocalDateTime) = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()?.let {
             it.lastLoginAt = loginTime
             true
         } ?: false
     }
 
-    override fun updatePassword(userId: UUID, hashedPassword: String) = exposedTransaction {
-        UserDao.findById(userId)?.let {
+    override fun updatePassword(userId: UUID, realmId: String, hashedPassword: String) = exposedTransaction {
+        UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()?.let {
             it.passwordHash = hashedPassword
             true
         } ?: false
     }
 
-    override fun deleteUser(userId: UUID): UserRepository.DeleteResult = exposedTransaction {
-        val user = UserDao.findById(userId)
+    override fun deleteUser(userId: UUID, realmId: String): UserRepository.DeleteResult = exposedTransaction {
+        val user = UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull()
         if (user == null) {
             UserRepository.DeleteResult.NotFound
         } else {
@@ -328,6 +333,7 @@ private object ExposedUserRepository : UserRepository {
 
     override fun updateBatch(
         userId: UUID,
+        realmId: String,
         email: FieldUpdate<String>,
         phone: FieldUpdate<String>,
         status: FieldUpdate<UserStatus>,
@@ -335,7 +341,7 @@ private object ExposedUserRepository : UserRepository {
         customAttributes: FieldUpdate<Map<String, String>>,
         currentTime: LocalDateTime
     ): UserRepository.UpdateUserResult = exposedTransaction {
-        val user = UserDao.findById(userId) ?: run {
+        val user = UserDao.find { (Users.id eq userId) and (Users.realmId eq realmId) }.firstOrNull() ?: run {
             return@exposedTransaction UserRepository.UpdateUserResult.NotFound
         }
 

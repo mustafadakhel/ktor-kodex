@@ -150,7 +150,8 @@ public class Kodex private constructor(
                 userRepository = context.userRepository,
                 hookExecutor = context.hookExecutor,
                 changeTracker = ChangeTracker(),
-                timeZone = context.timeZone
+                timeZone = context.timeZone,
+                realmId = context.realm.name
             )
         }
 
@@ -209,7 +210,8 @@ public class Kodex private constructor(
                 tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                 tokenRepository = repositories.tokenRepository,
                 hashingService = tokenHasher,
-                userRepository = repositories.userRepository
+                userRepository = repositories.userRepository,
+                realm = realmConfig.realm
             )
         }
 

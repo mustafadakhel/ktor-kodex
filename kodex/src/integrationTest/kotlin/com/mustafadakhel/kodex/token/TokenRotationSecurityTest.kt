@@ -80,7 +80,8 @@ class TokenRotationSecurityTest : FunSpec({
             ),
             tokenRepository = tokenRepository,
             hashingService = saltedHashingService(),
-            userRepository = userRepository
+            userRepository = userRepository,
+            realm = realm
         )
 
         return DefaultTokenManager(

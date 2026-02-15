@@ -45,13 +45,14 @@ class JwtTokenVerifierTest : FunSpec({
             revoked = false
         )
     }
+    val realm = Realm("test-realm")
     val userRepository = mockk<UserRepository> {
-        every { findRoles(any()) } returns listOf(
+        every { findRoles(any(), any()) } returns listOf(
             RoleEntity("user", null),
             RoleEntity("admin", null)
         )
-        every { findById(any()) } returns null
-        every { findFullById(any()) } returns null
+        every { findById(any(), any()) } returns null
+        every { findFullById(any(), any()) } returns null
     }
     val tokenPersistence = mapOf(
         TokenType.AccessToken to true,
@@ -75,7 +76,8 @@ class JwtTokenVerifierTest : FunSpec({
             hashingService = hashingService,
             tokenRepository = tokenRepository,
             tokenPersistence = tokenPersistence,
-            userRepository = userRepository
+            userRepository = userRepository,
+            realm = realm
         )
         shouldNotThrowAny {
             verifier.verify(decoded, TokenType.RefreshToken)
@@ -95,7 +97,8 @@ class JwtTokenVerifierTest : FunSpec({
             hashingService = hashingService,
             tokenRepository = tokenRepository,
             tokenPersistence = tokenPersistence,
-            userRepository = userRepository
+            userRepository = userRepository,
+            realm = realm
         )
         shouldThrow<KodexThrowable.Authorization.SuspiciousToken> {
             verifier.verify(decoded, TokenType.RefreshToken)
