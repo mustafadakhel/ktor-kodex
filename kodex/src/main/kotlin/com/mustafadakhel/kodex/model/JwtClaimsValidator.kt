@@ -14,10 +14,11 @@ internal class JwtClaimsValidator(
         expectedType: TokenType,
         expectedRoles: List<String>,
     ): Boolean {
+        val now = CurrentKotlinInstant.toJavaInstant()
         return claims.all { claim ->
             when (claim) {
                 is Claim.ExpiresAt -> claim.toDateOrNull()?.let {
-                    it.toInstant() > CurrentKotlinInstant.toJavaInstant()
+                    it.toInstant() > now
                 } ?: false
 
                 is Claim.Issuer -> claimProvider.issuer == claim.value

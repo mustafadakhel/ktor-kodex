@@ -2,9 +2,9 @@ package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.TokenCleanupEvent
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.kodexTransaction
-import com.mustafadakhel.kodex.verification.database.VerificationTokens
+import com.mustafadakhel.kodex.verification.schema.VerificationSchema
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
@@ -23,10 +23,14 @@ public interface TokenCleanupService {
 }
 
 internal class DefaultTokenCleanupService(
+    private val db: KodexDatabase,
+    private val schema: VerificationSchema,
     private val timeZone: TimeZone,
     private val eventBus: EventBus?,
     private val realm: String
 ) : TokenCleanupService {
+
+    private val tokens = schema.verificationTokens
 
     override suspend fun purgeExpiredTokens(retentionPeriod: Duration): Int {
         val clockNow = CurrentKotlinInstant
@@ -37,11 +41,11 @@ internal class DefaultTokenCleanupService(
         var totalDeleted = 0
 
         do {
-            val deletedInBatch = kodexTransaction {
-                VerificationTokens.deleteWhere(limit = batchSize) {
-                    (VerificationTokens.realmId eq realm) and (
-                        (usedAt.isNotNull() and (usedAt less cutoff)) or
-                        ((expiresAt less now) and (createdAt less cutoff))
+            val deletedInBatch = db.transaction {
+                tokens.deleteWhere(limit = batchSize) {
+                    (tokens.realmId eq realm) and (
+                        (tokens.usedAt.isNotNull() and (tokens.usedAt less cutoff)) or
+                        ((tokens.expiresAt less now) and (tokens.createdAt less cutoff))
                     )
                 }
             }

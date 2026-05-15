@@ -40,7 +40,7 @@ internal class JwtTokenVerifier(
         val decodedType = decodedToken.claims.filterIsInstance<Claim.TokenType>().firstOrNull()
             ?: throw KodexThrowable.Authorization.SuspiciousToken("Token does not contain a valid type claim")
 
-        val expectedRoles = userRepository.findRoles(userId, realm.name).takeIf { it.isNotEmpty() }
+        val expectedRoles = userRepository.findRoles(userId).takeIf { it.isNotEmpty() }
             ?: throw KodexThrowable.Authorization.UserHasNoRoles
 
         val tokenType = TokenType.fromClaim(decodedType)

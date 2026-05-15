@@ -23,7 +23,6 @@ public class SessionConfig : ExtensionConfig() {
 
         return SessionExtension(
             config = this,
-            timeZone = context.timeZone,
             eventBus = context.eventBus,
             realmId = context.realm.name
         )

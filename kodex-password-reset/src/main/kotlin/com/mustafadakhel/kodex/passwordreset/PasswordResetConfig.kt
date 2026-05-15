@@ -89,7 +89,7 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
             )
         )
 
-        val service = DefaultPasswordResetService(
+        return PasswordResetExtension(
             config = config,
             passwordResetSender = sender,
             timeZone = context.timeZone,
@@ -97,9 +97,6 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
             realm = context.realm.name,
             rateLimiter = context.rateLimiter
         )
-        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.name)
-
-        return PasswordResetExtension(service, cleanupService, context.timeZone)
     }
 }
 

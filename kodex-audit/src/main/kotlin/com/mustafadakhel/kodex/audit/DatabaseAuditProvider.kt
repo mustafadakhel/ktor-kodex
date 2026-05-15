@@ -1,35 +1,37 @@
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.audit.database.AuditLogDao
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.audit.schema.AuditSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.insert
 
-/**
- * Database-backed audit provider that persists events to the AuditLogs table.
- *
- * This provider ensures all audit events are stored persistently in the database
- * for compliance, forensics, and audit trail purposes.
- *
- * Features:
- * - Atomic writes with transaction support
- * - Automatic metadata sanitization via AuditLogDao
- * - Graceful error handling (logging never fails main operations)
- */
-public class DatabaseAuditProvider : AuditProvider {
+public class DatabaseAuditProvider(
+    private val db: KodexDatabase,
+    private val schema: AuditSchema
+) : AuditProvider {
+
+    private val json = Json { ignoreUnknownKeys = true }
+    private val auditEvents = schema.auditEvents
 
     override suspend fun log(event: AuditEvent) {
         try {
-            kodexTransaction {
-                AuditLogDao.new {
-                    this.eventType = event.eventType
-                    this.timestamp = event.timestamp
-                    this.actorId = event.actorId
-                    this.actorType = event.actorType
-                    this.targetId = event.targetId
-                    this.targetType = event.targetType
-                    this.result = event.result
-                    this.metadata = event.metadata
-                    this.realmId = event.realmId
-                    this.sessionId = event.sessionId
+            db.transaction {
+                val sanitized = MetadataSanitizer.sanitize(event.metadata)
+                val stringified = sanitized.mapValues { (_, v) -> v.toString() }
+                val metadataJson = json.encodeToString(stringified)
+
+                auditEvents.insert {
+                    it[auditEvents.eventType] = event.eventType
+                    it[auditEvents.timestamp] = event.timestamp
+                    it[auditEvents.actorId] = event.actorId
+                    it[auditEvents.actorType] = event.actorType
+                    it[auditEvents.targetId] = event.targetId
+                    it[auditEvents.targetType] = event.targetType
+                    it[auditEvents.result] = event.result
+                    it[auditEvents.metadata] = metadataJson
+                    it[auditEvents.realmId] = event.realmId
+                    it[auditEvents.sessionId] = event.sessionId
                 }
             }
         } catch (e: Exception) {

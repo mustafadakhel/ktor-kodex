@@ -3,7 +3,9 @@ package com.mustafadakhel.kodex.routes.auth
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionConfig
+import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
+import com.mustafadakhel.kodex.extension.HookFailureStrategy
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.RealmExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
@@ -27,7 +29,7 @@ internal data class RealmConfig(
     internal val tokenRotationConfig: TokenRotationConfig,
     internal val extensions: ExtensionRegistry,
     val timeZone: TimeZone,
-    val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy,
+    val hookFailureStrategy: HookFailureStrategy,
     internal val eventBus: EventBus,
     internal val rateLimiter: RateLimiter
 )
@@ -52,13 +54,13 @@ public class RealmConfigScope internal constructor(
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
     private var rateLimiter: RateLimiter = NoOpRateLimiter()
 
-    public var hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy =
-        com.mustafadakhel.kodex.extension.HookFailureStrategy.FAIL_FAST
+    public var hookFailureStrategy: HookFailureStrategy =
+        HookFailureStrategy.FAIL_FAST
 
     @PublishedApi
     internal fun getExtensionContext(
-        eventBus: com.mustafadakhel.kodex.event.EventBus
-    ): com.mustafadakhel.kodex.extension.ExtensionContext {
+        eventBus: EventBus
+    ): ExtensionContext {
         return extensionContext(realm, timeZone, eventBus, rateLimiter)
     }
 

@@ -3,7 +3,7 @@ package com.mustafadakhel.kodex.mfa.event
 import com.mustafadakhel.kodex.event.EventSeverity
 import com.mustafadakhel.kodex.event.FailureReason
 import com.mustafadakhel.kodex.event.KodexEvent
-import com.mustafadakhel.kodex.mfa.database.MfaMethodType
+import com.mustafadakhel.kodex.mfa.MfaMethodType
 import kotlinx.datetime.Instant
 import java.util.UUID
 

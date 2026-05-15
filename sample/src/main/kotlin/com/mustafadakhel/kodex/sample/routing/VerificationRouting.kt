@@ -5,7 +5,6 @@ import com.mustafadakhel.kodex.routes.auth.KodexId
 import com.mustafadakhel.kodex.routes.auth.authenticateFor
 import com.mustafadakhel.kodex.routes.auth.authorizedRoute
 import com.mustafadakhel.kodex.sample.DefaultRealms
-import com.mustafadakhel.kodex.verification.ContactIdentifier
 import com.mustafadakhel.kodex.verification.ContactType
 import com.mustafadakhel.kodex.verification.VerificationResult
 import com.mustafadakhel.kodex.verification.VerificationService
@@ -28,32 +27,19 @@ fun Application.setupVerificationRouting() = routing {
                         )
 
                     val params = call.receiveParameters()
-                    val contactType = params["contactType"] ?: return@post call.respondText(
-                        "Missing contactType (EMAIL, PHONE, or CUSTOM_ATTRIBUTE)",
+                    val contactTypeParam = params["contactType"] ?: return@post call.respondText(
+                        "Missing contactType (EMAIL, PHONE, or custom attribute key)",
                         status = HttpStatusCode.BadRequest
                     )
-                    val customAttributeKey = params["customAttributeKey"]
 
                     try {
-                        val identifier = when (contactType.uppercase()) {
-                            "EMAIL" -> ContactIdentifier(ContactType.EMAIL)
-                            "PHONE" -> ContactIdentifier(ContactType.PHONE)
-                            "CUSTOM_ATTRIBUTE" -> {
-                                if (customAttributeKey == null) {
-                                    return@post call.respondText(
-                                        "customAttributeKey required for CUSTOM_ATTRIBUTE type",
-                                        status = HttpStatusCode.BadRequest
-                                    )
-                                }
-                                ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, customAttributeKey)
-                            }
-                            else -> return@post call.respondText(
-                                "Invalid contactType. Must be EMAIL, PHONE, or CUSTOM_ATTRIBUTE",
+                        val contactType = parseContactType(contactTypeParam)
+                            ?: return@post call.respondText(
+                                "Invalid contactType",
                                 status = HttpStatusCode.BadRequest
                             )
-                        }
 
-                        verificationService.sendVerification(userId, identifier)
+                        verificationService.sendVerification(userId, contactType)
                         call.respondText("Verification sent", status = HttpStatusCode.OK)
                     } catch (e: Exception) {
                         call.respondText("Failed to send verification: ${e.message}", status = HttpStatusCode.InternalServerError)
@@ -72,32 +58,19 @@ fun Application.setupVerificationRouting() = routing {
                         "Missing token",
                         status = HttpStatusCode.BadRequest
                     )
-                    val contactType = params["contactType"] ?: return@post call.respondText(
+                    val contactTypeParam = params["contactType"] ?: return@post call.respondText(
                         "Missing contactType",
                         status = HttpStatusCode.BadRequest
                     )
-                    val customAttributeKey = params["customAttributeKey"]
 
                     try {
-                        val identifier = when (contactType.uppercase()) {
-                            "EMAIL" -> ContactIdentifier(ContactType.EMAIL)
-                            "PHONE" -> ContactIdentifier(ContactType.PHONE)
-                            "CUSTOM_ATTRIBUTE" -> {
-                                if (customAttributeKey == null) {
-                                    return@post call.respondText(
-                                        "customAttributeKey required for CUSTOM_ATTRIBUTE type",
-                                        status = HttpStatusCode.BadRequest
-                                    )
-                                }
-                                ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, customAttributeKey)
-                            }
-                            else -> return@post call.respondText(
+                        val contactType = parseContactType(contactTypeParam)
+                            ?: return@post call.respondText(
                                 "Invalid contactType",
                                 status = HttpStatusCode.BadRequest
                             )
-                        }
 
-                        val result = verificationService.verifyToken(userId, identifier, token)
+                        val result = verificationService.verifyToken(userId, contactType, token)
                         when (result) {
                             is VerificationResult.Success -> {
                                 call.respondText("Verification successful", status = HttpStatusCode.OK)
@@ -123,32 +96,19 @@ fun Application.setupVerificationRouting() = routing {
                         )
 
                     val params = call.receiveParameters()
-                    val contactType = params["contactType"] ?: return@post call.respondText(
+                    val contactTypeParam = params["contactType"] ?: return@post call.respondText(
                         "Missing contactType",
                         status = HttpStatusCode.BadRequest
                     )
-                    val customAttributeKey = params["customAttributeKey"]
 
                     try {
-                        val identifier = when (contactType.uppercase()) {
-                            "EMAIL" -> ContactIdentifier(ContactType.EMAIL)
-                            "PHONE" -> ContactIdentifier(ContactType.PHONE)
-                            "CUSTOM_ATTRIBUTE" -> {
-                                if (customAttributeKey == null) {
-                                    return@post call.respondText(
-                                        "customAttributeKey required for CUSTOM_ATTRIBUTE type",
-                                        status = HttpStatusCode.BadRequest
-                                    )
-                                }
-                                ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, customAttributeKey)
-                            }
-                            else -> return@post call.respondText(
+                        val contactType = parseContactType(contactTypeParam)
+                            ?: return@post call.respondText(
                                 "Invalid contactType",
                                 status = HttpStatusCode.BadRequest
                             )
-                        }
 
-                        verificationService.resendVerification(userId, identifier)
+                        verificationService.resendVerification(userId, contactType)
                         call.respondText("Verification resent", status = HttpStatusCode.OK)
                     } catch (e: Exception) {
                         call.respondText("Failed to resend verification: ${e.message}", status = HttpStatusCode.InternalServerError)
@@ -174,5 +134,13 @@ fun Application.setupVerificationRouting() = routing {
                 }
             }
         }
+    }
+}
+
+private fun parseContactType(param: String): ContactType? = when (param.uppercase()) {
+    "EMAIL" -> ContactType.Email
+    "PHONE" -> ContactType.Phone
+    else -> {
+        if (param.isNotBlank()) ContactType.CustomAttribute(param) else null
     }
 }

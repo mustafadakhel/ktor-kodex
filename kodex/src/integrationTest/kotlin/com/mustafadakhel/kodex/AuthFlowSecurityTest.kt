@@ -25,7 +25,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:timing-attack-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -99,7 +98,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:invalid-creds-existing;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -140,7 +138,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:invalid-creds-nonexisting;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -174,7 +171,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:password-change-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -224,7 +220,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:password-change-fail;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -270,7 +265,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:admin-reset-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -320,7 +314,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:multi-session-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -392,7 +385,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:token-claims-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

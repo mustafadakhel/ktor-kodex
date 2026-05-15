@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.sample.routing
 
 import com.mustafadakhel.kodex.extensionService
 import com.mustafadakhel.kodex.mfa.MfaService
+import com.mustafadakhel.kodex.mfa.VerificationResult
 import com.mustafadakhel.kodex.routes.auth.KodexId
 import com.mustafadakhel.kodex.routes.auth.authenticateFor
 import com.mustafadakhel.kodex.routes.auth.authorizedRoute
@@ -41,7 +42,7 @@ fun Application.setupMfaRouting() = routing {
                 try {
                     val result = mfaService.verifyMfaSession(sessionId, code, methodId)
                     when (result) {
-                        is com.mustafadakhel.kodex.mfa.VerificationResult.Success -> {
+                        is VerificationResult.Success -> {
                             call.respond(
                                 HttpStatusCode.OK,
                                 mapOf(
@@ -50,19 +51,19 @@ fun Application.setupMfaRouting() = routing {
                                 )
                             )
                         }
-                        is com.mustafadakhel.kodex.mfa.VerificationResult.Invalid -> {
+                        is VerificationResult.Invalid -> {
                             call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("success" to false, "error" to result.reason)
                             )
                         }
-                        is com.mustafadakhel.kodex.mfa.VerificationResult.Expired -> {
+                        is VerificationResult.Expired -> {
                             call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("success" to false, "error" to result.reason)
                             )
                         }
-                        is com.mustafadakhel.kodex.mfa.VerificationResult.RateLimitExceeded -> {
+                        is VerificationResult.RateLimitExceeded -> {
                             call.respond(
                                 HttpStatusCode.TooManyRequests,
                                 mapOf("success" to false, "error" to result.reason)

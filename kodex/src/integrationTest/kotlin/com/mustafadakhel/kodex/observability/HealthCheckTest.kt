@@ -1,37 +1,35 @@
 package com.mustafadakhel.kodex.observability
 
-import com.mustafadakhel.kodex.util.Db
-import com.mustafadakhel.kodex.util.setupExposedEngine
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.string.shouldContain
+import org.jetbrains.exposed.sql.Database
+import java.util.UUID
 
 class HealthCheckTest : FunSpec({
 
-    beforeEach {
-        // Setup H2 in-memory database for testing
-        val config = HikariConfig().apply {
-            driverClassName = "org.h2.Driver"
-            jdbcUrl = "jdbc:h2:mem:health_check_test;DB_CLOSE_DELAY=-1"
-            maximumPoolSize = 5
-        }
-        setupExposedEngine(HikariDataSource(config))
-    }
+    lateinit var db: KodexDatabase
 
-    afterEach {
-        Db.clearEngine()
+    beforeEach {
+        val database = Database.connect(
+            "jdbc:h2:mem:health_check_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
+            driver = "org.h2.Driver"
+        )
+        val core = CoreSchema("test_")
+        db = KodexDatabase(database, core)
+        db.createSchema()
     }
 
     context("Database Health Check") {
 
         test("should return UP when database is accessible") {
-            val result = KodexHealth.checkDatabase()
+            val health = KodexHealth(db)
+            val result = health.checkDatabase()
 
             result.status shouldBe HealthStatus.UP
-            result.isHealthy() shouldBe true
+            result.isHealthy shouldBe true
             result.error shouldBe null
             result.details shouldNotBe null
             result.details["description"] shouldBe "Database connection successful"
@@ -39,7 +37,8 @@ class HealthCheckTest : FunSpec({
         }
 
         test("should include response time in health check") {
-            val result = KodexHealth.checkDatabase()
+            val health = KodexHealth(db)
+            val result = health.checkDatabase()
 
             result.details.containsKey("responseTimeMs") shouldBe true
             val responseTime = result.details["responseTimeMs"] as? Long
@@ -51,17 +50,19 @@ class HealthCheckTest : FunSpec({
     context("Overall Health Check") {
 
         test("should return UP when all components are healthy") {
-            val result = KodexHealth.checkOverall()
+            val health = KodexHealth(db)
+            val result = health.checkOverall()
 
             result.status shouldBe HealthStatus.UP
-            result.isHealthy() shouldBe true
+            result.isHealthy shouldBe true
             result.error shouldBe null
             result.details["database"] shouldBe "UP"
             result.details["description"] shouldBe "All systems operational"
         }
 
         test("should include component statuses in overall health") {
-            val result = KodexHealth.checkOverall()
+            val health = KodexHealth(db)
+            val result = health.checkOverall()
 
             result.details.containsKey("database") shouldBe true
             result.details["database"] shouldBe "UP"
@@ -72,17 +73,17 @@ class HealthCheckTest : FunSpec({
 
         test("UP status should be healthy") {
             val result = HealthCheckResult(status = HealthStatus.UP)
-            result.isHealthy() shouldBe true
+            result.isHealthy shouldBe true
         }
 
         test("DEGRADED status should be healthy") {
             val result = HealthCheckResult(status = HealthStatus.DEGRADED)
-            result.isHealthy() shouldBe true
+            result.isHealthy shouldBe true
         }
 
         test("DOWN status should not be healthy") {
             val result = HealthCheckResult(status = HealthStatus.DOWN)
-            result.isHealthy() shouldBe false
+            result.isHealthy shouldBe false
         }
 
         test("should include error message when failed") {
@@ -92,7 +93,7 @@ class HealthCheckTest : FunSpec({
             )
 
             result.error shouldBe "Connection timeout"
-            result.isHealthy() shouldBe false
+            result.isHealthy shouldBe false
         }
 
         test("should include details map") {

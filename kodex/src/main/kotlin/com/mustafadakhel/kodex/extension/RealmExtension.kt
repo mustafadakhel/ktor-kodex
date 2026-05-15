@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.extension
 
-import org.jetbrains.exposed.sql.Table
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlin.reflect.KClass
 
 public interface RealmExtension {
@@ -9,7 +10,7 @@ public interface RealmExtension {
 }
 
 public interface PersistentExtension : RealmExtension {
-    public fun tables(): List<Table>
+    public fun createSchema(core: CoreSchema): ExtensionSchema
 }
 
 public class ExtensionRegistry internal constructor(
@@ -28,12 +29,12 @@ public class ExtensionRegistry internal constructor(
         return extensions.containsKey(extensionClass) && extensions[extensionClass]?.isNotEmpty() == true
     }
 
-    public fun getTables(): List<Table> {
+    public fun collectSchemas(core: CoreSchema): Map<KClass<out ExtensionSchema>, ExtensionSchema> {
         return extensions.values
             .flatten()
             .filterIsInstance<PersistentExtension>()
-            .flatMap { it.tables() }
-            .distinct()
+            .map { it.createSchema(core) }
+            .associateBy { it::class }
     }
 
     public companion object {

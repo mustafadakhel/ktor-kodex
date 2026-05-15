@@ -42,7 +42,6 @@ dependencies {
     api(project(":kodex"))
 
     // Database dependencies (Exposed)
-    implementation(libs.exposed.dao)
     implementation(libs.exposed.jdbc)
     implementation(libs.exposed.datetime)
 

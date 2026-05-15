@@ -5,10 +5,9 @@ import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.model.Realm
-import com.mustafadakhel.kodex.test.TestDatabaseSetup
-import com.mustafadakhel.kodex.util.kodexTransaction
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -16,6 +15,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import com.mustafadakhel.kodex.tokens.token.TokenHasher
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -39,8 +39,6 @@ import kotlin.time.Duration.Companion.minutes
  */
 class PasswordResetServiceIntegrationTest : FunSpec({
 
-    // Test database setup
-    val database = Database.connect("jdbc:h2:mem:test_password_reset_integration;DB_CLOSE_DELAY=-1", driver = "org.h2.Driver")
     val timeZone = TimeZone.UTC
 
     val mockEventBus = object : EventBus {
@@ -49,6 +47,11 @@ class PasswordResetServiceIntegrationTest : FunSpec({
         override fun <T : KodexEvent> unsubscribe(subscriber: EventSubscriber<T>) {}
         override fun shutdown() {}
     }
+
+    lateinit var db: KodexDatabase
+    lateinit var passwordResetSchema: PasswordResetSchema
+    lateinit var testSetup: com.mustafadakhel.kodex.test.TestDatabaseSetup
+    var userCounter = 0
 
     val testContext = object : ExtensionContext {
         override val realm = Realm(name = "test-realm")
@@ -78,25 +81,33 @@ class PasswordResetServiceIntegrationTest : FunSpec({
     val mockSender = MockPasswordResetSender()
 
     beforeTest {
-        TestDatabaseSetup.setupTestEngine(database)
-        // Create tables
-        kodexTransaction {
-            SchemaUtils.create(PasswordResetContacts, PasswordResetTokens)
-        }
+        val database = Database.connect(
+            "jdbc:h2:mem:test_password_reset_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
+            driver = "org.h2.Driver"
+        )
+        val core = CoreSchema("test_")
+        passwordResetSchema = PasswordResetSchema(core)
+        db = KodexDatabase(database, core, mapOf(PasswordResetSchema::class to passwordResetSchema))
+        db.createSchema()
+        testSetup = com.mustafadakhel.kodex.test.TestDatabaseSetup(db)
+        userCounter = 0
         mockSender.reset()
         // Clear rate limiter state between tests
         testContext.rateLimiter.clearAll()
     }
 
     afterTest {
-        // Drop tables
-        kodexTransaction {
-            SchemaUtils.drop(PasswordResetContacts, PasswordResetTokens)
+        db.transaction {
+            SchemaUtils.drop(
+                passwordResetSchema.passwordResetTokens,
+                passwordResetSchema.passwordResetContacts,
+                *db.core.tables().reversed().toTypedArray()
+            )
         }
     }
 
     context("End-to-End Password Reset Flow") {
-        test("complete flow: initiate → verify → consume → success") {
+        test("complete flow: initiate -> verify -> consume -> success") {
             val config = PasswordResetConfig().apply {
                 tokenValidity = 1.hours
                 maxAttemptsPerUser = 5
@@ -107,15 +118,17 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
             // Setup: Register user contact
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "user@example.com"
-            kodexTransaction {
-                PasswordResetContacts.insert {
-                    it[PasswordResetContacts.realmId] = "test-realm"
-                    it[PasswordResetContacts.userId] = userId
+            val contacts = passwordResetSchema.passwordResetContacts
+            db.transaction {
+                contacts.insert {
+                    it[contacts.realmId] = "test-realm"
+                    it[contacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
                     it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
@@ -138,8 +151,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             token.shouldNotBeNull()
 
             // Verify token is stored in database
-            val tokenCount = kodexTransaction {
-                PasswordResetTokens.selectAll().count()
+            val tokens = passwordResetSchema.passwordResetTokens
+            val tokenCount = db.transaction {
+                tokens.selectAll().count()
             }
             tokenCount shouldBe 1
 
@@ -168,6 +182,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
             val verifyResult = service.verifyResetToken("invalid-token-12345")
@@ -184,20 +199,22 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
             // Manually insert an expired token
             val expiredToken = "expired-token-12345"
             val now = CurrentKotlinInstant
             val expiredTime = now.minus(2.hours).toLocalDateTime(timeZone)
 
-            kodexTransaction {
-                PasswordResetTokens.insert {
-                    it[PasswordResetTokens.realmId] = "test-realm"
-                    it[PasswordResetTokens.userId] = userId
-                    it[token] = expiredToken
+            val tokens = passwordResetSchema.passwordResetTokens
+            db.transaction {
+                tokens.insert {
+                    it[tokens.realmId] = "test-realm"
+                    it[tokens.userId] = userId
+                    it[token] = TokenHasher.hash(expiredToken)
                     it[contactValue] = "user@example.com"
                     it[createdAt] = expiredTime
                     it[expiresAt] = expiredTime  // Already expired
@@ -224,6 +241,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
             // Request reset for non-existent email
@@ -240,8 +258,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             mockSender.sentTokens.size shouldBe 0
 
             // And no token should be created
-            val tokenCount = kodexTransaction {
-                PasswordResetTokens.selectAll().count()
+            val tokens = passwordResetSchema.passwordResetTokens
+            val tokenCount = db.transaction {
+                tokens.selectAll().count()
             }
             tokenCount shouldBe 0
         }
@@ -257,14 +276,16 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "user@example.com"
-            kodexTransaction {
-                PasswordResetContacts.insert {
-                    it[PasswordResetContacts.realmId] = "test-realm"
-                    it[PasswordResetContacts.userId] = userId
+            val contacts = passwordResetSchema.passwordResetContacts
+            db.transaction {
+                contacts.insert {
+                    it[contacts.realmId] = "test-realm"
+                    it[contacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
                     it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
@@ -298,6 +319,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
             val email = "user@example.com"
@@ -324,6 +346,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
             val ipAddress = "192.168.1.100"
@@ -358,14 +381,16 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "user@example.com"
-            kodexTransaction {
-                PasswordResetContacts.insert {
-                    it[PasswordResetContacts.realmId] = "test-realm"
-                    it[PasswordResetContacts.userId] = userId
+            val contacts = passwordResetSchema.passwordResetContacts
+            db.transaction {
+                contacts.insert {
+                    it[contacts.realmId] = "test-realm"
+                    it[contacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
                     it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
@@ -381,8 +406,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             firstResult.shouldBeInstanceOf<PasswordResetResult.Success>()
 
             // Verify no token was created (send failed)
-            val tokenCount1 = kodexTransaction {
-                PasswordResetTokens.selectAll().count()
+            val tokens = passwordResetSchema.passwordResetTokens
+            val tokenCount1 = db.transaction {
+                tokens.selectAll().count()
             }
             tokenCount1 shouldBe 0
 
@@ -398,8 +424,8 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             thirdResult.shouldBeInstanceOf<PasswordResetResult.Success>()
 
             // Verify token WAS created this time
-            val tokenCount2 = kodexTransaction {
-                PasswordResetTokens.selectAll().count()
+            val tokenCount2 = db.transaction {
+                tokens.selectAll().count()
             }
             tokenCount2 shouldBe 1
         }
@@ -413,14 +439,16 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "user@example.com"
-            kodexTransaction {
-                PasswordResetContacts.insert {
-                    it[PasswordResetContacts.realmId] = "test-realm"
-                    it[PasswordResetContacts.userId] = userId
+            val contacts = passwordResetSchema.passwordResetContacts
+            db.transaction {
+                contacts.insert {
+                    it[contacts.realmId] = "test-realm"
+                    it[contacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
                     it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
@@ -454,14 +482,16 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "user@example.com"
-            kodexTransaction {
-                PasswordResetContacts.insert {
-                    it[PasswordResetContacts.realmId] = "test-realm"
-                    it[PasswordResetContacts.userId] = userId
+            val contacts = passwordResetSchema.passwordResetContacts
+            db.transaction {
+                contacts.insert {
+                    it[contacts.realmId] = "test-realm"
+                    it[contacts.userId] = userId
                     it[contactType] = "EMAIL"
                     it[contactValue] = email
                     it[createdAt] = CurrentKotlinInstant.toLocalDateTime(timeZone)
@@ -493,6 +523,7 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
 
             val extension = config.build(testContext) as PasswordResetExtension
+            extension.initialize(db)
             val service = extension.passwordResetService
 
             val email = "user@example.com"

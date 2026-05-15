@@ -25,7 +25,6 @@ class ConcurrencyTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:concurrent-refresh;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -36,7 +35,7 @@ class ConcurrencyTest : FunSpec({
                             audience("test-audience")
                         }
                         secrets {
-                            raw("concurrent-refresh-secret-32ch!")
+                            raw("concurrent-refresh-secret-32ch!!")
                         }
                         tokenValidity {
                             persist(TokenType.RefreshToken, true)
@@ -89,7 +88,6 @@ class ConcurrencyTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:multi-ip-login;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -100,7 +98,7 @@ class ConcurrencyTest : FunSpec({
                             audience("test-audience")
                         }
                         secrets {
-                            raw("concurrent-update-secret-32ch!!")
+                            raw("concurrent-update-secret-32chars!")
                         }
                     }
                 }
@@ -151,7 +149,6 @@ class ConcurrencyTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:concurrent-failed;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -162,7 +159,7 @@ class ConcurrencyTest : FunSpec({
                             audience("test-audience")
                         }
                         secrets {
-                            raw("concurrent-failed-secret-32ch!!")
+                            raw("concurrent-failed-secret-32chars!")
                         }
                     }
                 }
@@ -220,7 +217,6 @@ class ConcurrencyTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:concurrent-role;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -234,7 +230,7 @@ class ConcurrencyTest : FunSpec({
                             audience("test-audience")
                         }
                         secrets {
-                            raw("concurrent-role-secret-32chars!")
+                            raw("concurrent-role-secret-32chars!!")
                         }
                     }
                 }
@@ -284,7 +280,6 @@ class ConcurrencyTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:concurrent-create;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -295,7 +290,7 @@ class ConcurrencyTest : FunSpec({
                             audience("test-audience")
                         }
                         secrets {
-                            raw("concurrent-create-secret-32ch!!")
+                            raw("concurrent-create-secret-32chars!")
                         }
                     }
                 }
@@ -345,7 +340,6 @@ class ConcurrencyTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:concurrent-login;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -356,7 +350,7 @@ class ConcurrencyTest : FunSpec({
                             audience("test-audience")
                         }
                         secrets {
-                            raw("concurrent-login-secret-32char!")
+                            raw("concurrent-login-secret-32char!!")
                         }
                     }
                 }

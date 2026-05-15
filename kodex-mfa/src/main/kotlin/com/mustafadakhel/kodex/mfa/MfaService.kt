@@ -1,6 +1,5 @@
 package com.mustafadakhel.kodex.mfa
 
-import com.mustafadakhel.kodex.mfa.database.MfaMethodType
 import kotlinx.datetime.Instant
 import java.util.UUID
 

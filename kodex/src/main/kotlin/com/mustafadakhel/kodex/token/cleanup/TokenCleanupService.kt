@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.token.cleanup
 
 import com.mustafadakhel.kodex.observability.KodexLogger
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -23,12 +24,13 @@ import kotlin.time.Duration.Companion.hours
  * @param timeZone used to convert instants to local date-times for database queries
  */
 public class TokenCleanupService(
+    private val db: KodexDatabase,
     private val realmId: String,
     private val cleanupInterval: Duration = 1.hours,
     private val retentionPeriod: Duration = 7.days,
     private val timeZone: TimeZone = TimeZone.UTC
 ) {
-    private val repository = TokenCleanupRepository(realmId)
+    private val repository = TokenCleanupRepository(db, realmId)
     private val logger = KodexLogger.logger<TokenCleanupService>()
     private var cleanupJob: Job? = null
 

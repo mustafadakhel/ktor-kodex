@@ -22,7 +22,7 @@ internal class UpdateCommandProcessor(
 ) {
 
     suspend fun execute(command: UpdateCommand): UpdateResult {
-        val currentUserEntity = userRepository.findFullById(command.userId, realmId)
+        val currentUserEntity = userRepository.findFullById(command.userId)
             ?: return UpdateResult.Failure.NotFound(command.userId)
 
         val transformedCommand = try {
@@ -207,7 +207,6 @@ internal class UpdateCommandProcessor(
         // Apply update through repository
         val repositoryResult = userRepository.updateById(
             userId = current.id,
-            realmId = realmId,
             email = updates.email,
             phone = updates.phone,
             status = updates.status,
@@ -217,7 +216,7 @@ internal class UpdateCommandProcessor(
         return when (repositoryResult) {
             is UserRepository.UpdateUserResult.Success -> {
                 // Fetch updated user
-                val updatedUserEntity = userRepository.findFullById(current.id, realmId)
+                val updatedUserEntity = userRepository.findFullById(current.id)
                     ?: return UpdateResult.Failure.Unknown("User disappeared after update")
 
                 // Recalculate actual changes (in case repository modified something)
@@ -280,11 +279,11 @@ internal class UpdateCommandProcessor(
             profilePicture = newProfilePicture
         )
 
-        val repositoryResult = userRepository.updateProfileByUserId(current.id, realmId, newProfile)
+        val repositoryResult = userRepository.updateProfileByUserId(current.id, newProfile)
 
         return when (repositoryResult) {
             is UserRepository.UpdateProfileResult.Success -> {
-                val updatedUserEntity = userRepository.findFullById(current.id, realmId)
+                val updatedUserEntity = userRepository.findFullById(current.id)
                     ?: return UpdateResult.Failure.Unknown("User disappeared after update")
 
                 val actualChanges = changeTracker.detectChanges(current, UpdateProfileFields(current.id, updates))
@@ -314,7 +313,7 @@ internal class UpdateCommandProcessor(
         val repositoryResult = if (hasReplaceAll) {
             // Use replaceAll for ReplaceAll operations
             val replaceChange = changes.changes.first { it is AttributeChange.ReplaceAll } as AttributeChange.ReplaceAll
-            userRepository.replaceAllCustomAttributesByUserId(current.id, realmId, replaceChange.attributes)
+            userRepository.replaceAllCustomAttributesByUserId(current.id, replaceChange.attributes)
         } else {
             // Apply individual changes
             val newAttrs = currentAttrs.toMutableMap()
@@ -325,12 +324,12 @@ internal class UpdateCommandProcessor(
                     is AttributeChange.ReplaceAll -> {} // Already handled
                 }
             }
-            userRepository.updateCustomAttributesByUserId(current.id, realmId, newAttrs)
+            userRepository.updateCustomAttributesByUserId(current.id, newAttrs)
         }
 
         return when (repositoryResult) {
             is UserRepository.UpdateUserResult.Success -> {
-                val updatedUserEntity = userRepository.findFullById(current.id, realmId)
+                val updatedUserEntity = userRepository.findFullById(current.id)
                     ?: return UpdateResult.Failure.Unknown("User disappeared after update")
 
                 val actualChanges = changeTracker.detectChanges(current, UpdateAttributes(current.id, changes))
@@ -358,7 +357,6 @@ internal class UpdateCommandProcessor(
         // Execute batch update atomically in single transaction
         val repositoryResult = userRepository.updateBatch(
             userId = current.id,
-            realmId = realmId,
             email = batch.userFields?.email ?: FieldUpdate.NoChange,
             phone = batch.userFields?.phone ?: FieldUpdate.NoChange,
             status = batch.userFields?.status ?: FieldUpdate.NoChange,
@@ -414,7 +412,7 @@ internal class UpdateCommandProcessor(
 
         return when (repositoryResult) {
             is UserRepository.UpdateUserResult.Success -> {
-                val updatedUserEntity = userRepository.findFullById(current.id, realmId)
+                val updatedUserEntity = userRepository.findFullById(current.id)
                     ?: return UpdateResult.Failure.Unknown("User disappeared after update")
 
                 val actualChanges = changeTracker.detectBatchChanges(current.toFullUser(), batch)

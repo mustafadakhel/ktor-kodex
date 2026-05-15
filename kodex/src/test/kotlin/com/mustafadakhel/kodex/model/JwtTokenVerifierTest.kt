@@ -48,12 +48,12 @@ class JwtTokenVerifierTest : FunSpec({
     }
     val realm = Realm("test-realm")
     val userRepository = mockk<UserRepository> {
-        every { findRoles(any(), any()) } returns listOf(
+        every { findRoles(any()) } returns listOf(
             RoleEntity("user", null),
             RoleEntity("admin", null)
         )
-        every { findById(any(), any()) } returns null
-        every { findFullById(any(), any()) } returns null
+        every { findById(any()) } returns null
+        every { findFullById(any()) } returns null
     }
     val tokenPersistence = mapOf(
         TokenType.AccessToken to true,

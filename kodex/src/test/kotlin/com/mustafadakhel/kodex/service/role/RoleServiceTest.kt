@@ -89,16 +89,16 @@ class RoleServiceTest : FunSpec({
         val newRoleNames = listOf("admin", "moderator")
         val eventSlot = slot<UserEvent.RolesUpdated>()
 
-        every { userRepository.findById(testUserId, realmOwner) } returns mockk()
-        every { userRepository.findRoles(testUserId, realmOwner) } returns currentRoles
-        every { userRepository.updateRolesForUser(testUserId, realmOwner, newRoleNames) } returns
+        every { userRepository.findById(testUserId) } returns mockk()
+        every { userRepository.findRoles(testUserId) } returns currentRoles
+        every { userRepository.updateRolesForUser(testUserId, newRoleNames) } returns
             UserRepository.UpdateRolesResult.Success
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         roleService.updateUserRoles(testUserId, newRoleNames)
 
-        verify(exactly = 1) { userRepository.findRoles(testUserId, realmOwner) }
-        verify(exactly = 1) { userRepository.updateRolesForUser(testUserId, realmOwner, newRoleNames) }
+        verify(exactly = 1) { userRepository.findRoles(testUserId) }
+        verify(exactly = 1) { userRepository.updateRolesForUser(testUserId, newRoleNames) }
         coVerify(exactly = 1) { eventBus.publish(any<UserEvent.RolesUpdated>()) }
 
         eventSlot.captured.apply {
@@ -114,9 +114,9 @@ class RoleServiceTest : FunSpec({
         val invalidRoleName = "invalid-role"
         val newRoleNames = listOf("admin", invalidRoleName)
 
-        every { userRepository.findById(testUserId, realmOwner) } returns mockk()
-        every { userRepository.findRoles(testUserId, realmOwner) } returns emptyList()
-        every { userRepository.updateRolesForUser(testUserId, realmOwner, newRoleNames) } returns
+        every { userRepository.findById(testUserId) } returns mockk()
+        every { userRepository.findRoles(testUserId) } returns emptyList()
+        every { userRepository.updateRolesForUser(testUserId, newRoleNames) } returns
             UserRepository.UpdateRolesResult.InvalidRole(invalidRoleName)
 
         val exception = shouldThrow<KodexThrowable.RoleNotFound> {
@@ -131,9 +131,9 @@ class RoleServiceTest : FunSpec({
         val newRoleNames = listOf("user")
         val eventSlot = slot<UserEvent.RolesUpdated>()
 
-        every { userRepository.findById(testUserId, realmOwner) } returns mockk()
-        every { userRepository.findRoles(testUserId, realmOwner) } returns emptyList()
-        every { userRepository.updateRolesForUser(testUserId, realmOwner, newRoleNames) } returns
+        every { userRepository.findById(testUserId) } returns mockk()
+        every { userRepository.findRoles(testUserId) } returns emptyList()
+        every { userRepository.updateRolesForUser(testUserId, newRoleNames) } returns
             UserRepository.UpdateRolesResult.Success
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
@@ -150,9 +150,9 @@ class RoleServiceTest : FunSpec({
         val newRoleNames = emptyList<String>()
         val eventSlot = slot<UserEvent.RolesUpdated>()
 
-        every { userRepository.findById(testUserId, realmOwner) } returns mockk()
-        every { userRepository.findRoles(testUserId, realmOwner) } returns currentRoles
-        every { userRepository.updateRolesForUser(testUserId, realmOwner, newRoleNames) } returns
+        every { userRepository.findById(testUserId) } returns mockk()
+        every { userRepository.findRoles(testUserId) } returns currentRoles
+        every { userRepository.updateRolesForUser(testUserId, newRoleNames) } returns
             UserRepository.UpdateRolesResult.Success
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
@@ -172,9 +172,9 @@ class RoleServiceTest : FunSpec({
         val newRoleNames = listOf("admin", "admin", "user")
         val eventSlot = slot<UserEvent.RolesUpdated>()
 
-        every { userRepository.findById(testUserId, realmOwner) } returns mockk()
-        every { userRepository.findRoles(testUserId, realmOwner) } returns currentRoles
-        every { userRepository.updateRolesForUser(testUserId, realmOwner, newRoleNames) } returns
+        every { userRepository.findById(testUserId) } returns mockk()
+        every { userRepository.findRoles(testUserId) } returns currentRoles
+        every { userRepository.updateRolesForUser(testUserId, newRoleNames) } returns
             UserRepository.UpdateRolesResult.Success
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 

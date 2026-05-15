@@ -1,46 +1,48 @@
-package com.mustafadakhel.kodex.model.database
+package com.mustafadakhel.kodex.repository
 
-import com.mustafadakhel.kodex.util.hikariDataSource
-import com.mustafadakhel.kodex.util.setupExposedEngine
+import com.mustafadakhel.kodex.model.Role
+import com.mustafadakhel.kodex.repository.database.databaseUserRepository
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.contain
-import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.now
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.transactions.transaction
+import kotlinx.datetime.LocalDateTime
+import org.jetbrains.exposed.sql.Database
 import java.util.*
 
 class UserCustomAttributesValidationTest : DescribeSpec({
 
-    val dataSource = hikariDataSource()
-    val engine = setupExposedEngine(dataSource)
+    lateinit var db: KodexDatabase
+    lateinit var userRepository: UserRepository
+    val testRealm = "test-realm"
+    val now = LocalDateTime(2024, 1, 15, 10, 30)
 
     beforeEach {
-        transaction {
-            // Create test user
-            val now = now(TimeZone.UTC)
-            UserDao.new {
-                passwordHash = "hash"
-                createdAt = now
-                updatedAt = now
-                realmId = "test-realm"
-            }
-        }
+        val database = Database.connect(
+            "jdbc:h2:mem:attr_validation_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
+            driver = "org.h2.Driver"
+        )
+        val core = CoreSchema("test_")
+        db = KodexDatabase(database, core)
+        db.createSchema()
+        userRepository = databaseUserRepository(db, testRealm)
+        userRepository.seedRoles(listOf(Role("U", "")))
     }
 
-    afterEach {
-        transaction {
-            UserCustomAttributesDao.all().forEach { it.delete() }
-            UserDao.all().forEach { it.delete() }
-        }
-    }
-
-    afterSpec {
-        engine.clear()
+    fun createUserWithAttrs(attrs: Map<String, String>): UUID {
+        val result = userRepository.create(
+            email = "test-${UUID.randomUUID()}@example.com",
+            phone = null,
+            hashedPassword = "hash",
+            roleNames = listOf("U"),
+            customAttributes = attrs,
+            profile = null,
+            currentTime = now,
+        )
+        return (result as UserRepository.CreateUserResult.Success).user.id
     }
 
     describe("Custom Attribute Key Validation") {
@@ -48,97 +50,45 @@ class UserCustomAttributesValidationTest : DescribeSpec({
         describe("Valid keys") {
 
             it("should accept alphanumeric keys") {
-                val userId = transaction { UserDao.all().first().id.value }
-
-                transaction {
-                    UserCustomAttributesDao.createForUser(
-                        userId,
-                        mapOf("myKey123" to "value")
-                    )
-                }
-
-                transaction {
-                    val attrs = UserCustomAttributesDao.findByUserId(userId)
-                    attrs.size shouldBe 1
-                    attrs.first().key shouldBe "myKey123"
-                }
+                val userId = createUserWithAttrs(mapOf("myKey123" to "value"))
+                val attrs = userRepository.findCustomAttributesByUserId(userId)
+                attrs.size shouldBe 1
+                attrs["myKey123"] shouldBe "value"
             }
 
             it("should accept keys with underscores") {
-                val userId = transaction { UserDao.all().first().id.value }
-
-                transaction {
-                    UserCustomAttributesDao.createForUser(
-                        userId,
-                        mapOf("my_key_name" to "value")
-                    )
-                }
-
-                transaction {
-                    val attrs = UserCustomAttributesDao.findByUserId(userId)
-                    attrs.first().key shouldBe "my_key_name"
-                }
+                val userId = createUserWithAttrs(mapOf("my_key_name" to "value"))
+                val attrs = userRepository.findCustomAttributesByUserId(userId)
+                attrs["my_key_name"] shouldBe "value"
             }
 
             it("should accept keys with hyphens") {
-                val userId = transaction { UserDao.all().first().id.value }
-
-                transaction {
-                    UserCustomAttributesDao.createForUser(
-                        userId,
-                        mapOf("my-key-name" to "value")
-                    )
-                }
-
-                transaction {
-                    val attrs = UserCustomAttributesDao.findByUserId(userId)
-                    attrs.first().key shouldBe "my-key-name"
-                }
+                val userId = createUserWithAttrs(mapOf("my-key-name" to "value"))
+                val attrs = userRepository.findCustomAttributesByUserId(userId)
+                attrs["my-key-name"] shouldBe "value"
             }
         }
 
         describe("Invalid characters") {
 
             it("should reject keys with SQL injection characters") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 val exception = shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("key'; DROP TABLE users--" to "value")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("key'; DROP TABLE users--" to "value"))
                 }
-
                 exception.message should contain("invalid characters")
             }
 
             it("should reject keys with quotes") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("key\"value" to "value")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("key\"value" to "value"))
                 }
 
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("key'value" to "value")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("key'value" to "value"))
                 }
             }
 
             it("should reject keys with special characters") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 val invalidKeys = listOf(
                     "key" + "@" + "value",
                     "key#value",
@@ -167,35 +117,18 @@ class UserCustomAttributesValidationTest : DescribeSpec({
 
                 invalidKeys.forEach { invalidKey ->
                     shouldThrow<IllegalArgumentException> {
-                        transaction {
-                            UserCustomAttributesDao.createForUser(
-                                userId,
-                                mapOf(invalidKey to "value")
-                            )
-                        }
+                        createUserWithAttrs(mapOf(invalidKey to "value"))
                     }
                 }
             }
 
             it("should reject blank keys") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("" to "value")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("" to "value"))
                 }
 
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("   " to "value")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("   " to "value"))
                 }
             }
         }
@@ -203,66 +136,32 @@ class UserCustomAttributesValidationTest : DescribeSpec({
         describe("Blocked keys") {
 
             it("should reject __proto__") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 val exception = shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("__proto__" to "malicious")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("__proto__" to "malicious"))
                 }
-
                 exception.message should contain("blocked for security reasons")
             }
 
             it("should reject constructor") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("constructor" to "malicious")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("constructor" to "malicious"))
                 }
             }
 
             it("should reject prototype") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("prototype" to "malicious")
-                        )
-                    }
+                    createUserWithAttrs(mapOf("prototype" to "malicious"))
                 }
             }
 
             it("should reject blocked keys case-insensitively") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 val blockedVariants = listOf(
-                    "__PROTO__",
-                    "__Proto__",
-                    "CONSTRUCTOR",
-                    "Constructor",
-                    "PROTOTYPE",
-                    "Prototype"
+                    "__PROTO__", "__Proto__", "CONSTRUCTOR", "Constructor", "PROTOTYPE", "Prototype"
                 )
 
                 blockedVariants.forEach { blockedKey ->
                     shouldThrow<IllegalArgumentException> {
-                        transaction {
-                            UserCustomAttributesDao.createForUser(
-                                userId,
-                                mapOf(blockedKey to "value")
-                            )
-                        }
+                        createUserWithAttrs(mapOf(blockedKey to "value"))
                     }
                 }
             }
@@ -271,86 +170,50 @@ class UserCustomAttributesValidationTest : DescribeSpec({
         describe("Length limits") {
 
             it("should enforce key length limit") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 // 100 characters is the max
                 val validKey = "a".repeat(100)
-                transaction {
-                    UserCustomAttributesDao.createForUser(
-                        userId,
-                        mapOf(validKey to "value")
-                    )
-                }
+                createUserWithAttrs(mapOf(validKey to "value"))
 
                 // 101 characters should fail
                 val tooLongKey = "a".repeat(101)
                 val exception = shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf(tooLongKey to "value")
-                        )
-                    }
+                    createUserWithAttrs(mapOf(tooLongKey to "value"))
                 }
-
                 exception.message should contain("too long")
             }
 
             it("should enforce value length limit") {
-                val userId = transaction { UserDao.all().first().id.value }
-
                 // 4096 characters is the max
                 val validValue = "a".repeat(4096)
-                transaction {
-                    UserCustomAttributesDao.createForUser(
-                        userId,
-                        mapOf("key" to validValue)
-                    )
-                }
+                createUserWithAttrs(mapOf("key" to validValue))
 
                 // 4097 characters should fail
                 val tooLongValue = "a".repeat(4097)
                 val exception = shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.createForUser(
-                            userId,
-                            mapOf("key2" to tooLongValue)
-                        )
-                    }
+                    createUserWithAttrs(mapOf("key2" to tooLongValue))
                 }
-
                 exception.message should contain("too long")
             }
         }
 
-        describe("replaceAllForUser validation") {
+        describe("replaceAllCustomAttributesByUserId validation") {
 
-            it("should validate keys in replaceAllForUser") {
-                val userId = transaction { UserDao.all().first().id.value }
+            it("should validate keys in replaceAll") {
+                val userId = createUserWithAttrs(mapOf("valid" to "value"))
 
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.replaceAllForUser(
-                            userId,
-                            mapOf("invalid@key" to "value")
-                        )
-                    }
+                    userRepository.replaceAllCustomAttributesByUserId(userId, mapOf("invalid@key" to "value"))
                 }
             }
         }
 
-        describe("updateForUser validation") {
+        describe("updateCustomAttributesByUserId validation") {
 
-            it("should validate keys in updateForUser") {
-                val userId = transaction { UserDao.all().first().id.value }
+            it("should validate keys in update") {
+                val userId = createUserWithAttrs(mapOf("valid" to "value"))
 
                 shouldThrow<IllegalArgumentException> {
-                    transaction {
-                        UserCustomAttributesDao.updateForUser(
-                            userId,
-                            mapOf("invalid@key" to "value")
-                        )
-                    }
+                    userRepository.updateCustomAttributesByUserId(userId, mapOf("invalid@key" to "value"))
                 }
             }
         }

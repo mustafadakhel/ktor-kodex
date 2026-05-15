@@ -106,7 +106,6 @@ dependencies {
     implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
-    implementation(libs.flyway.core)
     compileOnly(libs.micrometer.core)
 
     testImplementation(libs.h2.database)

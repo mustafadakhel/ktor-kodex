@@ -6,36 +6,34 @@ import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserUpdateData
-import com.mustafadakhel.kodex.lockout.database.AccountLocks
-import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
+import com.mustafadakhel.kodex.lockout.schema.LockoutSchema
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Table
 import java.util.*
 
-/**
- * Account lockout extension that protects against brute force attacks.
- * Implements OWASP/NIST compliant two-layer protection:
- * - Layer 1 (beforeLogin): Throttling based on identifier + IP
- * - Layer 2 (afterAuthentication): Account lockout for real accounts only
- *
- * Priority: 10 (critical) - runs early to block throttled requests and locked accounts.
- */
 public class AccountLockoutExtension internal constructor(
-    private val service: AccountLockoutService,
-    private val timeZone: TimeZone
-) : UserLifecycleHooks, PersistentExtension {
+    private val policy: AccountLockoutPolicy,
+    private val timeZone: TimeZone,
+    private val realmId: String
+) : UserLifecycleHooks, PersistentExtension, DatabaseAwareExtension {
 
     override val priority: Int = 10
 
-    override fun tables(): List<Table> = listOf(
-        FailedLoginAttempts,
-        AccountLocks
-    )
+    private lateinit var service: AccountLockoutService
+
+    override fun createSchema(core: CoreSchema): ExtensionSchema = LockoutSchema(core)
+
+    override fun initialize(db: KodexDatabase) {
+        val schema = db.schema<LockoutSchema>()
+        service = accountLockoutService(db, schema, policy, timeZone, realmId)
+    }
 
     override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
-        // Layer 1: Check throttling (identifier + IP based)
         val identifierThrottle = service.shouldThrottleIdentifier(identifier)
         if (identifierThrottle is ThrottleResult.Throttled) {
             throw LockoutThrowable.TooManyAttempts(
@@ -54,14 +52,11 @@ public class AccountLockoutExtension internal constructor(
     }
 
     override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
-        // Layer 2: Check if account is locked or should be locked
         val nowLocal = now(timeZone)
 
-        // First check if account is already locked
         if (service.isAccountLocked(user.userId, nowLocal)) {
-            // Account is already locked - block login
             throw LockoutThrowable.AccountLocked(
-                lockedUntil = nowLocal,  // We don't have exact time but nowLocal is safe
+                lockedUntil = nowLocal,
                 reason = "Account is locked due to too many failed login attempts"
             )
         }
@@ -86,8 +81,6 @@ public class AccountLockoutExtension internal constructor(
         identifierType: String,
         metadata: LoginMetadata
     ) {
-        // Record failed attempt with all metadata
-        // userId will be null if account doesn't exist (prevents username enumeration)
         service.recordFailedAttempt(
             identifier = identifier,
             userId = userId,

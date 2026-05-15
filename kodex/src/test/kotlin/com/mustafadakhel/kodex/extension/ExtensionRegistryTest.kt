@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.extension
 
-import com.mustafadakhel.kodex.repository.UserRepository
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.ExtensionSchema
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -18,6 +19,11 @@ private interface AnotherExtension : RealmExtension
 private class TestExtensionImpl(override val priority: Int = 100) : TestExtension
 private class AnotherExtensionImpl : AnotherExtension
 
+// Stub ExtensionSchema for tests
+private class StubExtensionSchema(private val schemaTables: List<Table>) : ExtensionSchema {
+    override fun tables(): List<Table> = schemaTables
+}
+
 // Persistent extension for table testing
 private class PersistentTestExtension : PersistentExtension {
     companion object {
@@ -25,7 +31,8 @@ private class PersistentTestExtension : PersistentExtension {
         val AnotherTestTable = object : Table("another_test_table") {}
     }
 
-    override fun tables(): List<Table> = listOf(TestTable, AnotherTestTable)
+    override fun createSchema(core: CoreSchema): ExtensionSchema =
+        StubExtensionSchema(listOf(TestTable, AnotherTestTable))
 }
 
 // Test service for ServiceProvider testing
@@ -71,7 +78,8 @@ class ExtensionRegistryTest : DescribeSpec({
 
             it("should return empty tables list") {
                 val registry = ExtensionRegistry.empty()
-                registry.getTables().shouldBeEmpty()
+                val core = CoreSchema("test_")
+                registry.collectSchemas(core).values.flatMap { it.tables() }.shouldBeEmpty()
             }
         }
 
@@ -241,14 +249,16 @@ class ExtensionRegistryTest : DescribeSpec({
             }
         }
 
-        describe("getTables") {
+        describe("collectSchemas") {
+            val core = CoreSchema("test_")
+
             it("should collect tables from persistent extensions") {
                 val persistentExt = PersistentTestExtension()
                 val registry = ExtensionRegistry.from(
                     mapOf(PersistentExtension::class to persistentExt)
                 )
 
-                val tables = registry.getTables()
+                val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
                 tables.size shouldBe 2
                 tables shouldContainExactly listOf(
                     PersistentTestExtension.TestTable,
@@ -261,32 +271,12 @@ class ExtensionRegistryTest : DescribeSpec({
                     mapOf(TestExtension::class to TestExtensionImpl())
                 )
 
-                registry.getTables().shouldBeEmpty()
+                registry.collectSchemas(core).values.flatMap { it.tables() }.shouldBeEmpty()
             }
 
             it("should return empty list for empty registry") {
                 val registry = ExtensionRegistry.empty()
-                registry.getTables().shouldBeEmpty()
-            }
-
-            it("should deduplicate tables from multiple extensions") {
-                val sharedTable = object : Table("shared_table") {}
-
-                val ext1 = object : PersistentExtension {
-                    override fun tables() = listOf(sharedTable)
-                }
-
-                val ext2 = object : PersistentExtension {
-                    override fun tables() = listOf(sharedTable)
-                }
-
-                val registry = ExtensionRegistry.fromLists(
-                    mapOf(PersistentExtension::class to listOf(ext1, ext2))
-                )
-
-                val tables = registry.getTables()
-                tables.size shouldBe 1
-                tables[0] shouldBe sharedTable
+                registry.collectSchemas(core).values.flatMap { it.tables() }.shouldBeEmpty()
             }
 
             it("should flatten tables from multiple persistent extensions") {
@@ -294,18 +284,24 @@ class ExtensionRegistryTest : DescribeSpec({
                 val table2 = object : Table("table2") {}
 
                 val ext1 = object : PersistentExtension {
-                    override fun tables() = listOf(table1)
+                    override fun createSchema(core: CoreSchema): ExtensionSchema =
+                        object : ExtensionSchema {
+                            override fun tables() = listOf(table1)
+                        }
                 }
 
                 val ext2 = object : PersistentExtension {
-                    override fun tables() = listOf(table2)
+                    override fun createSchema(core: CoreSchema): ExtensionSchema =
+                        object : ExtensionSchema {
+                            override fun tables() = listOf(table2)
+                        }
                 }
 
                 val registry = ExtensionRegistry.fromLists(
                     mapOf(PersistentExtension::class to listOf(ext1, ext2))
                 )
 
-                val tables = registry.getTables()
+                val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
                 tables.size shouldBe 2
                 tables shouldContainExactly listOf(table1, table2)
             }

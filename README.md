@@ -257,10 +257,10 @@ realm("admin") {
 ```
 
 Database connectivity is configured in the `database` block where a `HikariConfig` is available. After installation you
-can obtain services using `application.kodex.serviceOf(realm)`:
+can obtain services using `application.kodex.servicesOf(realm)`:
 
 ```kotlin
-val services = application.kodex.serviceOf(Realm("admin"))
+val services = application.kodex.servicesOf(Realm("admin"))
 
 // User management operations
 val user = services.users.createUser(email, phone, password)
@@ -385,7 +385,7 @@ tokenRotation {
 The rotation is transparent to your application code - simply call `refresh()` as usual:
 
 ```kotlin
-val services = application.kodex.serviceOf(Realm("admin"))
+val services = application.kodex.servicesOf(Realm("admin"))
 val tokenPair = services.tokens.refresh(userId, refreshToken)
 // Returns new access and refresh tokens
 // Old refresh token is now single-use and cannot be replayed
@@ -441,7 +441,7 @@ realm("admin") {
 **Validation is automatically enforced** on all user operations (when configured):
 
 ```kotlin
-val services = application.kodex.serviceOf(Realm("admin"))
+val services = application.kodex.servicesOf(Realm("admin"))
 
 // Validation happens automatically
 val user = services.users.createUser(
@@ -498,7 +498,7 @@ All user and authentication operations publish typed events:
 The event bus provides a clean separation between domain logic and audit logging:
 
 ```kotlin
-val services = application.kodex.serviceOf(Realm("admin"))
+val services = application.kodex.servicesOf(Realm("admin"))
 
 // Events are published automatically by the service layer
 services.users.createUser(email, phone, password, ...)

@@ -31,7 +31,7 @@ internal class JwtTokenIssuer internal constructor(
         rolesParam: List<String>?,
         tokenFamily: UUID?
     ): GeneratedToken {
-        val roles = rolesParam ?: userRepository.findRoles(userId, realm.name).map { it.name }
+        val roles = rolesParam ?: userRepository.findRoles(userId).map { it.name }
         val (secret, kid) = secretsConfig.randomWithKid()
 
         val token = TokenGenerator.generate(

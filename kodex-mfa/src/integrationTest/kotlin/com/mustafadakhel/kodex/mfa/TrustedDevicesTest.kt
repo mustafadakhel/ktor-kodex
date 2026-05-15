@@ -57,7 +57,6 @@ class TrustedDevicesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:trusted-device-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -208,7 +207,6 @@ class TrustedDevicesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:remove-device-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -320,7 +318,6 @@ class TrustedDevicesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:remove-all-devices-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

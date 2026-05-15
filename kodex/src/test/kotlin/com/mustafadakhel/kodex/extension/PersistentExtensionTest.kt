@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.extension
 
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.ExtensionSchema
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -20,16 +22,23 @@ private object TestTable3 : Table("test_table_3") {
     override val primaryKey = PrimaryKey(id)
 }
 
+private class TestStubExtensionSchema(private val schemaTables: List<Table>) : ExtensionSchema {
+    override fun tables(): List<Table> = schemaTables
+}
+
 class PersistentExtensionTest : DescribeSpec({
+
+    val core = CoreSchema("test_")
 
     describe("PersistentExtension") {
         it("should return tables from single persistent extension") {
             val extension = object : PersistentExtension, UserLifecycleHooks {
-                override fun tables() = listOf(TestTable1, TestTable2)
+                override fun createSchema(core: CoreSchema): ExtensionSchema =
+                    TestStubExtensionSchema(listOf(TestTable1, TestTable2))
             }
 
             val registry = ExtensionRegistry.from(mapOf(UserLifecycleHooks::class to extension))
-            val tables = registry.getTables()
+            val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
 
             tables shouldContainExactly listOf(TestTable1, TestTable2)
         }
@@ -37,37 +46,24 @@ class PersistentExtensionTest : DescribeSpec({
         it("should collect tables from multiple persistent extensions") {
             val extension1 = object : PersistentExtension, UserLifecycleHooks {
                 override val priority = 1
-                override fun tables() = listOf(TestTable1)
+                override fun createSchema(core: CoreSchema): ExtensionSchema =
+                    object : ExtensionSchema {
+                        override fun tables() = listOf(TestTable1)
+                    }
             }
 
             val extension2 = object : PersistentExtension, UserLifecycleHooks {
                 override val priority = 2
-                override fun tables() = listOf(TestTable2, TestTable3)
+                override fun createSchema(core: CoreSchema): ExtensionSchema =
+                    object : ExtensionSchema {
+                        override fun tables() = listOf(TestTable2, TestTable3)
+                    }
             }
 
             val registry = ExtensionRegistry.fromLists(
                 mapOf(UserLifecycleHooks::class to listOf(extension1, extension2))
             )
-            val tables = registry.getTables()
-
-            tables shouldContainExactly listOf(TestTable1, TestTable2, TestTable3)
-        }
-
-        it("should deduplicate tables when multiple extensions return same table") {
-            val extension1 = object : PersistentExtension, UserLifecycleHooks {
-                override val priority = 1
-                override fun tables() = listOf(TestTable1, TestTable2)
-            }
-
-            val extension2 = object : PersistentExtension, UserLifecycleHooks {
-                override val priority = 2
-                override fun tables() = listOf(TestTable2, TestTable3)
-            }
-
-            val registry = ExtensionRegistry.fromLists(
-                mapOf(UserLifecycleHooks::class to listOf(extension1, extension2))
-            )
-            val tables = registry.getTables()
+            val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
 
             tables shouldContainExactly listOf(TestTable1, TestTable2, TestTable3)
         }
@@ -78,7 +74,7 @@ class PersistentExtensionTest : DescribeSpec({
             }
 
             val registry = ExtensionRegistry.from(mapOf(UserLifecycleHooks::class to extension))
-            val tables = registry.getTables()
+            val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
 
             tables shouldBe emptyList()
         }
@@ -86,7 +82,8 @@ class PersistentExtensionTest : DescribeSpec({
         it("should mix persistent and non-persistent extensions") {
             val persistentExt = object : PersistentExtension, UserLifecycleHooks {
                 override val priority = 1
-                override fun tables() = listOf(TestTable1)
+                override fun createSchema(core: CoreSchema): ExtensionSchema =
+                    TestStubExtensionSchema(listOf(TestTable1))
             }
 
             val nonPersistentExt = object : UserLifecycleHooks {
@@ -96,14 +93,14 @@ class PersistentExtensionTest : DescribeSpec({
             val registry = ExtensionRegistry.fromLists(
                 mapOf(UserLifecycleHooks::class to listOf(persistentExt, nonPersistentExt))
             )
-            val tables = registry.getTables()
+            val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
 
             tables shouldContainExactly listOf(TestTable1)
         }
 
         it("should return empty list from empty registry") {
             val registry = ExtensionRegistry.empty()
-            val tables = registry.getTables()
+            val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
 
             tables shouldBe emptyList()
         }

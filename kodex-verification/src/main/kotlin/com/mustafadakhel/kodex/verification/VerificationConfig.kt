@@ -2,6 +2,10 @@ package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter
+import com.mustafadakhel.kodex.tokens.token.HexFormat
+import com.mustafadakhel.kodex.tokens.token.NumericFormat
+import com.mustafadakhel.kodex.tokens.token.TokenFormat
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
 import com.mustafadakhel.kodex.validation.validate
@@ -11,14 +15,16 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
 public data class ContactVerificationPolicy(
-    val identifier: ContactIdentifier,
+    val contactType: ContactType,
     val required: Boolean = false,
     val autoSend: Boolean = true,
     val tokenExpiration: Duration? = null,
-    val sender: VerificationSender? = null
+    val sender: VerificationSender? = null,
+    val tokenFormat: TokenFormat<String> = HexFormat(),
+    val dependsOn: List<ContactType> = emptyList()
 )
 
-public class ContactPolicyBuilder internal constructor(private val identifier: ContactIdentifier) {
+public class ContactPolicyBuilder internal constructor(private val contactType: ContactType) {
     /** Whether verification of this contact is required before login (default: false) */
     public var required: Boolean = false
 
@@ -31,13 +37,30 @@ public class ContactPolicyBuilder internal constructor(private val identifier: C
     /** The sender implementation for this contact type (required for auto-send to work) */
     public var sender: VerificationSender? = null
 
-    internal fun build(): ContactVerificationPolicy = ContactVerificationPolicy(
-        identifier = identifier,
-        required = required,
-        autoSend = autoSend,
-        tokenExpiration = tokenExpiration,
-        sender = sender
-    )
+    /** Token format for this contact type. Defaults to NumericFormat(6) for phone, HexFormat() for others. */
+    public var tokenFormat: TokenFormat<String>? = null
+
+    private val _dependsOn = mutableListOf<ContactType>()
+
+    public fun dependsOn(type: ContactType) {
+        _dependsOn += type
+    }
+
+    internal fun build(): ContactVerificationPolicy {
+        val resolvedFormat = tokenFormat ?: when (contactType) {
+            is ContactType.Phone -> NumericFormat(6)
+            else -> HexFormat()
+        }
+        return ContactVerificationPolicy(
+            contactType = contactType,
+            required = required,
+            autoSend = autoSend,
+            tokenExpiration = tokenExpiration,
+            sender = sender,
+            tokenFormat = resolvedFormat,
+            dependsOn = _dependsOn.toList()
+        )
+    }
 }
 
 /**
@@ -54,15 +77,16 @@ public class ContactPolicyBuilder internal constructor(private val identifier: C
  *         email {
  *             required = true
  *             autoSend = true
- *             tokenExpiration = 24.hours  // Override default
+ *             tokenExpiration = 24.hours
  *             sender = EmailVerificationSender(emailProvider)
  *         }
  *
  *         phone {
  *             required = false
- *             autoSend = true
- *             tokenExpiration = 10.minutes  // SMS expires faster
+ *             autoSend = false
+ *             tokenExpiration = 10.minutes
  *             sender = SMSVerificationSender(twilioClient)
+ *             dependsOn(ContactType.Email)
  *         }
  *
  *         customAttribute("discord") {
@@ -70,6 +94,7 @@ public class ContactPolicyBuilder internal constructor(private val identifier: C
  *             autoSend = false
  *             tokenExpiration = 30.minutes
  *             sender = DiscordVerificationSender(discordBot)
+ *             dependsOn(ContactType.CustomAttribute("telegram"))
  *         }
  *     }
  * }
@@ -123,41 +148,41 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
     public var sendCooldownPeriod: Duration? = null
 
     public fun email(block: ContactPolicyBuilder.() -> Unit) {
-        val identifier = ContactIdentifier(ContactType.EMAIL)
-        val builder = ContactPolicyBuilder(identifier)
+        val type = ContactType.Email
+        val builder = ContactPolicyBuilder(type)
         builder.block()
-        policies[identifier.key] = builder.build()
+        policies[type.key] = builder.build()
     }
 
     public fun phone(block: ContactPolicyBuilder.() -> Unit) {
-        val identifier = ContactIdentifier(ContactType.PHONE)
-        val builder = ContactPolicyBuilder(identifier)
+        val type = ContactType.Phone
+        val builder = ContactPolicyBuilder(type)
         builder.block()
-        policies[identifier.key] = builder.build()
+        policies[type.key] = builder.build()
     }
 
     public fun customAttribute(attributeKey: String, block: ContactPolicyBuilder.() -> Unit) {
-        val identifier = ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, attributeKey)
-        val builder = ContactPolicyBuilder(identifier)
+        val type = ContactType.CustomAttribute(attributeKey)
+        val builder = ContactPolicyBuilder(type)
         builder.block()
-        policies[identifier.key] = builder.build()
+        policies[type.key] = builder.build()
     }
 
-    public fun getPolicy(identifier: ContactIdentifier): ContactVerificationPolicy? = policies[identifier.key]
+    public fun getPolicy(contactType: ContactType): ContactVerificationPolicy? = policies[contactType.key]
 
-    public fun getRequiredContacts(): List<ContactIdentifier> =
-        policies.values.filter { it.required }.map { it.identifier }
+    public fun getRequiredContacts(): List<ContactType> =
+        policies.values.filter { it.required }.map { it.contactType }
 
     public fun getAllPolicies(): Map<String, ContactVerificationPolicy> = policies.toMap()
 
     /** Get the effective token expiration for a contact (policy-specific or default) */
-    public fun getTokenExpiration(identifier: ContactIdentifier): Duration {
-        val policy = getPolicy(identifier)
+    public fun getTokenExpiration(contactType: ContactType): Duration {
+        val policy = getPolicy(contactType)
         return policy?.tokenExpiration ?: defaultTokenExpiration
     }
 
-    public fun getSender(identifier: ContactIdentifier): VerificationSender? {
-        return getPolicy(identifier)?.sender
+    public fun getSender(contactType: ContactType): VerificationSender? {
+        return getPolicy(contactType)?.sender
     }
 
     override fun validate(): ConfigValidationResult = validate {
@@ -195,21 +220,70 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
 
         // Validate policies
         policies.values.forEach { policy ->
+            val policyKey = policy.contactType.key
+
             policy.tokenExpiration?.let { expiration ->
                 require(expiration.isPositive()) {
-                    "Token expiration for ${policy.identifier.key} must be positive, got: $expiration"
+                    "Token expiration for $policyKey must be positive, got: $expiration"
                 }
             }
 
             // Warn if autoSend is true but no sender configured
             if (policy.autoSend && policy.sender == null) {
-                error("autoSend is true for ${policy.identifier.key} but no sender is configured")
+                error("autoSend is true for $policyKey but no sender is configured")
             }
 
             // Warn if required but no sender configured
             if (policy.required && policy.sender == null && strategy != VerificationStrategy.MANUAL) {
-                error("Contact ${policy.identifier.key} is required but no sender is configured (strategy is not MANUAL)")
+                error("Contact $policyKey is required but no sender is configured (strategy is not MANUAL)")
             }
+
+            // Validate sender availability for dependency targets
+            if (policy.required && policy.dependsOn.isNotEmpty() && strategy != VerificationStrategy.MANUAL) {
+                policy.dependsOn.forEach { dep ->
+                    val depPolicy = policies[dep.key]
+                    if (depPolicy != null && depPolicy.sender == null) {
+                        error("Required contact $policyKey depends on ${dep.key}, but ${dep.key} has no sender configured")
+                    }
+                }
+            }
+
+            // Validate autoSend + dependsOn contradiction
+            if (policy.autoSend && policy.dependsOn.isNotEmpty()) {
+                error(
+                    "Contact $policyKey has autoSend=true but also has dependencies. " +
+                    "Auto-send cannot work when dependencies must be verified first. Set autoSend=false explicitly."
+                )
+            }
+
+            // Validate no self-dependency
+            policy.dependsOn.forEach { dep ->
+                require(dep.key != policyKey) {
+                    "Contact $policyKey cannot depend on itself"
+                }
+                require(policies.containsKey(dep.key)) {
+                    "Contact $policyKey depends on ${dep.key} which is not configured"
+                }
+            }
+
+            // Validate minimum token entropy
+            val format = policy.tokenFormat
+            if (format is NumericFormat) {
+                require(format.length >= 4) {
+                    "Token format for $policyKey uses NumericFormat with length ${format.length}, minimum is 4"
+                }
+            }
+            if (format is HexFormat) {
+                require(format.length >= 4) {
+                    "Token format for $policyKey uses HexFormat with length ${format.length}, minimum is 4"
+                }
+            }
+        }
+
+        // Validate no circular dependencies
+        val cycleError = findCycleError()
+        if (cycleError != null) {
+            error(cycleError)
         }
 
         // Validate required contacts exist when using VERIFY_REQUIRED_ONLY
@@ -219,6 +293,33 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
                 "Strategy is VERIFY_REQUIRED_ONLY but no contacts are marked as required"
             }
         }
+    }
+
+    private fun findCycleError(): String? {
+        val visited = mutableSetOf<String>()
+        val stack = mutableSetOf<String>()
+
+        fun dfs(key: String, path: List<String>): String? {
+            if (key in stack) {
+                val cycle = path.dropWhile { it != key } + key
+                return "Circular dependency detected: ${cycle.joinToString(" -> ")}"
+            }
+            if (key in visited) return null
+            stack += key
+            for (dep in policies[key]?.dependsOn.orEmpty()) {
+                val result = dfs(dep.key, path + key)
+                if (result != null) return result
+            }
+            stack -= key
+            visited += key
+            return null
+        }
+
+        for (key in policies.keys) {
+            val result = dfs(key, emptyList())
+            if (result != null) return result
+        }
+        return null
     }
 
     override fun build(context: ExtensionContext): VerificationExtension {
@@ -231,14 +332,21 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
             )
         }
 
-        val service = DefaultVerificationService(
+        val hasNumericFormat = policies.values.any { it.tokenFormat is NumericFormat }
+        if (hasNumericFormat && context.rateLimiter is NoOpRateLimiter) {
+            throw IllegalStateException(
+                "NumericFormat tokens are vulnerable to brute-force attacks. " +
+                "Configure a real rate limiter (InMemoryRateLimiter or RedisRateLimiter) " +
+                "when using NumericFormat for verification tokens."
+            )
+        }
+
+        return VerificationExtension(
             config = this,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
             realm = context.realm.name,
             rateLimiter = context.rateLimiter
         )
-        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.name)
-        return VerificationExtension(service, cleanupService, this, context.timeZone)
     }
 }

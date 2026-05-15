@@ -3,18 +3,20 @@ package com.mustafadakhel.kodex.mfa
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
-import com.mustafadakhel.kodex.mfa.database.*
 import com.mustafadakhel.kodex.mfa.device.DeviceFingerprint
 import com.mustafadakhel.kodex.mfa.encryption.AesGcmSecretEncryption
+import com.mustafadakhel.kodex.mfa.schema.MfaSchema
 import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
 import com.mustafadakhel.kodex.mfa.totp.TotpAlgorithm
 import com.mustafadakhel.kodex.mfa.totp.TotpGenerator
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.ratelimit.inmemory.InMemoryRateLimiter
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.test.TestDatabaseSetup
 import com.mustafadakhel.kodex.throwable.KodexThrowable
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
@@ -24,13 +26,16 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.delay
-import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import java.util.*
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
+import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -38,42 +43,39 @@ import kotlin.time.Duration.Companion.seconds
 class Phase3IntegrationTest : FunSpec({
 
     lateinit var mfaService: MfaService
-    lateinit var db: Database
+    lateinit var db: KodexDatabase
+    lateinit var mfaSchema: MfaSchema
+    lateinit var testSetup: TestDatabaseSetup
     lateinit var testUserId: UUID
     lateinit var adminUserId: UUID
     lateinit var sentCodes: MutableMap<String, String>
     lateinit var hashMap: MutableMap<String, String>
 
     beforeEach {
-        db = Database.connect("jdbc:h2:mem:test_${UUID.randomUUID()};DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
-        TestDatabaseSetup.setupTestEngine(db)
+        val database = Database.connect(
+            "jdbc:h2:mem:test_${UUID.randomUUID()};DB_CLOSE_DELAY=-1;",
+            driver = "org.h2.Driver"
+        )
+        val core = CoreSchema("test_")
+        mfaSchema = MfaSchema(core)
+        db = KodexDatabase(database, core, mapOf(MfaSchema::class to mfaSchema))
+        db.createSchema()
+        testSetup = TestDatabaseSetup(db)
 
-        kodexTransaction {
-            val coreTables = TestDatabaseSetup.getCoreTables()
-            SchemaUtils.create(
-                *coreTables.toTypedArray(),
-                MfaMethods,
-                MfaChallenges,
-                MfaTrustedDevices,
-                MfaBackupCodes,
-                MfaTotpUsedCodes
-            )
-        }
-
-        testUserId = TestDatabaseSetup.createTestUser(
+        testUserId = testSetup.createTestUser(
             email = "test@example.com",
             passwordHash = "hash",
             status = UserStatus.ACTIVE
         )
 
-        adminUserId = TestDatabaseSetup.createAdminUser(
+        adminUserId = testSetup.createAdminUser(
             email = "admin@example.com",
             passwordHash = "hash"
         )
 
         val config = MfaConfig()
-        config.userHasRole = { userId, role -> TestDatabaseSetup.userHasRole(userId, role) }
-        config.getTotalUsers = { TestDatabaseSetup.getUserCount() }
+        config.userHasRole = { userId, role -> testSetup.userHasRole(userId, role, "test-realm") }
+        config.getTotalUsers = { testSetup.getUserCount() }
 
         // Mock hashing service
         hashMap = mutableMapOf()
@@ -110,6 +112,8 @@ class Phase3IntegrationTest : FunSpec({
         val sessionStore = com.mustafadakhel.kodex.mfa.session.MfaSessionStore()
 
         mfaService = DefaultMfaService(
+            db = db,
+            schema = mfaSchema,
             config = config,
             timeZone = TimeZone.UTC,
             hashingService = hashingService,
@@ -121,18 +125,7 @@ class Phase3IntegrationTest : FunSpec({
         )
     }
 
-    afterEach {
-        kodexTransaction {
-            val coreTables = TestDatabaseSetup.getCoreTables()
-            SchemaUtils.drop(
-                MfaBackupCodes,
-                MfaChallenges,
-                MfaTrustedDevices,
-                MfaMethods,
-                *coreTables.reversed().toTypedArray()
-            )
-        }
-    }
+    // No afterEach cleanup needed: each test creates a fresh in-memory database via UUID in the JDBC URL
 
     context("Trusted Devices") {
 
@@ -210,22 +203,23 @@ class Phase3IntegrationTest : FunSpec({
             val userAgent = "Mozilla/5.0"
             val fingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
 
+            val trustedDevices = mfaSchema.mfaTrustedDevices
             // Trust device with very short expiration (simulated via direct DB insert)
-            kodexTransaction {
+            db.transaction {
                 val now = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
                 val expiredTime = now.toInstant(TimeZone.UTC).minus(1.days).toLocalDateTime(TimeZone.UTC)
 
-                MfaTrustedDevices.insert {
-                    it[MfaTrustedDevices.realmId] = "test-realm"
-                    it[id] = org.jetbrains.exposed.dao.id.EntityID(UUID.randomUUID(), MfaTrustedDevices)
-                    it[userId] = testUserId
-                    it[deviceFingerprint] = fingerprint
-                    it[deviceName] = "Expired Device"
-                    it[MfaTrustedDevices.ipAddress] = ipAddress
-                    it[MfaTrustedDevices.userAgent] = userAgent
-                    it[trustedAt] = now
-                    it[lastUsedAt] = null
-                    it[expiresAt] = expiredTime
+                trustedDevices.insert {
+                    it[trustedDevices.realmId] = "test-realm"
+                    it[trustedDevices.id] = UUID.randomUUID()
+                    it[trustedDevices.userId] = testUserId
+                    it[trustedDevices.deviceFingerprint] = fingerprint
+                    it[trustedDevices.deviceName] = "Expired Device"
+                    it[trustedDevices.ipAddress] = ipAddress
+                    it[trustedDevices.userAgent] = userAgent
+                    it[trustedDevices.trustedAt] = now
+                    it[trustedDevices.lastUsedAt] = null
+                    it[trustedDevices.expiresAt] = expiredTime
                 }
             }
 
@@ -299,17 +293,18 @@ class Phase3IntegrationTest : FunSpec({
             // Enroll TOTP for user
             val enrollResult = mfaService.enrollTotp(testUserId, "test@example.com")
 
+            val methods = mfaSchema.mfaMethods
             // Manually activate the method for testing (normally done via verifyTotpEnrollment)
-            kodexTransaction {
-                MfaMethods.update({ (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }) {
+            db.transaction {
+                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
                     it[isActive] = true
                 }
             }
 
-            val methods = mfaService.getMethods(testUserId)
-            methods shouldHaveSize 1
+            val userMethods = mfaService.getMethods(testUserId)
+            userMethods shouldHaveSize 1
 
-            val methodId = methods[0].id
+            val methodId = userMethods[0].id
 
             // Admin removes the method
             mfaService.forceRemoveMfaMethod(adminUserId, testUserId, methodId)
@@ -319,12 +314,15 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should allow admin to disable all MFA for user") {
+            val methods = mfaSchema.mfaMethods
+            val backupCodes = mfaSchema.mfaBackupCodes
+
             // Setup user with TOTP, backup codes, and trusted device
             mfaService.enrollTotp(testUserId, "test@example.com")
 
             // Manually activate the method for testing
-            kodexTransaction {
-                MfaMethods.update({ (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }) {
+            db.transaction {
+                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
                     it[isActive] = true
                 }
             }
@@ -334,8 +332,8 @@ class Phase3IntegrationTest : FunSpec({
 
             // Verify everything is set up
             mfaService.getMethods(testUserId) shouldHaveSize 1
-            kodexTransaction {
-                MfaBackupCodes.selectAll().where { MfaBackupCodes.userId eq testUserId }.count()
+            db.transaction {
+                backupCodes.selectAll().where { backupCodes.userId eq testUserId }.count()
             } shouldNotBe 0L
             mfaService.getTrustedDevices(testUserId) shouldHaveSize 1
 
@@ -344,46 +342,50 @@ class Phase3IntegrationTest : FunSpec({
 
             // Verify everything is removed
             mfaService.getMethods(testUserId) shouldHaveSize 0
-            kodexTransaction {
-                MfaBackupCodes.selectAll().where { MfaBackupCodes.userId eq testUserId }.count()
+            db.transaction {
+                backupCodes.selectAll().where { backupCodes.userId eq testUserId }.count()
             } shouldBe 0L
             mfaService.getTrustedDevices(testUserId) shouldHaveSize 0
         }
 
         test("should allow admin to list user's MFA methods") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll TOTP for user
             mfaService.enrollTotp(testUserId, "test@example.com")
 
             // Manually activate the method for testing
-            kodexTransaction {
-                MfaMethods.update({ (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }) {
+            db.transaction {
+                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
                     it[isActive] = true
                 }
             }
 
             // Admin lists methods
-            val methods = mfaService.listUserMethods(adminUserId, testUserId)
+            val userMethods = mfaService.listUserMethods(adminUserId, testUserId)
 
-            methods shouldHaveSize 1
-            methods[0].type.name shouldBe "TOTP"
+            userMethods shouldHaveSize 1
+            userMethods[0].type.name shouldBe "TOTP"
         }
     }
 
     context("Admin Authorization") {
 
         test("should reject non-admin trying to force remove MFA method") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll TOTP for testUserId
             mfaService.enrollTotp(testUserId, "test@example.com")
 
             // Manually activate the method
-            kodexTransaction {
-                MfaMethods.update({ (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }) {
+            db.transaction {
+                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
                     it[isActive] = true
                 }
             }
 
-            val methods = mfaService.getMethods(testUserId)
-            val methodId = methods[0].id
+            val userMethods = mfaService.getMethods(testUserId)
+            val methodId = userMethods[0].id
 
             // testUserId (non-admin) tries to remove their own method via admin API
             val exception =
@@ -418,8 +420,10 @@ class Phase3IntegrationTest : FunSpec({
     context("Statistics") {
 
         test("should return statistics for MFA adoption") {
+            val methods = mfaSchema.mfaMethods
+
             // Create another user without MFA
-            val user2Id = TestDatabaseSetup.createTestUser(
+            val user2Id = testSetup.createTestUser(
                 email = "user2@example.com",
                 passwordHash = "hash",
                 status = UserStatus.ACTIVE
@@ -429,8 +433,8 @@ class Phase3IntegrationTest : FunSpec({
             mfaService.enrollTotp(testUserId, "test@example.com")
 
             // Manually activate the method for testing
-            kodexTransaction {
-                MfaMethods.update({ (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }) {
+            db.transaction {
+                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
                     it[isActive] = true
                 }
             }
@@ -443,12 +447,14 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should return method distribution in statistics") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll TOTP for testUserId
             mfaService.enrollTotp(testUserId, "test@example.com")
 
             // Manually activate the method for testing
-            kodexTransaction {
-                MfaMethods.update({ (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.TOTP) }) {
+            db.transaction {
+                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
                     it[isActive] = true
                 }
             }
@@ -471,8 +477,8 @@ class Phase3IntegrationTest : FunSpec({
 
         test("should return zero statistics for empty system") {
             // Remove test users
-            TestDatabaseSetup.deleteTestUser(testUserId)
-            TestDatabaseSetup.deleteTestUser(adminUserId)
+            testSetup.deleteTestUser(testUserId)
+            testSetup.deleteTestUser(adminUserId)
 
             val stats = mfaService.getMfaStatistics()
 
@@ -486,6 +492,8 @@ class Phase3IntegrationTest : FunSpec({
     context("Authentication Flow - Email Challenge") {
 
         test("should send email challenge for enrolled email method") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll email MFA first
             val enrollResult = mfaService.enrollEmail(testUserId, "test@example.com", null)
             enrollResult.shouldBeInstanceOf<EnrollmentResult.CodeSent>()
@@ -497,10 +505,10 @@ class Phase3IntegrationTest : FunSpec({
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             // Get the email method ID
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[MfaMethods.id].value
+            val methodId = db.transaction {
+                methods.selectAll()
+                    .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
+                    .single()[methods.id]
             }
 
             // Clear sent codes to test challenge
@@ -522,6 +530,8 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should enforce rate limiting for challenges") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll email MFA first
             val enrollResult = mfaService.enrollEmail(testUserId, "test@example.com", null)
             enrollResult.shouldBeInstanceOf<EnrollmentResult.CodeSent>()
@@ -531,10 +541,10 @@ class Phase3IntegrationTest : FunSpec({
             val verifyResult = mfaService.verifyEmailEnrollment(testUserId, enrollChallengeId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[MfaMethods.id].value
+            val methodId = db.transaction {
+                methods.selectAll()
+                    .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
+                    .single()[methods.id]
             }
 
             // Exhaust rate limit attempts
@@ -552,6 +562,8 @@ class Phase3IntegrationTest : FunSpec({
     context("Authentication Flow - Challenge Verification") {
 
         test("should verify valid email challenge code") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll email MFA first
             val enrollResult = mfaService.enrollEmail(testUserId, "test@example.com", null)
             enrollResult.shouldBeInstanceOf<EnrollmentResult.CodeSent>()
@@ -561,10 +573,10 @@ class Phase3IntegrationTest : FunSpec({
             val verifyResult = mfaService.verifyEmailEnrollment(testUserId, enrollChallengeId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[MfaMethods.id].value
+            val methodId = db.transaction {
+                methods.selectAll()
+                    .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
+                    .single()[methods.id]
             }
 
             // Send challenge
@@ -581,6 +593,8 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should fail verification with invalid code") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll email MFA first
             val enrollResult = mfaService.enrollEmail(testUserId, "test@example.com", null)
             enrollResult.shouldBeInstanceOf<EnrollmentResult.CodeSent>()
@@ -590,10 +604,10 @@ class Phase3IntegrationTest : FunSpec({
             val verifyResult = mfaService.verifyEmailEnrollment(testUserId, enrollChallengeId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[MfaMethods.id].value
+            val methodId = db.transaction {
+                methods.selectAll()
+                    .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
+                    .single()[methods.id]
             }
 
             // Send challenge
@@ -608,6 +622,9 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should fail verification after challenge expires") {
+            val methods = mfaSchema.mfaMethods
+            val challenges = mfaSchema.mfaChallenges
+
             // Enroll email MFA first
             val enrollResult = mfaService.enrollEmail(testUserId, "test@example.com", null)
             enrollResult.shouldBeInstanceOf<EnrollmentResult.CodeSent>()
@@ -617,10 +634,10 @@ class Phase3IntegrationTest : FunSpec({
             val verifyResult = mfaService.verifyEmailEnrollment(testUserId, enrollChallengeId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[MfaMethods.id].value
+            val methodId = db.transaction {
+                methods.selectAll()
+                    .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
+                    .single()[methods.id]
             }
 
             // Send challenge
@@ -631,8 +648,8 @@ class Phase3IntegrationTest : FunSpec({
             val challengeCode = sentCodes["test@example.com"]!!
 
             // Manually expire the challenge
-            kodexTransaction {
-                MfaChallenges.update({ MfaChallenges.id eq challengeId }) {
+            db.transaction {
+                challenges.update({ challenges.id eq challengeId }) {
                     it[expiresAt] = CurrentKotlinInstant.minus(1.milliseconds).toLocalDateTime(TimeZone.UTC)
                 }
             }
@@ -644,6 +661,8 @@ class Phase3IntegrationTest : FunSpec({
         }
 
         test("should enforce rate limiting for challenge verification") {
+            val methods = mfaSchema.mfaMethods
+
             // Enroll email MFA first
             val enrollResult = mfaService.enrollEmail(testUserId, "test@example.com", null)
             enrollResult.shouldBeInstanceOf<EnrollmentResult.CodeSent>()
@@ -653,10 +672,10 @@ class Phase3IntegrationTest : FunSpec({
             val verifyResult = mfaService.verifyEmailEnrollment(testUserId, enrollChallengeId, enrollCode)
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
-            val methodId = kodexTransaction {
-                MfaMethods.selectAll()
-                    .where { (MfaMethods.userId eq testUserId) and (MfaMethods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[MfaMethods.id].value
+            val methodId = db.transaction {
+                methods.selectAll()
+                    .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
+                    .single()[methods.id]
             }
 
             // Send challenge

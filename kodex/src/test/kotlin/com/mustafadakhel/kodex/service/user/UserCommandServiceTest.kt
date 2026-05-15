@@ -102,7 +102,6 @@ class UserCommandServiceTest : FunSpec({
             currentTime = any(),
             customAttributes = null,
             profile = testProfile,
-            realmId = realmOwner
         ) } returns UserRepository.CreateUserResult.Success(testUserEntity)
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
@@ -143,7 +142,6 @@ class UserCommandServiceTest : FunSpec({
             currentTime = any(),
             customAttributes = any(),
             profile = any(),
-            realmId = realmOwner
         ) } returns UserRepository.CreateUserResult.Success(testUserEntity)
         coEvery { eventBus.publish(any<UserEvent.Created>()) } returns Unit
 
@@ -163,7 +161,6 @@ class UserCommandServiceTest : FunSpec({
                 currentTime = any(),
                 customAttributes = any(),
                 profile = any(),
-                realmId = realmOwner
             )
         }
     }
@@ -173,7 +170,7 @@ class UserCommandServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeUserCreate(any(), any(), any(), any(), any()) } returns transformedData
         every { hashingService.hash(any()) } returns testHashedPassword
-        every { userRepository.create(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        every { userRepository.create(any(), any(), any(), any(), any(), any(), any()) } returns
             UserRepository.CreateUserResult.EmailAlreadyExists
 
         shouldThrow<KodexThrowable.EmailAlreadyExists> {
@@ -190,7 +187,7 @@ class UserCommandServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeUserCreate(any(), any(), any(), any(), any()) } returns transformedData
         every { hashingService.hash(any()) } returns testHashedPassword
-        every { userRepository.create(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        every { userRepository.create(any(), any(), any(), any(), any(), any(), any()) } returns
             UserRepository.CreateUserResult.PhoneAlreadyExists
 
         shouldThrow<KodexThrowable.PhoneAlreadyExists> {
@@ -208,7 +205,7 @@ class UserCommandServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeUserCreate(any(), any(), any(), any(), any()) } returns transformedData
         every { hashingService.hash(any()) } returns testHashedPassword
-        every { userRepository.create(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        every { userRepository.create(any(), any(), any(), any(), any(), any(), any()) } returns
             UserRepository.CreateUserResult.InvalidRole(invalidRole)
 
         val exception = shouldThrow<KodexThrowable.RoleNotFound> {

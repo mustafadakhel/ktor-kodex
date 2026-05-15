@@ -2,30 +2,26 @@ package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.FailureReason
-import com.mustafadakhel.kodex.mfa.database.MfaBackupCodes
-import com.mustafadakhel.kodex.mfa.database.MfaChallenges
-import com.mustafadakhel.kodex.mfa.database.MfaMethodType
-import com.mustafadakhel.kodex.mfa.database.MfaMethods
-import com.mustafadakhel.kodex.mfa.database.MfaTotpUsedCodes
-import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.device.DeviceFingerprint
 import com.mustafadakhel.kodex.mfa.encryption.EncryptedSecret
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
 import com.mustafadakhel.kodex.mfa.event.MfaEvent
+import com.mustafadakhel.kodex.mfa.schema.MfaSchema
 import com.mustafadakhel.kodex.mfa.totp.QrCodeGenerator
 import com.mustafadakhel.kodex.mfa.totp.TotpGenerator
+import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 import com.mustafadakhel.kodex.mfa.totp.TotpValidator
+import com.mustafadakhel.kodex.ratelimit.RateLimitResult
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
-import com.mustafadakhel.kodex.ratelimit.RateLimitResult
-import com.mustafadakhel.kodex.ratelimit.RateLimiter
 import com.mustafadakhel.kodex.tokens.token.AlphanumericFormat
 import com.mustafadakhel.kodex.tokens.token.NumericFormat
 import com.mustafadakhel.kodex.tokens.token.TokenGenerator
-import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.coroutines.delay
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
@@ -34,7 +30,6 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
@@ -44,6 +39,8 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 internal class DefaultMfaService(
+    private val db: KodexDatabase,
+    private val schema: MfaSchema,
     private val config: MfaConfig,
     private val timeZone: TimeZone,
     private val hashingService: HashingService,
@@ -51,7 +48,7 @@ internal class DefaultMfaService(
     private val eventBus: EventBus,
     private val realmId: String,
     private val rateLimiter: RateLimiter,
-    private val sessionStore: com.mustafadakhel.kodex.mfa.session.MfaSessionStore
+    private val sessionStore: MfaSessionStore
 ) : MfaService {
 
     private val totpGenerator = TotpGenerator(
@@ -62,10 +59,12 @@ internal class DefaultMfaService(
     private val totpValidator = TotpValidator(totpGenerator, config.totpTimeStepWindow)
     private val qrCodeGenerator = QrCodeGenerator()
 
-    /**
-     * Verifies that the given user has admin role.
-     * @throws KodexThrowable.Authorization.InsufficientPermissions if user doesn't have admin role
-     */
+    private val methods = schema.mfaMethods
+    private val challenges = schema.mfaChallenges
+    private val backupCodes = schema.mfaBackupCodes
+    private val totpUsedCodes = schema.mfaTotpUsedCodes
+    private val trustedDevices = schema.mfaTrustedDevices
+
     private suspend fun requireAdminRole(userId: UUID) {
         val hasAdminRole = config.userHasRole?.invoke(userId, "admin") ?: false
         if (!hasAdminRole) {
@@ -211,33 +210,32 @@ internal class DefaultMfaService(
             return EnrollmentResult.Failed("Failed to send code: ${e.message}")
         }
 
-        val challengeId = kodexTransaction {
+        val challengeId = db.transaction {
             val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, now)
             val codeHash = hashingService.hash(code)
 
-            // Create the MFA method record (inactive) to store the email
-            val methodId = MfaMethods.insertAndGetId {
-                it[MfaMethods.realmId] = this@DefaultMfaService.realmId
-                it[MfaMethods.userId] = userId
-                it[MfaMethods.methodType] = MfaMethodType.EMAIL
-                it[MfaMethods.identifier] = email
-                it[MfaMethods.encryptedSecret] = null
-                it[MfaMethods.encryptionNonce] = null
-                it[MfaMethods.isActive] = false  // Inactive until verification
-                it[MfaMethods.isPrimary] = false
-                it[MfaMethods.enrolledAt] = nowLocal
-            }.value
+            val methodId = methods.insert {
+                it[methods.realmId] = this@DefaultMfaService.realmId
+                it[methods.userId] = userId
+                it[methods.methodType] = MfaMethodType.EMAIL
+                it[methods.identifier] = email
+                it[methods.encryptedSecret] = null
+                it[methods.encryptionNonce] = null
+                it[methods.isActive] = false
+                it[methods.isPrimary] = false
+                it[methods.enrolledAt] = nowLocal
+            }[methods.id]
 
-            MfaChallenges.insert {
-                it[MfaChallenges.realmId] = this@DefaultMfaService.realmId
-                it[MfaChallenges.userId] = userId
-                it[MfaChallenges.methodId] = methodId
-                it[MfaChallenges.codeHash] = codeHash
-                it[MfaChallenges.expiresAt] = expiresAt
-                it[MfaChallenges.createdAt] = nowLocal
-                it[MfaChallenges.attempts] = 0
-                it[MfaChallenges.maxAttempts] = config.maxVerifyAttempts
-            }[MfaChallenges.id].value
+            challenges.insert {
+                it[challenges.realmId] = this@DefaultMfaService.realmId
+                it[challenges.userId] = userId
+                it[challenges.methodId] = methodId
+                it[challenges.codeHash] = codeHash
+                it[challenges.expiresAt] = expiresAt
+                it[challenges.createdAt] = nowLocal
+                it[challenges.attempts] = 0
+                it[challenges.maxAttempts] = config.maxVerifyAttempts
+            }[challenges.id]
         }
 
         return EnrollmentResult.CodeSent(challengeId)
@@ -252,18 +250,18 @@ internal class DefaultMfaService(
             val now = CurrentKotlinInstant
             val nowLocal = now.toLocalDateTime(timeZone)
 
-            val challenge = kodexTransaction {
-                MfaChallenges
+            val challenge = db.transaction {
+                challenges
                     .selectAll()
-                    .where { (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId) }
+                    .where { (challenges.realmId eq realmId) and (challenges.id eq challengeId) }
                     .singleOrNull()
             } ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid challenge")
 
-            val userId = challenge[MfaChallenges.userId]
-            val attempts = challenge[MfaChallenges.attempts]
-            val maxAttempts = challenge[MfaChallenges.maxAttempts]
-            val expiresAt = challenge[MfaChallenges.expiresAt]
-            val verifiedAt = challenge[MfaChallenges.verifiedAt]
+            val userId = challenge[challenges.userId].value
+            val attempts = challenge[challenges.attempts]
+            val maxAttempts = challenge[challenges.maxAttempts]
+            val expiresAt = challenge[challenges.expiresAt]
+            val verifiedAt = challenge[challenges.verifiedAt]
 
             if (verifiedAt != null) {
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Challenge already verified")
@@ -277,15 +275,15 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.RateLimitExceeded("Too many attempts")
             }
 
-            val codeHash = challenge[MfaChallenges.codeHash]
+            val codeHash = challenge[challenges.codeHash]
             val isValid = hashingService.verify(code, codeHash)
 
             if (!isValid) {
-                kodexTransaction {
-                    MfaChallenges.update({
-                        (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+                db.transaction {
+                    challenges.update({
+                        (challenges.realmId eq realmId) and (challenges.id eq challengeId)
                     }) {
-                        it[MfaChallenges.attempts] = attempts + 1
+                        it[challenges.attempts] = attempts + 1
                     }
                 }
                 eventBus.publish(MfaEvent.EnrollmentFailed(
@@ -300,27 +298,26 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid code")
             }
 
-            val methodId = kodexTransaction {
-                MfaChallenges.update({
-                    (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+            val methodId = db.transaction {
+                challenges.update({
+                    (challenges.realmId eq realmId) and (challenges.id eq challengeId)
                 }) {
-                    it[MfaChallenges.verifiedAt] = nowLocal
+                    it[challenges.verifiedAt] = nowLocal
                 }
 
-                // Activate the method that was created during enrollment
-                val methodId = challenge[MfaChallenges.methodId]
+                val methodId = challenge[challenges.methodId]
                 val hadAnyMethod = hasAnyMethod(userId)
-                MfaMethods.update({
-                    (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
+                methods.update({
+                    (methods.realmId eq realmId) and (methods.id eq methodId)
                 }) {
-                    it[MfaMethods.isActive] = true
-                    it[MfaMethods.isPrimary] = !hadAnyMethod
+                    it[methods.isActive] = true
+                    it[methods.isPrimary] = !hadAnyMethod
                 }
 
                 methodId
             }
 
-            val backupCodes = generateBackupCodes(userId)
+            val backupCodesList = generateBackupCodes(userId)
 
             eventBus.publish(MfaEvent.EnrollmentCompleted(
                 eventId = UUID.randomUUID(),
@@ -332,7 +329,7 @@ internal class DefaultMfaService(
                 isPrimary = !hasAnyMethod(userId)
             ))
 
-            EnrollmentVerificationResult.Success(backupCodes)
+            EnrollmentVerificationResult.Success(backupCodesList)
         }
     }
 
@@ -358,20 +355,20 @@ internal class DefaultMfaService(
 
         val encrypted = secretEncryption.encrypt(secret)
 
-        val methodId = kodexTransaction {
+        val methodId = db.transaction {
             val nowLocal = now.toLocalDateTime(timeZone)
 
-            MfaMethods.insertAndGetId {
-                it[MfaMethods.realmId] = this@DefaultMfaService.realmId
-                it[MfaMethods.userId] = userId
-                it[methodType] = MfaMethodType.TOTP
-                it[identifier] = "TOTP"
-                it[encryptedSecret] = encrypted.ciphertext
-                it[encryptionNonce] = encrypted.nonce
-                it[isActive] = false
-                it[isPrimary] = false
-                it[enrolledAt] = nowLocal
-            }.value
+            methods.insert {
+                it[methods.realmId] = this@DefaultMfaService.realmId
+                it[methods.userId] = userId
+                it[methods.methodType] = MfaMethodType.TOTP
+                it[methods.identifier] = "TOTP"
+                it[methods.encryptedSecret] = encrypted.ciphertext
+                it[methods.encryptionNonce] = encrypted.nonce
+                it[methods.isActive] = false
+                it[methods.isPrimary] = false
+                it[methods.enrolledAt] = nowLocal
+            }[methods.id]
         }
 
         return TotpEnrollmentResult(
@@ -392,22 +389,22 @@ internal class DefaultMfaService(
             val now = CurrentKotlinInstant
             val nowLocal = now.toLocalDateTime(timeZone)
 
-            val method = kodexTransaction {
-                MfaMethods
+            val method = db.transaction {
+                methods
                     .selectAll()
                     .where {
-                        (MfaMethods.realmId eq realmId) and
-                        (MfaMethods.userId eq userId) and
-                        (MfaMethods.id eq methodId) and
-                        (MfaMethods.methodType eq MfaMethodType.TOTP) and
-                        (MfaMethods.isActive eq false)
+                        (methods.realmId eq realmId) and
+                        (methods.userId eq userId) and
+                        (methods.id eq methodId) and
+                        (methods.methodType eq MfaMethodType.TOTP) and
+                        (methods.isActive eq false)
                     }
                     .singleOrNull()
             } ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("No pending TOTP enrollment for this method")
 
-            val encryptedSecret = method[MfaMethods.encryptedSecret]
+            val encryptedSecret = method[methods.encryptedSecret]
                 ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("No secret found")
-            val nonce = method[MfaMethods.encryptionNonce]
+            val nonce = method[methods.encryptionNonce]
                 ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("No nonce found")
 
             val secret = secretEncryption.decrypt(EncryptedSecret(encryptedSecret, nonce))
@@ -427,18 +424,18 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid code")
             }
 
-            kodexTransaction {
-                MfaMethods.update({
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.id eq methodId)
+            db.transaction {
+                methods.update({
+                    (methods.realmId eq realmId) and
+                    (methods.id eq methodId)
                 }) {
-                    it[isActive] = true
-                    it[isPrimary] = !hasAnyMethod(userId)
-                    it[lastUsedAt] = nowLocal
+                    it[methods.isActive] = true
+                    it[methods.isPrimary] = !hasAnyMethod(userId)
+                    it[methods.lastUsedAt] = nowLocal
                 }
             }
 
-            val backupCodes = generateBackupCodes(userId)
+            val backupCodesList = generateBackupCodes(userId)
 
             eventBus.publish(MfaEvent.EnrollmentCompleted(
                 eventId = UUID.randomUUID(),
@@ -450,7 +447,7 @@ internal class DefaultMfaService(
                 isPrimary = !hasAnyMethod(userId)
             ))
 
-            EnrollmentVerificationResult.Success(backupCodes)
+            EnrollmentVerificationResult.Success(backupCodesList)
         }
     }
 
@@ -462,24 +459,23 @@ internal class DefaultMfaService(
         val now = CurrentKotlinInstant
         val nowLocal = now.toLocalDateTime(timeZone)
 
-        // Retrieve the MFA method to get the email address
-        val method = kodexTransaction {
-            MfaMethods
+        val method = db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.id eq methodId) and
-                    (MfaMethods.isActive eq true)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.id eq methodId) and
+                    (methods.isActive eq true)
                 }
                 .singleOrNull()
         } ?: return ChallengeResult.Failed("MFA method not found or inactive")
 
-        if (method[MfaMethods.methodType] != MfaMethodType.EMAIL) {
+        if (method[methods.methodType] != MfaMethodType.EMAIL) {
             return ChallengeResult.Failed("Method is not an email MFA method")
         }
 
-        val email = method[MfaMethods.identifier]
+        val email = method[methods.identifier]
             ?: return ChallengeResult.Failed("Email address not found for this MFA method")
 
         val userKey = "mfa:challenge:user:$userId"
@@ -589,20 +585,20 @@ internal class DefaultMfaService(
             return ChallengeResult.Failed("Failed to send code: ${e.message}")
         }
 
-        val challengeId = kodexTransaction {
+        val challengeId = db.transaction {
             val expiresAt = ExpirationCalculator.calculateExpiration(config.codeExpiration, timeZone, now)
             val codeHash = hashingService.hash(code)
 
-            MfaChallenges.insert {
-                it[MfaChallenges.realmId] = this@DefaultMfaService.realmId
-                it[MfaChallenges.userId] = userId
-                it[MfaChallenges.methodId] = methodId
-                it[MfaChallenges.codeHash] = codeHash
-                it[MfaChallenges.expiresAt] = expiresAt
-                it[MfaChallenges.createdAt] = nowLocal
-                it[MfaChallenges.attempts] = 0
-                it[MfaChallenges.maxAttempts] = config.maxVerifyAttempts
-            }[MfaChallenges.id].value
+            challenges.insert {
+                it[challenges.realmId] = this@DefaultMfaService.realmId
+                it[challenges.userId] = userId
+                it[challenges.methodId] = methodId
+                it[challenges.codeHash] = codeHash
+                it[challenges.expiresAt] = expiresAt
+                it[challenges.createdAt] = nowLocal
+                it[challenges.attempts] = 0
+                it[challenges.maxAttempts] = config.maxVerifyAttempts
+            }[challenges.id]
         }
 
         eventBus.publish(MfaEvent.ChallengeSent(
@@ -629,22 +625,22 @@ internal class DefaultMfaService(
             val now = CurrentKotlinInstant
             val nowLocal = now.toLocalDateTime(timeZone)
 
-            val challenge = kodexTransaction {
-                MfaChallenges
+            val challenge = db.transaction {
+                challenges
                     .selectAll()
                     .where {
-                        (MfaChallenges.realmId eq realmId) and
-                        (MfaChallenges.id eq challengeId) and
-                        (MfaChallenges.userId eq userId)
+                        (challenges.realmId eq realmId) and
+                        (challenges.id eq challengeId) and
+                        (challenges.userId eq userId)
                     }
                     .singleOrNull()
             } ?: return@ensureMinimumResponseTime VerificationResult.Invalid("Invalid challenge")
 
-            val methodId = challenge[MfaChallenges.methodId]
-            val attempts = challenge[MfaChallenges.attempts]
-            val maxAttempts = challenge[MfaChallenges.maxAttempts]
-            val expiresAt = challenge[MfaChallenges.expiresAt]
-            val verifiedAt = challenge[MfaChallenges.verifiedAt]
+            val methodId = challenge[challenges.methodId]
+            val attempts = challenge[challenges.attempts]
+            val maxAttempts = challenge[challenges.maxAttempts]
+            val expiresAt = challenge[challenges.expiresAt]
+            val verifiedAt = challenge[challenges.verifiedAt]
 
             if (verifiedAt != null) {
                 return@ensureMinimumResponseTime VerificationResult.Invalid("Challenge already verified")
@@ -682,15 +678,15 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime VerificationResult.RateLimitExceeded("Too many attempts")
             }
 
-            val codeHash = challenge[MfaChallenges.codeHash]
+            val codeHash = challenge[challenges.codeHash]
             val isValid = hashingService.verify(code, codeHash)
 
             if (!isValid) {
-                kodexTransaction {
-                    MfaChallenges.update({
-                        (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+                db.transaction {
+                    challenges.update({
+                        (challenges.realmId eq realmId) and (challenges.id eq challengeId)
                     }) {
-                        it[MfaChallenges.attempts] = attempts + 1
+                        it[challenges.attempts] = attempts + 1
                     }
                 }
                 val remainingAttempts = maxAttempts - (attempts + 1)
@@ -710,17 +706,17 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime VerificationResult.Invalid("Invalid code")
             }
 
-            kodexTransaction {
-                MfaChallenges.update({
-                    (MfaChallenges.realmId eq realmId) and (MfaChallenges.id eq challengeId)
+            db.transaction {
+                challenges.update({
+                    (challenges.realmId eq realmId) and (challenges.id eq challengeId)
                 }) {
-                    it[MfaChallenges.verifiedAt] = nowLocal
+                    it[challenges.verifiedAt] = nowLocal
                 }
 
-                MfaMethods.update({
-                    (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
+                methods.update({
+                    (methods.realmId eq realmId) and (methods.id eq methodId)
                 }) {
-                    it[MfaMethods.lastUsedAt] = nowLocal
+                    it[methods.lastUsedAt] = nowLocal
                 }
             }
 
@@ -750,35 +746,34 @@ internal class DefaultMfaService(
             val nowLocal = now.toLocalDateTime(timeZone)
             val codeHash = hashingService.hash(code)
 
-            val method = kodexTransaction {
-                MfaMethods
+            val method = db.transaction {
+                methods
                     .selectAll()
                     .where {
-                        (MfaMethods.realmId eq realmId) and
-                        (MfaMethods.userId eq userId) and
-                        (MfaMethods.id eq methodId) and
-                        (MfaMethods.methodType eq MfaMethodType.TOTP) and
-                        (MfaMethods.isActive eq true)
+                        (methods.realmId eq realmId) and
+                        (methods.userId eq userId) and
+                        (methods.id eq methodId) and
+                        (methods.methodType eq MfaMethodType.TOTP) and
+                        (methods.isActive eq true)
                     }
                     .singleOrNull()
             } ?: return@ensureMinimumResponseTime VerificationResult.Invalid("TOTP method not found or inactive")
 
-            val encryptedSecret = method[MfaMethods.encryptedSecret]
+            val encryptedSecret = method[methods.encryptedSecret]
                 ?: return@ensureMinimumResponseTime VerificationResult.Invalid("No secret found")
-            val nonce = method[MfaMethods.encryptionNonce]
+            val nonce = method[methods.encryptionNonce]
                 ?: return@ensureMinimumResponseTime VerificationResult.Invalid("No nonce found")
 
             val secret = secretEncryption.decrypt(EncryptedSecret(encryptedSecret, nonce))
 
-            // Check if code has been used recently (replay attack protection)
-            val codeAlreadyUsed = kodexTransaction {
-                MfaTotpUsedCodes
+            val codeAlreadyUsed = db.transaction {
+                totpUsedCodes
                     .selectAll()
                     .where {
-                        (MfaTotpUsedCodes.realmId eq realmId) and
-                        (MfaTotpUsedCodes.userId eq userId) and
-                        (MfaTotpUsedCodes.methodId eq methodId) and
-                        (MfaTotpUsedCodes.codeHash eq codeHash)
+                        (totpUsedCodes.realmId eq realmId) and
+                        (totpUsedCodes.userId eq userId) and
+                        (totpUsedCodes.methodId eq methodId) and
+                        (totpUsedCodes.codeHash eq codeHash)
                     }
                     .count() > 0
             }
@@ -819,28 +814,25 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime VerificationResult.Invalid("Invalid code")
             }
 
-            kodexTransaction {
-                // Record the used code
-                MfaTotpUsedCodes.insert {
-                    it[MfaTotpUsedCodes.realmId] = this@DefaultMfaService.realmId
-                    it[MfaTotpUsedCodes.userId] = userId
-                    it[MfaTotpUsedCodes.methodId] = methodId
-                    it[MfaTotpUsedCodes.codeHash] = codeHash
-                    it[MfaTotpUsedCodes.usedAt] = nowLocal
+            db.transaction {
+                totpUsedCodes.insert {
+                    it[totpUsedCodes.realmId] = this@DefaultMfaService.realmId
+                    it[totpUsedCodes.userId] = userId
+                    it[totpUsedCodes.methodId] = methodId
+                    it[totpUsedCodes.codeHash] = codeHash
+                    it[totpUsedCodes.usedAt] = nowLocal
                 }
 
-                // Update last used timestamp
-                MfaMethods.update({
-                    (MfaMethods.realmId eq realmId) and (MfaMethods.id eq methodId)
+                methods.update({
+                    (methods.realmId eq realmId) and (methods.id eq methodId)
                 }) {
-                    it[MfaMethods.lastUsedAt] = nowLocal
+                    it[methods.lastUsedAt] = nowLocal
                 }
 
-                // Clean up old used codes (keep only last 3 time windows = 90 seconds with 30s period)
                 val cutoffTime = now.minus(90.seconds).toLocalDateTime(timeZone)
-                MfaTotpUsedCodes.deleteWhere {
-                    (MfaTotpUsedCodes.realmId eq this@DefaultMfaService.realmId) and
-                    (MfaTotpUsedCodes.usedAt less cutoffTime)
+                totpUsedCodes.deleteWhere {
+                    (totpUsedCodes.realmId eq this@DefaultMfaService.realmId) and
+                    (totpUsedCodes.usedAt less cutoffTime)
                 }
             }
 
@@ -860,46 +852,46 @@ internal class DefaultMfaService(
     }
 
     override fun getMethods(userId: UUID): List<MfaMethodInfo> {
-        return kodexTransaction {
-            MfaMethods
+        return db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.isActive eq true)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.isActive eq true)
                 }
                 .map {
                     MfaMethodInfo(
-                        id = it[MfaMethods.id].value,
-                        type = it[MfaMethods.methodType],
-                        identifier = it[MfaMethods.identifier],
-                        isPrimary = it[MfaMethods.isPrimary],
-                        lastUsedAt = it[MfaMethods.lastUsedAt]?.toInstant(timeZone)
+                        id = it[methods.id],
+                        type = it[methods.methodType],
+                        identifier = it[methods.identifier],
+                        isPrimary = it[methods.isPrimary],
+                        lastUsedAt = it[methods.lastUsedAt]?.toInstant(timeZone)
                     )
                 }
         }
     }
 
     override suspend fun removeMethod(userId: UUID, methodId: UUID) {
-        val methodInfo = kodexTransaction {
-            MfaMethods
+        val methodInfo = db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.id eq methodId)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.id eq methodId)
                 }
                 .singleOrNull()
                 ?.let {
-                    it[MfaMethods.methodType]
+                    it[methods.methodType]
                 }
         }
 
-        kodexTransaction {
-            MfaMethods.deleteWhere {
-                (MfaMethods.realmId eq realmId) and
-                (MfaMethods.userId eq userId) and
-                (MfaMethods.id eq methodId)
+        db.transaction {
+            methods.deleteWhere {
+                (methods.realmId eq realmId) and
+                (methods.userId eq userId) and
+                (methods.id eq methodId)
             }
         }
 
@@ -917,41 +909,41 @@ internal class DefaultMfaService(
     }
 
     override suspend fun setPrimaryMethod(userId: UUID, methodId: UUID) {
-        val oldPrimaryId = kodexTransaction {
-            MfaMethods
+        val oldPrimaryId = db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.isPrimary eq true)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.isPrimary eq true)
                 }
                 .singleOrNull()
-                ?.let { it[MfaMethods.id].value }
+                ?.let { it[methods.id] }
         }
 
-        val newMethodType = kodexTransaction {
-            MfaMethods
+        val newMethodType = db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.id eq methodId)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.id eq methodId)
                 }
                 .singleOrNull()
-                ?.let { it[MfaMethods.methodType] }
+                ?.let { it[methods.methodType] }
         }
 
-        kodexTransaction {
-            MfaMethods.update({
-                (MfaMethods.realmId eq realmId) and (MfaMethods.userId eq userId)
+        db.transaction {
+            methods.update({
+                (methods.realmId eq realmId) and (methods.userId eq userId)
             }) {
-                it[isPrimary] = false
+                it[methods.isPrimary] = false
             }
 
-            MfaMethods.update({
-                (MfaMethods.realmId eq realmId) and (MfaMethods.userId eq userId) and (MfaMethods.id eq methodId)
+            methods.update({
+                (methods.realmId eq realmId) and (methods.userId eq userId) and (methods.id eq methodId)
             }) {
-                it[isPrimary] = true
+                it[methods.isPrimary] = true
             }
         }
 
@@ -970,7 +962,6 @@ internal class DefaultMfaService(
     }
 
     override suspend fun generateBackupCodes(userId: UUID): List<String> {
-        // Verify user has at least one active MFA method
         if (!hasAnyMethod(userId)) {
             throw KodexThrowable.Authorization.InsufficientPermissions(
                 requiredRole = "MFA_ENROLLED",
@@ -982,21 +973,21 @@ internal class DefaultMfaService(
         val nowLocal = now.toLocalDateTime(timeZone)
         val codes = mutableListOf<String>()
 
-        kodexTransaction {
-            MfaBackupCodes.deleteWhere {
-                (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.userId eq userId)
+        db.transaction {
+            backupCodes.deleteWhere {
+                (backupCodes.realmId eq realmId) and (backupCodes.userId eq userId)
             }
 
             repeat(config.backupCodesCount) {
                 val code = TokenGenerator.generate(AlphanumericFormat(config.backupCodeLength, true))
                 val codeHash = hashingService.hash(code)
 
-                MfaBackupCodes.insert {
-                    it[MfaBackupCodes.realmId] = this@DefaultMfaService.realmId
-                    it[MfaBackupCodes.userId] = userId
-                    it[MfaBackupCodes.codeHash] = codeHash
-                    it[usedAt] = null
-                    it[createdAt] = nowLocal
+                backupCodes.insert {
+                    it[backupCodes.realmId] = this@DefaultMfaService.realmId
+                    it[backupCodes.userId] = userId
+                    it[backupCodes.codeHash] = codeHash
+                    it[backupCodes.usedAt] = null
+                    it[backupCodes.createdAt] = nowLocal
                 }
 
                 codes.add(code)
@@ -1024,7 +1015,6 @@ internal class DefaultMfaService(
             val now = CurrentKotlinInstant
             val nowLocal = now.toLocalDateTime(timeZone)
 
-            // Check rate limits for backup code verification
             val userLimit = rateLimiter.checkLimit(
                 key = "mfa:backup_code_verify:user:$userId",
                 limit = config.maxBackupCodeAttemptsPerUser,
@@ -1057,36 +1047,36 @@ internal class DefaultMfaService(
                 return@ensureMinimumResponseTime VerificationResult.RateLimitExceeded(reason)
             }
 
-            val backupCodes = kodexTransaction {
-                MfaBackupCodes
+            val backupCodeRows = db.transaction {
+                backupCodes
                     .selectAll()
                     .where {
-                        (MfaBackupCodes.realmId eq realmId) and
-                        (MfaBackupCodes.userId eq userId) and
-                        (MfaBackupCodes.usedAt.isNull())
+                        (backupCodes.realmId eq realmId) and
+                        (backupCodes.userId eq userId) and
+                        (backupCodes.usedAt.isNull())
                     }
                     .toList()
             }
 
-            for (backupCode in backupCodes) {
-                val codeHash = backupCode[MfaBackupCodes.codeHash]
+            for (backupCode in backupCodeRows) {
+                val codeHash = backupCode[backupCodes.codeHash]
                 if (hashingService.verify(code, codeHash)) {
-                    val codeId = backupCode[MfaBackupCodes.id].value
-                    kodexTransaction {
-                        MfaBackupCodes.update({
-                            (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.id eq codeId)
+                    val codeId = backupCode[backupCodes.id]
+                    db.transaction {
+                        backupCodes.update({
+                            (backupCodes.realmId eq realmId) and (backupCodes.id eq codeId)
                         }) {
-                            it[usedAt] = nowLocal
+                            it[backupCodes.usedAt] = nowLocal
                         }
                     }
 
-                    val remainingCodes = kodexTransaction {
-                        MfaBackupCodes
+                    val remainingCodes = db.transaction {
+                        backupCodes
                             .selectAll()
                             .where {
-                                (MfaBackupCodes.realmId eq realmId) and
-                                (MfaBackupCodes.userId eq userId) and
-                                (MfaBackupCodes.usedAt.isNull())
+                                (backupCodes.realmId eq realmId) and
+                                (backupCodes.userId eq userId) and
+                                (backupCodes.usedAt.isNull())
                             }
                             .count()
                             .toInt()
@@ -1115,28 +1105,19 @@ internal class DefaultMfaService(
         code: String,
         methodId: UUID?
     ): VerificationResult {
-        // Get MFA session
         val session = sessionStore.getSession(sessionId)
             ?: return VerificationResult.Invalid("Invalid or expired MFA session")
 
-        // Determine verification method and verify code
         val result = when {
-            // TOTP verification (requires methodId)
             methodId != null -> verifyTotp(session.userId, methodId, code, session.ipAddress)
-
-            // Backup code verification (code length matches backup code length)
             code.length == config.backupCodeLength ->
                 verifyBackupCode(session.userId, code, session.ipAddress)
-
-            // Invalid - no method ID provided and code is not a backup code
             else -> VerificationResult.Invalid("Invalid verification method or code")
         }
 
-        // If verification successful, mark session as verified and auto-trust device
         if (result is VerificationResult.Success) {
             sessionStore.markAsVerified(sessionId)
 
-            // Auto-trust device if enabled
             if (config.autoTrustDeviceAfterVerification &&
                 session.ipAddress != null &&
                 session.userAgent != null) {
@@ -1156,13 +1137,13 @@ internal class DefaultMfaService(
     }
 
     override fun hasAnyMethod(userId: UUID): Boolean {
-        return kodexTransaction {
-            MfaMethods
+        return db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.isActive eq true)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.isActive eq true)
                 }
                 .count() > 0
         }
@@ -1172,7 +1153,6 @@ internal class DefaultMfaService(
         return config.requireMfa && hasAnyMethod(userId)
     }
 
-    // Trusted Devices
     override suspend fun trustDevice(
         userId: UUID,
         ipAddress: String?,
@@ -1180,11 +1160,10 @@ internal class DefaultMfaService(
         deviceName: String?,
         expiresInDays: Int?
     ): UUID {
-        // Generate device fingerprint from IP and user agent
         val deviceFingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
 
         val now = CurrentKotlinInstant
-        val deviceId = kodexTransaction {
+        val deviceId = db.transaction {
             val nowLocal = now.toLocalDateTime(timeZone)
 
             val effectiveExpiresInDays = expiresInDays
@@ -1194,17 +1173,17 @@ internal class DefaultMfaService(
                 now.plus(it.days).toLocalDateTime(timeZone)
             }
 
-            MfaTrustedDevices.insert {
-                it[MfaTrustedDevices.realmId] = this@DefaultMfaService.realmId
-                it[MfaTrustedDevices.userId] = userId
-                it[MfaTrustedDevices.deviceFingerprint] = deviceFingerprint
-                it[MfaTrustedDevices.deviceName] = deviceName
-                it[MfaTrustedDevices.ipAddress] = ipAddress
-                it[MfaTrustedDevices.userAgent] = userAgent
-                it[MfaTrustedDevices.trustedAt] = nowLocal
-                it[MfaTrustedDevices.lastUsedAt] = null
-                it[MfaTrustedDevices.expiresAt] = expiresAt
-            }[MfaTrustedDevices.id].value
+            trustedDevices.insert {
+                it[trustedDevices.realmId] = this@DefaultMfaService.realmId
+                it[trustedDevices.userId] = userId
+                it[trustedDevices.deviceFingerprint] = deviceFingerprint
+                it[trustedDevices.deviceName] = deviceName
+                it[trustedDevices.ipAddress] = ipAddress
+                it[trustedDevices.userAgent] = userAgent
+                it[trustedDevices.trustedAt] = nowLocal
+                it[trustedDevices.lastUsedAt] = null
+                it[trustedDevices.expiresAt] = expiresAt
+            }[trustedDevices.id]
         }
 
         eventBus.publish(MfaEvent.DeviceTrusted(
@@ -1229,37 +1208,35 @@ internal class DefaultMfaService(
         ipAddress: String?,
         userAgent: String?
     ): Boolean {
-        // Generate device fingerprint from IP and user agent
         val deviceFingerprint = DeviceFingerprint.generate(ipAddress, userAgent)
 
-        return kodexTransaction {
+        return db.transaction {
             val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-            val device = MfaTrustedDevices
+            val device = trustedDevices
                 .selectAll()
                 .where {
-                    (MfaTrustedDevices.realmId eq realmId) and
-                    (MfaTrustedDevices.userId eq userId) and
-                    (MfaTrustedDevices.deviceFingerprint eq deviceFingerprint)
+                    (trustedDevices.realmId eq realmId) and
+                    (trustedDevices.userId eq userId) and
+                    (trustedDevices.deviceFingerprint eq deviceFingerprint)
                 }
                 .singleOrNull()
 
             if (device == null) {
-                return@kodexTransaction false
+                return@transaction false
             }
 
-            val expiresAt = device[MfaTrustedDevices.expiresAt]
+            val expiresAt = device[trustedDevices.expiresAt]
             if (expiresAt != null && now > expiresAt) {
-                return@kodexTransaction false
+                return@transaction false
             }
 
-            // Update last used timestamp
-            MfaTrustedDevices.update({
-                (MfaTrustedDevices.realmId eq realmId) and
-                (MfaTrustedDevices.userId eq userId) and
-                (MfaTrustedDevices.deviceFingerprint eq deviceFingerprint)
+            trustedDevices.update({
+                (trustedDevices.realmId eq realmId) and
+                (trustedDevices.userId eq userId) and
+                (trustedDevices.deviceFingerprint eq deviceFingerprint)
             }) {
-                it[lastUsedAt] = now
+                it[trustedDevices.lastUsedAt] = now
             }
 
             true
@@ -1267,46 +1244,46 @@ internal class DefaultMfaService(
     }
 
     override suspend fun getTrustedDevices(userId: UUID): List<TrustedDeviceInfo> {
-        return kodexTransaction {
-            MfaTrustedDevices
+        return db.transaction {
+            trustedDevices
                 .selectAll()
                 .where {
-                    (MfaTrustedDevices.realmId eq realmId) and
-                    (MfaTrustedDevices.userId eq userId)
+                    (trustedDevices.realmId eq realmId) and
+                    (trustedDevices.userId eq userId)
                 }
                 .map {
                     TrustedDeviceInfo(
-                        id = it[MfaTrustedDevices.id].value,
-                        deviceFingerprint = it[MfaTrustedDevices.deviceFingerprint],
-                        deviceName = it[MfaTrustedDevices.deviceName],
-                        ipAddress = it[MfaTrustedDevices.ipAddress],
-                        userAgent = it[MfaTrustedDevices.userAgent],
-                        trustedAt = it[MfaTrustedDevices.trustedAt].toInstant(timeZone),
-                        lastUsedAt = it[MfaTrustedDevices.lastUsedAt]?.toInstant(timeZone),
-                        expiresAt = it[MfaTrustedDevices.expiresAt]?.toInstant(timeZone)
+                        id = it[trustedDevices.id],
+                        deviceFingerprint = it[trustedDevices.deviceFingerprint],
+                        deviceName = it[trustedDevices.deviceName],
+                        ipAddress = it[trustedDevices.ipAddress],
+                        userAgent = it[trustedDevices.userAgent],
+                        trustedAt = it[trustedDevices.trustedAt].toInstant(timeZone),
+                        lastUsedAt = it[trustedDevices.lastUsedAt]?.toInstant(timeZone),
+                        expiresAt = it[trustedDevices.expiresAt]?.toInstant(timeZone)
                     )
                 }
         }
     }
 
     override suspend fun removeTrustedDevice(userId: UUID, deviceId: UUID) {
-        val deviceInfo = kodexTransaction {
-            MfaTrustedDevices
+        val deviceInfo = db.transaction {
+            trustedDevices
                 .selectAll()
                 .where {
-                    (MfaTrustedDevices.realmId eq realmId) and
-                    (MfaTrustedDevices.userId eq userId) and
-                    (MfaTrustedDevices.id eq deviceId)
+                    (trustedDevices.realmId eq realmId) and
+                    (trustedDevices.userId eq userId) and
+                    (trustedDevices.id eq deviceId)
                 }
                 .singleOrNull()
-                ?.let { it[MfaTrustedDevices.deviceFingerprint] }
+                ?.let { it[trustedDevices.deviceFingerprint] }
         }
 
-        kodexTransaction {
-            MfaTrustedDevices.deleteWhere {
-                (MfaTrustedDevices.realmId eq realmId) and
-                (MfaTrustedDevices.userId eq userId) and
-                (MfaTrustedDevices.id eq deviceId)
+        db.transaction {
+            trustedDevices.deleteWhere {
+                (trustedDevices.realmId eq realmId) and
+                (trustedDevices.userId eq userId) and
+                (trustedDevices.id eq deviceId)
             }
         }
 
@@ -1324,36 +1301,35 @@ internal class DefaultMfaService(
     }
 
     override suspend fun removeAllTrustedDevices(userId: UUID) {
-        kodexTransaction {
-            MfaTrustedDevices.deleteWhere {
-                (MfaTrustedDevices.realmId eq realmId) and (MfaTrustedDevices.userId eq userId)
+        db.transaction {
+            trustedDevices.deleteWhere {
+                (trustedDevices.realmId eq realmId) and (trustedDevices.userId eq userId)
             }
         }
     }
 
-    // Admin Management
     override suspend fun forceRemoveMfaMethod(adminId: UUID, userId: UUID, methodId: UUID) {
         requireAdminRole(adminId)
 
-        val methodInfo = kodexTransaction {
-            MfaMethods
+        val methodInfo = db.transaction {
+            methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.userId eq userId) and
-                    (MfaMethods.id eq methodId)
+                    (methods.realmId eq realmId) and
+                    (methods.userId eq userId) and
+                    (methods.id eq methodId)
                 }
                 .singleOrNull()
                 ?.let {
-                    it[MfaMethods.methodType]
+                    it[methods.methodType]
                 }
         }
 
-        kodexTransaction {
-            MfaMethods.deleteWhere {
-                (MfaMethods.realmId eq realmId) and
-                (MfaMethods.userId eq userId) and
-                (MfaMethods.id eq methodId)
+        db.transaction {
+            methods.deleteWhere {
+                (methods.realmId eq realmId) and
+                (methods.userId eq userId) and
+                (methods.id eq methodId)
             }
         }
 
@@ -1373,15 +1349,15 @@ internal class DefaultMfaService(
     override suspend fun disableMfaForUser(adminId: UUID, userId: UUID) {
         requireAdminRole(adminId)
 
-        kodexTransaction {
-            MfaMethods.deleteWhere {
-                (MfaMethods.realmId eq realmId) and (MfaMethods.userId eq userId)
+        db.transaction {
+            methods.deleteWhere {
+                (methods.realmId eq realmId) and (methods.userId eq userId)
             }
-            MfaBackupCodes.deleteWhere {
-                (MfaBackupCodes.realmId eq realmId) and (MfaBackupCodes.userId eq userId)
+            backupCodes.deleteWhere {
+                (backupCodes.realmId eq realmId) and (backupCodes.userId eq userId)
             }
-            MfaTrustedDevices.deleteWhere {
-                (MfaTrustedDevices.realmId eq realmId) and (MfaTrustedDevices.userId eq userId)
+            trustedDevices.deleteWhere {
+                (trustedDevices.realmId eq realmId) and (trustedDevices.userId eq userId)
             }
         }
     }
@@ -1392,18 +1368,17 @@ internal class DefaultMfaService(
         return getMethods(userId)
     }
 
-    // Statistics
     override suspend fun getMfaStatistics(): MfaStatistics {
         val totalUsers = config.getTotalUsers?.invoke() ?: 0L
-        return kodexTransaction {
+        return db.transaction {
 
-            val usersWithMfa = MfaMethods
+            val usersWithMfa = methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.isActive eq true)
+                    (methods.realmId eq realmId) and
+                    (methods.isActive eq true)
                 }
-                .map { it[MfaMethods.userId] }
+                .map { it[methods.userId].value }
                 .distinct()
                 .count()
                 .toLong()
@@ -1412,18 +1387,18 @@ internal class DefaultMfaService(
                 (usersWithMfa.toDouble() / totalUsers.toDouble()) * 100.0
             } else 0.0
 
-            val methodDistribution = MfaMethods
+            val methodDistribution = methods
                 .selectAll()
                 .where {
-                    (MfaMethods.realmId eq realmId) and
-                    (MfaMethods.isActive eq true)
+                    (methods.realmId eq realmId) and
+                    (methods.isActive eq true)
                 }
-                .groupBy { it[MfaMethods.methodType] }
+                .groupBy { it[methods.methodType] }
                 .mapValues { it.value.size.toLong() }
 
-            val trustedDevices = MfaTrustedDevices
+            val trustedDeviceCount = trustedDevices
                 .selectAll()
-                .where { MfaTrustedDevices.realmId eq realmId }
+                .where { trustedDevices.realmId eq realmId }
                 .count()
 
             MfaStatistics(
@@ -1431,7 +1406,7 @@ internal class DefaultMfaService(
                 usersWithMfa = usersWithMfa,
                 adoptionRate = adoptionRate,
                 methodDistribution = methodDistribution,
-                trustedDevices = trustedDevices
+                trustedDevices = trustedDeviceCount
             )
         }
     }

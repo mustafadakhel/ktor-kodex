@@ -68,16 +68,16 @@ class UpdateCommandProcessorTest : DescribeSpec({
         )
 
         beforeEach {
-            every { mockRepository.findFullById(testUserId, testRealmId) } returns testUser
+            every { mockRepository.findFullById(testUserId) } returns testUser
         }
 
         describe("execute with UpdateUserFields") {
             it("should update email successfully") {
                 val updatedUser = testUser.copy(email = "new@example.com")
 
-                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateById(any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUser andThen updatedUser
+                every { mockRepository.findFullById(testUserId) } returns testUser andThen updatedUser
 
                 val command = UpdateUserFields(
                     userId = testUserId,
@@ -89,7 +89,6 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    realmId = testRealmId,
                     email = FieldUpdate.SetValue("new@example.com"),
                     phone = FieldUpdate.NoChange,
                     status = FieldUpdate.NoChange,
@@ -98,7 +97,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should handle email already exists") {
-                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateById(any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.EmailAlreadyExists
 
                 val command = UpdateUserFields(
@@ -114,7 +113,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should handle phone already exists") {
-                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateById(any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.PhoneAlreadyExists
 
                 val command = UpdateUserFields(
@@ -130,7 +129,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should update multiple fields at once") {
-                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateById(any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
 
                 val command = UpdateUserFields(
@@ -147,7 +146,6 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    realmId = testRealmId,
                     email = FieldUpdate.SetValue("new@example.com"),
                     phone = FieldUpdate.SetValue("+9999999999"),
                     status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
@@ -156,7 +154,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should handle null email (clear email)") {
-                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateById(any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
 
                 val command = UpdateUserFields(
@@ -169,7 +167,6 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    realmId = testRealmId,
                     email = FieldUpdate.ClearValue,
                     phone = FieldUpdate.NoChange,
                     status = FieldUpdate.NoChange,
@@ -178,7 +175,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should update status successfully") {
-                every { mockRepository.updateById(any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateById(any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
 
                 val command = UpdateUserFields(
@@ -191,7 +188,6 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    realmId = testRealmId,
                     email = FieldUpdate.NoChange,
                     phone = FieldUpdate.NoChange,
                     status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
@@ -212,12 +208,12 @@ class UpdateCommandProcessorTest : DescribeSpec({
             )
 
             beforeEach {
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithProfile
+                every { mockRepository.findFullById(testUserId) } returns testUserWithProfile
             }
 
             it("should update profile fields successfully") {
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithProfile andThen testUserWithProfile
-                every { mockRepository.updateProfileByUserId(any(), any(), any()) } returns
+                every { mockRepository.findFullById(testUserId) } returns testUserWithProfile andThen testUserWithProfile
+                every { mockRepository.updateProfileByUserId(any(), any()) } returns
                     UserRepository.UpdateProfileResult.Success(mockk(relaxed = true))
 
                 val command = UpdateProfileFields(
@@ -234,8 +230,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should clear profile fields with null") {
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithProfile andThen testUserWithProfile
-                every { mockRepository.updateProfileByUserId(any(), any(), any()) } returns
+                every { mockRepository.findFullById(testUserId) } returns testUserWithProfile andThen testUserWithProfile
+                every { mockRepository.updateProfileByUserId(any(), any()) } returns
                     UserRepository.UpdateProfileResult.Success(mockk(relaxed = true))
 
                 val command = UpdateProfileFields(
@@ -252,8 +248,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should handle user without existing profile") {
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUser andThen testUser
-                every { mockRepository.updateProfileByUserId(any(), any(), any()) } returns
+                every { mockRepository.findFullById(testUserId) } returns testUser andThen testUser
+                every { mockRepository.updateProfileByUserId(any(), any()) } returns
                     UserRepository.UpdateProfileResult.Success(mockk(relaxed = true))
 
                 val command = UpdateProfileFields(
@@ -273,11 +269,11 @@ class UpdateCommandProcessorTest : DescribeSpec({
             )
 
             beforeEach {
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithAttrs
+                every { mockRepository.findFullById(testUserId) } returns testUserWithAttrs
             }
 
             it("should add new attributes") {
-                every { mockRepository.updateCustomAttributesByUserId(any(), any(), any()) } returns
+                every { mockRepository.updateCustomAttributesByUserId(any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
 
                 val command = UpdateAttributes(
@@ -295,9 +291,9 @@ class UpdateCommandProcessorTest : DescribeSpec({
             it("should replace all attributes") {
                 val updatedUser = testUserWithAttrs.copy(customAttributes = mapOf("newKey" to "newValue"))
 
-                every { mockRepository.replaceAllCustomAttributesByUserId(any(), any(), any()) } returns
+                every { mockRepository.replaceAllCustomAttributesByUserId(any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithAttrs andThen updatedUser
+                every { mockRepository.findFullById(testUserId) } returns testUserWithAttrs andThen updatedUser
 
                 val newAttrs = mapOf("newKey" to "newValue")
                 val command = UpdateAttributes(
@@ -310,15 +306,15 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 val result = processor.execute(command)
 
                 result.shouldBeInstanceOf<UpdateResult.Success>()
-                verify { mockRepository.replaceAllCustomAttributesByUserId(testUserId, testRealmId, newAttrs) }
+                verify { mockRepository.replaceAllCustomAttributesByUserId(testUserId, newAttrs) }
             }
 
             it("should remove specific attributes") {
                 val updatedUser = testUserWithAttrs.copy(customAttributes = mapOf("key2" to "value2"))
 
-                every { mockRepository.updateCustomAttributesByUserId(any(), any(), any()) } returns
+                every { mockRepository.updateCustomAttributesByUserId(any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithAttrs andThen updatedUser
+                every { mockRepository.findFullById(testUserId) } returns testUserWithAttrs andThen updatedUser
 
                 val command = UpdateAttributes(
                     userId = testUserId,
@@ -335,9 +331,9 @@ class UpdateCommandProcessorTest : DescribeSpec({
             it("should clear all attributes with empty map") {
                 val updatedUser = testUserWithAttrs.copy(customAttributes = emptyMap())
 
-                every { mockRepository.replaceAllCustomAttributesByUserId(any(), any(), any()) } returns
+                every { mockRepository.replaceAllCustomAttributesByUserId(any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUserWithAttrs andThen updatedUser
+                every { mockRepository.findFullById(testUserId) } returns testUserWithAttrs andThen updatedUser
 
                 val command = UpdateAttributes(
                     userId = testUserId,
@@ -349,11 +345,11 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 val result = processor.execute(command)
 
                 result.shouldBeInstanceOf<UpdateResult.Success>()
-                verify { mockRepository.replaceAllCustomAttributesByUserId(testUserId, testRealmId, emptyMap()) }
+                verify { mockRepository.replaceAllCustomAttributesByUserId(testUserId, emptyMap()) }
             }
 
             it("should handle user with no existing attributes") {
-                every { mockRepository.updateCustomAttributesByUserId(any(), any(), any()) } returns
+                every { mockRepository.updateCustomAttributesByUserId(any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
 
                 val command = UpdateAttributes(
@@ -376,9 +372,9 @@ class UpdateCommandProcessorTest : DescribeSpec({
                     customAttributes = mapOf("key" to "value")
                 )
 
-                every { mockRepository.updateBatch(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateBatch(any(), any(), any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.Success
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns testUser andThen updatedUser
+                every { mockRepository.findFullById(testUserId) } returns testUser andThen updatedUser
 
                 val command = UpdateUserBatch(
                     userId = testUserId,
@@ -392,7 +388,6 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateBatch(
                     userId = testUserId,
-                    realmId = testRealmId,
                     email = FieldUpdate.SetValue("new@example.com"),
                     phone = FieldUpdate.NoChange,
                     status = FieldUpdate.NoChange,
@@ -403,7 +398,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
             }
 
             it("should handle batch failures") {
-                every { mockRepository.updateBatch(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+                every { mockRepository.updateBatch(any(), any(), any(), any(), any(), any(), any()) } returns
                     UserRepository.UpdateUserResult.EmailAlreadyExists
 
                 val command = UpdateUserBatch(
@@ -419,7 +414,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
 
         describe("user not found") {
             it("should return NotFound when user doesn't exist") {
-                every { mockRepository.findFullById(testUserId, testRealmId) } returns null
+                every { mockRepository.findFullById(testUserId) } returns null
 
                 val command = UpdateUserFields(
                     userId = testUserId,

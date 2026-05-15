@@ -50,7 +50,7 @@ internal class DefaultAuthService(
             identifierType = "email",
             ipAddress = ipAddress,
             userAgent = userAgent,
-            userFetcher = { userRepository.findByEmail(it, realm.name) }
+            userFetcher = { userRepository.findByEmail(it) }
         )
 
     override suspend fun loginByPhone(
@@ -65,13 +65,13 @@ internal class DefaultAuthService(
             identifierType = "phone",
             ipAddress = ipAddress,
             userAgent = userAgent,
-            userFetcher = { userRepository.findByPhone(it, realm.name) }
+            userFetcher = { userRepository.findByPhone(it) }
         )
 
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
         val timestamp = CurrentKotlinInstant
 
-        val user = userRepository.findById(userId, realm.name)
+        val user = userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         if (!authenticateInternal(oldPassword, userId)) {
@@ -90,7 +90,7 @@ internal class DefaultAuthService(
 
         val hashedPassword = hashingService.hash(newPassword)
 
-        val success = userRepository.updatePassword(userId, realm.name, hashedPassword)
+        val success = userRepository.updatePassword(userId, hashedPassword)
         if (!success) {
             throw KodexThrowable.UserNotFound("User with id $userId not found")
         }
@@ -111,12 +111,12 @@ internal class DefaultAuthService(
     override suspend fun resetPassword(userId: UUID, newPassword: String) {
         val timestamp = CurrentKotlinInstant
 
-        val user = userRepository.findById(userId, realm.name)
+        val user = userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         val hashedPassword = hashingService.hash(newPassword)
 
-        val success = userRepository.updatePassword(userId, realm.name, hashedPassword)
+        val success = userRepository.updatePassword(userId, hashedPassword)
         if (!success) {
             throw KodexThrowable.UserNotFound("User with id $userId not found")
         }
@@ -180,7 +180,7 @@ internal class DefaultAuthService(
             throw KodexThrowable.Authorization.InvalidCredentials
         }
 
-        val userRoles = userRepository.findRoles(user!!.id, realm.name)
+        val userRoles = userRepository.findRoles(user!!.id)
         val authenticatedUser = AuthenticatedUser(
             userId = user.id,
             email = user.email,
@@ -190,7 +190,7 @@ internal class DefaultAuthService(
         )
         hookExecutor.executeAfterAuthentication(authenticatedUser, metadata)
 
-        userRepository.updateLastLogin(user.id, realm.name, nowLocal(timeZone))
+        userRepository.updateLastLogin(user.id, nowLocal(timeZone))
 
         eventBus.publish(
             AuthEvent.LoginSuccess(
@@ -207,7 +207,7 @@ internal class DefaultAuthService(
     }
 
     private fun authenticateInternal(password: String, userId: UUID): Boolean {
-        val storedPassword = userRepository.getHashedPassword(userId, realm.name) ?: return false
+        val storedPassword = userRepository.getHashedPassword(userId) ?: return false
         return hashingService.verify(password, storedPassword)
     }
 

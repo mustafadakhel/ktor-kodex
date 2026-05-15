@@ -6,12 +6,15 @@ import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.TokenEvent
 import com.mustafadakhel.kodex.extension.*
 import com.mustafadakhel.kodex.observability.KodexLogger
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.sessions.cleanup.SessionCleanupService
 import com.mustafadakhel.kodex.sessions.database.SessionRepository
-import com.mustafadakhel.kodex.sessions.database.SessionHistory
-import com.mustafadakhel.kodex.sessions.database.Sessions
 import com.mustafadakhel.kodex.sessions.device.DeviceFingerprint
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
+import com.mustafadakhel.kodex.sessions.schema.SessionSchema
 import com.mustafadakhel.kodex.sessions.security.AnomalyDetector
 import com.mustafadakhel.kodex.sessions.security.DefaultAnomalyDetector
 import com.mustafadakhel.kodex.sessions.security.DefaultGeoLocationService
@@ -20,22 +23,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Table
 import java.util.UUID
 import kotlin.reflect.KClass
-import kotlin.time.Duration.Companion.days
 
 public class SessionExtension(
     private val config: SessionConfig,
-    private val timeZone: TimeZone,
     private val eventBus: EventBus,
     private val realmId: String
-) : UserLifecycleHooks, PersistentExtension, ServiceProvider, EventSubscriberProvider {
+) : UserLifecycleHooks, PersistentExtension, ServiceProvider, EventSubscriberProvider, DatabaseAwareExtension {
 
     override val priority: Int = 100
 
-    private val repository = SessionRepository(realmId)
+    private lateinit var repository: SessionRepository
+    private lateinit var sessionService: SessionService
+    private lateinit var cleanupService: SessionCleanupService
 
     private val anomalyDetector: AnomalyDetector? = if (config.anomalyDetection.enabled) {
         DefaultAnomalyDetector(config.anomalyDetection)
@@ -49,19 +50,25 @@ public class SessionExtension(
         null
     }
 
-    private val sessionService: SessionService = DefaultSessionService(
-        repository = repository,
-        config = config,
-        eventBus = eventBus,
-        anomalyDetector = anomalyDetector,
-        geoLocationService = geoLocationService
-    )
-
-    private val cleanupService = SessionCleanupService(sessionService, config)
-
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    init {
+    override fun createSchema(core: CoreSchema): ExtensionSchema = SessionSchema(core)
+
+    override fun initialize(db: KodexDatabase) {
+        val schema = db.schema<SessionSchema>()
+
+        repository = SessionRepository(db, schema, realmId)
+
+        sessionService = DefaultSessionService(
+            db = db,
+            repository = repository,
+            config = config,
+            eventBus = eventBus,
+            anomalyDetector = anomalyDetector,
+            geoLocationService = geoLocationService
+        )
+
+        cleanupService = SessionCleanupService(sessionService, config)
         cleanupService.start(cleanupScope)
     }
 
@@ -133,8 +140,6 @@ public class SessionExtension(
             }
         }
     }
-
-    override fun tables(): List<Table> = listOf(Sessions, SessionHistory)
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any> getService(type: KClass<T>): T? {

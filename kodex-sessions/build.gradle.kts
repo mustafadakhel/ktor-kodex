@@ -41,7 +41,6 @@ tasks {
 dependencies {
     api(project(":kodex"))
 
-    implementation(libs.exposed.dao)
     implementation(libs.exposed.jdbc)
     implementation(libs.exposed.datetime)
     implementation(libs.kotlinx.datetime)

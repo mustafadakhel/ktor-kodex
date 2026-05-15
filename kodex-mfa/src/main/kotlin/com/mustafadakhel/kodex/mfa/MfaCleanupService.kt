@@ -1,11 +1,8 @@
 package com.mustafadakhel.kodex.mfa
 
-import com.mustafadakhel.kodex.mfa.database.MfaChallenges
-import com.mustafadakhel.kodex.mfa.database.MfaMethodType
-import com.mustafadakhel.kodex.mfa.database.MfaMethods
-import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
+import com.mustafadakhel.kodex.mfa.schema.MfaSchema
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -54,18 +51,24 @@ public interface MfaCleanupService {
 }
 
 internal class DefaultMfaCleanupService(
+    private val db: KodexDatabase,
+    private val schema: MfaSchema,
     private val realmId: String,
     private val timeZone: TimeZone,
     private val sessionStore: MfaSessionStore,
     private val inactiveEnrollmentExpiration: Duration
 ) : MfaCleanupService {
 
+    private val challenges = schema.mfaChallenges
+    private val trustedDevices = schema.mfaTrustedDevices
+    private val methods = schema.mfaMethods
+
     override suspend fun cleanupExpiredChallenges(): Int {
         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-        return kodexTransaction {
-            MfaChallenges.deleteWhere {
-                (MfaChallenges.realmId eq realmId) and (MfaChallenges.expiresAt less now)
+        return db.transaction {
+            challenges.deleteWhere {
+                (challenges.realmId eq realmId) and (challenges.expiresAt less now)
             }
         }
     }
@@ -77,11 +80,11 @@ internal class DefaultMfaCleanupService(
     override suspend fun cleanupExpiredTrustedDevices(): Int {
         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-        return kodexTransaction {
-            MfaTrustedDevices.deleteWhere {
-                (MfaTrustedDevices.realmId eq realmId) and
-                (MfaTrustedDevices.expiresAt.isNotNull()) and
-                (MfaTrustedDevices.expiresAt less now)
+        return db.transaction {
+            trustedDevices.deleteWhere {
+                (trustedDevices.realmId eq realmId) and
+                (trustedDevices.expiresAt.isNotNull()) and
+                (trustedDevices.expiresAt less now)
             }
         }
     }
@@ -89,12 +92,12 @@ internal class DefaultMfaCleanupService(
     override suspend fun cleanupAbandonedEnrollments(): Int {
         val cutoffTime = CurrentKotlinInstant.minus(inactiveEnrollmentExpiration).toLocalDateTime(timeZone)
 
-        return kodexTransaction {
-            MfaMethods.deleteWhere {
-                (MfaMethods.realmId eq realmId) and
-                (MfaMethods.methodType eq MfaMethodType.TOTP) and
-                (MfaMethods.isActive eq false) and
-                (MfaMethods.enrolledAt less cutoffTime)
+        return db.transaction {
+            methods.deleteWhere {
+                (methods.realmId eq realmId) and
+                (methods.methodType eq MfaMethodType.TOTP) and
+                (methods.isActive eq false) and
+                (methods.enrolledAt less cutoffTime)
             }
         }
     }

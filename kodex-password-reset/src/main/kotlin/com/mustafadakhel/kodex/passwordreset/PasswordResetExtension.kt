@@ -1,43 +1,68 @@
 package com.mustafadakhel.kodex.passwordreset
 
+import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.upsert
 import kotlin.reflect.KClass
 
-/**
- * Password reset extension that manages password reset requests via email/phone.
- *
- * This extension:
- * - Creates password reset contact records on user registration
- * - Provides a service for managing password reset tokens
- * - Handles rate limiting for reset attempts
- *
- * Priority: 100 - runs independently, no conflicts with other extensions.
- */
 public class PasswordResetExtension internal constructor(
-    public val passwordResetService: PasswordResetService,
-    public val tokenCleanupService: TokenCleanupService,
-    private val timeZone: TimeZone
-) : PersistentExtension, EventSubscriberProvider, ServiceProvider {
+    private val config: PasswordResetConfigData,
+    private val passwordResetSender: PasswordResetSender,
+    private val timeZone: TimeZone,
+    private val eventBus: EventBus?,
+    private val realm: String,
+    private val rateLimiter: RateLimiter
+) : PersistentExtension, EventSubscriberProvider, ServiceProvider, DatabaseAwareExtension {
 
     override val priority: Int = 100
 
-    override fun tables(): List<Table> = listOf(
-        PasswordResetContacts,
-        PasswordResetTokens
-    )
+    public lateinit var passwordResetService: PasswordResetService
+        private set
+    public lateinit var tokenCleanupService: TokenCleanupService
+        private set
+
+    private lateinit var db: KodexDatabase
+    private lateinit var schema: PasswordResetSchema
+
+    override fun createSchema(core: CoreSchema): ExtensionSchema = PasswordResetSchema(core)
+
+    override fun initialize(db: KodexDatabase) {
+        this.db = db
+        this.schema = db.schema<PasswordResetSchema>()
+
+        passwordResetService = DefaultPasswordResetService(
+            db = db,
+            schema = schema,
+            config = config,
+            passwordResetSender = passwordResetSender,
+            timeZone = timeZone,
+            eventBus = eventBus,
+            realm = realm,
+            rateLimiter = rateLimiter
+        )
+
+        tokenCleanupService = DefaultTokenCleanupService(
+            db = db,
+            schema = schema,
+            timeZone = timeZone,
+            eventBus = eventBus,
+            realm = realm
+        )
+    }
 
     override fun getEventSubscribers(): List<EventSubscriber<*>> {
         return listOf(
@@ -45,28 +70,29 @@ public class PasswordResetExtension internal constructor(
                 override val eventType = UserEvent.Created::class
 
                 override suspend fun onEvent(event: UserEvent.Created) {
-                    kodexTransaction {
+                    val contacts = schema.passwordResetContacts
+                    db.transaction {
                         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
                         event.email?.let { email ->
-                            PasswordResetContacts.insert {
-                                it[PasswordResetContacts.realmId] = event.realmId
-                                it[PasswordResetContacts.userId] = event.userId
-                                it[PasswordResetContacts.contactType] = "EMAIL"
-                                it[PasswordResetContacts.contactValue] = email
-                                it[PasswordResetContacts.createdAt] = now
-                                it[PasswordResetContacts.updatedAt] = now
+                            contacts.insert {
+                                it[contacts.realmId] = event.realmId
+                                it[contacts.userId] = event.userId
+                                it[contacts.contactType] = "EMAIL"
+                                it[contacts.contactValue] = email
+                                it[contacts.createdAt] = now
+                                it[contacts.updatedAt] = now
                             }
                         }
 
                         event.phone?.let { phone ->
-                            PasswordResetContacts.insert {
-                                it[PasswordResetContacts.realmId] = event.realmId
-                                it[PasswordResetContacts.userId] = event.userId
-                                it[PasswordResetContacts.contactType] = "PHONE"
-                                it[PasswordResetContacts.contactValue] = phone
-                                it[PasswordResetContacts.createdAt] = now
-                                it[PasswordResetContacts.updatedAt] = now
+                            contacts.insert {
+                                it[contacts.realmId] = event.realmId
+                                it[contacts.userId] = event.userId
+                                it[contacts.contactType] = "PHONE"
+                                it[contacts.contactValue] = phone
+                                it[contacts.createdAt] = now
+                                it[contacts.updatedAt] = now
                             }
                         }
                     }
@@ -76,7 +102,8 @@ public class PasswordResetExtension internal constructor(
                 override val eventType = UserEvent.Updated::class
 
                 override suspend fun onEvent(event: UserEvent.Updated) {
-                    kodexTransaction {
+                    val contacts = schema.passwordResetContacts
+                    db.transaction {
                         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
                         event.fieldChanges.forEach { change ->
@@ -84,36 +111,36 @@ public class PasswordResetExtension internal constructor(
                                 "email" -> {
                                     val newEmail = change.newValue as? String
                                     if (newEmail != null) {
-                                        PasswordResetContacts.upsert(
+                                        contacts.upsert(
                                             keys = arrayOf(
-                                                PasswordResetContacts.realmId,
-                                                PasswordResetContacts.userId,
-                                                PasswordResetContacts.contactType
+                                                contacts.realmId,
+                                                contacts.userId,
+                                                contacts.contactType
                                             )
                                         ) {
-                                            it[PasswordResetContacts.realmId] = event.realmId
-                                            it[PasswordResetContacts.userId] = event.userId
-                                            it[PasswordResetContacts.contactType] = "EMAIL"
-                                            it[PasswordResetContacts.contactValue] = newEmail
-                                            it[PasswordResetContacts.updatedAt] = now
+                                            it[contacts.realmId] = event.realmId
+                                            it[contacts.userId] = event.userId
+                                            it[contacts.contactType] = "EMAIL"
+                                            it[contacts.contactValue] = newEmail
+                                            it[contacts.updatedAt] = now
                                         }
                                     }
                                 }
                                 "phone" -> {
                                     val newPhone = change.newValue as? String
                                     if (newPhone != null) {
-                                        PasswordResetContacts.upsert(
+                                        contacts.upsert(
                                             keys = arrayOf(
-                                                PasswordResetContacts.realmId,
-                                                PasswordResetContacts.userId,
-                                                PasswordResetContacts.contactType
+                                                contacts.realmId,
+                                                contacts.userId,
+                                                contacts.contactType
                                             )
                                         ) {
-                                            it[PasswordResetContacts.realmId] = event.realmId
-                                            it[PasswordResetContacts.userId] = event.userId
-                                            it[PasswordResetContacts.contactType] = "PHONE"
-                                            it[PasswordResetContacts.contactValue] = newPhone
-                                            it[PasswordResetContacts.updatedAt] = now
+                                            it[contacts.realmId] = event.realmId
+                                            it[contacts.userId] = event.userId
+                                            it[contacts.contactType] = "PHONE"
+                                            it[contacts.contactValue] = newPhone
+                                            it[contacts.updatedAt] = now
                                         }
                                     }
                                 }

@@ -22,7 +22,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-email;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -72,7 +71,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-phone;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -122,7 +120,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-creds;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -169,7 +166,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-user;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -201,7 +197,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-role;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -244,7 +239,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-token;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -275,7 +269,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-jwt;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -307,7 +300,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-rollback;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -352,7 +344,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-sanitize;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -407,7 +398,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-idempotent;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -461,7 +451,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-verify-idempotent;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -516,7 +505,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-nonexistent;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -553,7 +541,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-validation;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -595,7 +582,6 @@ class ErrorHandlingTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:error-constraint;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

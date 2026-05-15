@@ -1,24 +1,27 @@
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.audit.database.AuditLogs
+import com.mustafadakhel.kodex.audit.schema.AuditSchema
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.PersistentExtension
-import org.jetbrains.exposed.sql.Table
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 
-/**
- * Audit logging extension for Kodex.
- * Delegates audit event logging to a configurable audit provider via the event bus.
- *
- * If using DatabaseAuditProvider, this extension automatically registers
- * the AuditLogs table with the database engine.
- */
 public class AuditExtension internal constructor(
-    private val provider: AuditProvider
-) : PersistentExtension, EventSubscriberProvider {
+    private val providerFactory: (KodexDatabase, AuditSchema) -> AuditProvider
+) : PersistentExtension, EventSubscriberProvider, DatabaseAwareExtension {
 
-    override fun tables(): List<Table> = listOf(AuditLogs)
+    private lateinit var provider: AuditProvider
+
+    override fun createSchema(core: CoreSchema): ExtensionSchema = AuditSchema(core)
+
+    override fun initialize(db: KodexDatabase) {
+        val schema = db.schema<AuditSchema>()
+        provider = providerFactory(db, schema)
+    }
 
     override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
         return listOf(AuditEventSubscriber(provider))

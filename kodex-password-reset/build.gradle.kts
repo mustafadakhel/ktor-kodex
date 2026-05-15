@@ -18,6 +18,19 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+sourceSets {
+    create("integrationTest") {
+        kotlin {
+            srcDir("src/integrationTest/kotlin")
+        }
+        resources {
+            srcDir("src/integrationTest/resources")
+        }
+        compileClasspath += sourceSets["main"].output + sourceSets["test"].output
+        runtimeClasspath += sourceSets["main"].output + sourceSets["test"].output
+    }
+}
+
 tasks {
     test {
         useJUnitPlatform()
@@ -35,6 +48,32 @@ tasks {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+
+    val integrationTest = register<Test>("integrationTest") {
+        description = "Runs integration tests."
+        group = "verification"
+
+        testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+        classpath = sourceSets["integrationTest"].runtimeClasspath
+
+        useJUnitPlatform()
+        shouldRunAfter(test)
+    }
+
+    named<Task>("compileIntegrationTestKotlin") {
+        (this as org.jetbrains.kotlin.gradle.tasks.KotlinCompile).compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xfriend-paths=${project.layout.buildDirectory.get()}/classes/kotlin/main")
+        }
+    }
+
+    named<Task>("check") {
+        dependsOn(integrationTest)
+    }
+}
+
+val integrationTestImplementation by configurations.getting {
+    extendsFrom(configurations.testImplementation.get())
 }
 
 dependencies {
@@ -43,7 +82,6 @@ dependencies {
     implementation(project(":kodex-tokens"))
 
     // Database dependencies (Exposed)
-    implementation(libs.exposed.dao)
     implementation(libs.exposed.jdbc)
     implementation(libs.exposed.datetime)
 
@@ -57,6 +95,13 @@ dependencies {
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(project(":kodex-ratelimit-inmemory"))
+
+    // Integration test dependencies
+    integrationTestImplementation(libs.h2.database)
+    integrationTestImplementation(libs.bundles.kotest)
+    integrationTestImplementation(project(":kodex-ratelimit-inmemory"))
+    integrationTestImplementation(project(":kodex"))
+    integrationTestImplementation(project(":kodex-tokens"))
 }
 
 mavenPublishing {

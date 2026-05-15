@@ -2,17 +2,18 @@ package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.extension.AuthenticatedUser
+import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
-import com.mustafadakhel.kodex.mfa.database.MfaBackupCodes
-import com.mustafadakhel.kodex.mfa.database.MfaChallenges
-import com.mustafadakhel.kodex.mfa.database.MfaMethods
-import com.mustafadakhel.kodex.mfa.database.MfaTotpUsedCodes
-import com.mustafadakhel.kodex.mfa.database.MfaTrustedDevices
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
+import com.mustafadakhel.kodex.mfa.schema.MfaSchema
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 import com.mustafadakhel.kodex.ratelimit.RateLimiter
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.service.HashingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,19 +24,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Table
 import org.slf4j.LoggerFactory
 import kotlin.reflect.KClass
 
 public class MfaExtension internal constructor(
     private val config: MfaConfig,
-    timeZone: TimeZone,
-    hashingService: HashingService,
-    secretEncryption: SecretEncryption,
-    eventBus: EventBus,
+    private val timeZone: TimeZone,
+    private val hashingService: HashingService,
+    private val secretEncryption: SecretEncryption,
+    private val eventBus: EventBus,
     private val realmId: String,
-    rateLimiter: RateLimiter
-) : UserLifecycleHooks, PersistentExtension, ServiceProvider {
+    private val rateLimiter: RateLimiter
+) : UserLifecycleHooks, PersistentExtension, ServiceProvider, DatabaseAwareExtension {
 
     private val logger = LoggerFactory.getLogger(MfaExtension::class.java)
 
@@ -44,55 +44,54 @@ public class MfaExtension internal constructor(
         maxActiveSessions = config.maxActiveSessions
     )
 
-    private val mfaService: MfaService = DefaultMfaService(
-        config = config,
-        timeZone = timeZone,
-        hashingService = hashingService,
-        secretEncryption = secretEncryption,
-        eventBus = eventBus,
-        realmId = realmId,
-        rateLimiter = rateLimiter,
-        sessionStore = sessionStore
-    )
-
-    private val cleanupService: MfaCleanupService = DefaultMfaCleanupService(
-        realmId = realmId,
-        timeZone = timeZone,
-        sessionStore = sessionStore,
-        inactiveEnrollmentExpiration = config.inactiveEnrollmentExpiration
-    )
+    private lateinit var mfaService: MfaService
+    private lateinit var cleanupService: MfaCleanupService
 
     private val cleanupScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var cleanupJob: Job? = null
 
-    init {
+    override val priority: Int = 65
+
+    override fun createSchema(core: CoreSchema): ExtensionSchema = MfaSchema(core)
+
+    override fun initialize(db: KodexDatabase) {
+        val schema = db.schema<MfaSchema>()
+
+        mfaService = DefaultMfaService(
+            db = db,
+            schema = schema,
+            config = config,
+            timeZone = timeZone,
+            hashingService = hashingService,
+            secretEncryption = secretEncryption,
+            eventBus = eventBus,
+            realmId = realmId,
+            rateLimiter = rateLimiter,
+            sessionStore = sessionStore
+        )
+
+        cleanupService = DefaultMfaCleanupService(
+            db = db,
+            schema = schema,
+            realmId = realmId,
+            timeZone = timeZone,
+            sessionStore = sessionStore,
+            inactiveEnrollmentExpiration = config.inactiveEnrollmentExpiration
+        )
+
         if (config.automaticCleanup) {
             startAutomaticCleanup()
         }
     }
 
-    override val priority: Int = 65
-
-    override fun tables(): List<Table> = listOf(
-        MfaMethods,
-        MfaChallenges,
-        MfaBackupCodes,
-        MfaTrustedDevices,
-        MfaTotpUsedCodes
-    )
-
-    override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: com.mustafadakhel.kodex.extension.LoginMetadata) {
-        // Check device trust (automatic)
+    override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
         if (mfaService.isDeviceTrusted(user.userId, metadata.ipAddress, metadata.userAgent)) {
-            return  // Trusted device, skip MFA
+            return
         }
 
-        // Check if MFA is required (global or role-based)
         val requiresMfa = if (config.requiredRolesForMfa.isNotEmpty()) {
-            // Role-based enforcement
             user.roles.any { it in config.requiredRolesForMfa }
         } else {
-            // Global enforcement
             config.requireMfa
         }
 
@@ -100,7 +99,6 @@ public class MfaExtension internal constructor(
             return
         }
 
-        // Ensure user has enrolled MFA methods
         val methods = mfaService.getMethods(user.userId)
         if (methods.isEmpty()) {
             throw MfaThrowable.MfaEnrollmentRequired(
@@ -108,7 +106,6 @@ public class MfaExtension internal constructor(
             )
         }
 
-        // Create MFA session and throw challenge
         val session = sessionStore.createSession(
             userId = user.userId,
             ipAddress = metadata.ipAddress,

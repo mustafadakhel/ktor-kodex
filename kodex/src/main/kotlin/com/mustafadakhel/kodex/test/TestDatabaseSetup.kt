@@ -1,19 +1,9 @@
 package com.mustafadakhel.kodex.test
 
 import com.mustafadakhel.kodex.model.UserStatus
-import com.mustafadakhel.kodex.model.database.Roles
-import com.mustafadakhel.kodex.model.database.UserRoles
-import com.mustafadakhel.kodex.model.database.Users
-import com.mustafadakhel.kodex.util.Db
-import com.mustafadakhel.kodex.util.DbEngine
-import com.mustafadakhel.kodex.util.EngineRunner
-import com.mustafadakhel.kodex.util.exposedRunner
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -24,92 +14,95 @@ import java.util.UUID
 /**
  * Test utilities for extension modules.
  */
-public object TestDatabaseSetup {
+public class TestDatabaseSetup(private val db: KodexDatabase) {
 
-    /**
-     * Registers test database with Db singleton to ensure tests use the same code path as production.
-     */
-    public fun setupTestEngine(db: Database) {
-        val engine = object : DbEngine<Transaction> {
-            override val runner: EngineRunner<Transaction> = exposedRunner(db)
-            override fun <R> run(block: Transaction.() -> R): R = runner.run(block)
-            override fun clear() {}
-        }
-        Db.setEngine(engine)
-    }
+    private val users get() = db.core.users
+    private val roles get() = db.core.roles
+    private val userRoles get() = db.core.userRoles
 
-    public fun getCoreTables(): List<Table> = listOf(Users, Roles, UserRoles)
-
-    public suspend fun createTestUser(
+    public fun createTestUser(
         email: String,
         phone: String? = null,
         passwordHash: String = "test_hash",
         status: UserStatus = UserStatus.ACTIVE,
         realmId: String = "test-realm"
     ): UUID {
-        return kodexTransaction {
-            Users.insertAndGetId {
-                it[Users.passwordHash] = passwordHash
-                it[Users.email] = email
+        val realm = realmId
+        return db.transaction {
+            users.insertAndGetId {
+                it[users.passwordHash] = passwordHash
+                it[users.email] = email
                 if (phone != null) {
-                    it[Users.phoneNumber] = phone
+                    it[users.phoneNumber] = phone
                 }
-                it[Users.status] = status
-                it[Users.realmId] = realmId
+                it[users.status] = status
+                it[users.realmId] = realm
             }.value
         }
     }
 
-    public suspend fun createRole(roleName: String, description: String? = null) {
-        kodexTransaction {
-            try {
-                Roles.insert {
-                    it[id] = EntityID(roleName, Roles)
-                    it[Roles.description] = description
+    public fun createRole(roleName: String, realmId: String, description: String? = null) {
+        val realm = realmId
+        db.transaction {
+            val exists = roles.selectAll()
+                .where { (roles.name eq roleName) and (roles.realmId eq realm) }
+                .any()
+            if (!exists) {
+                roles.insert {
+                    it[roles.name] = roleName
+                    it[roles.realmId] = realm
+                    it[roles.description] = description
                 }
-            } catch (e: Exception) {
-                // Ignore if role exists
             }
         }
     }
 
-    public suspend fun assignRoleToUser(userId: UUID, roleName: String) {
-        kodexTransaction {
-            UserRoles.insert {
-                it[UserRoles.userId] = EntityID(userId, Users)
-                it[roleId] = EntityID(roleName, Roles)
+    public fun assignRoleToUser(userId: UUID, roleName: String, realmId: String) {
+        db.transaction {
+            val roleEntityId = roles.selectAll()
+                .where { (roles.name eq roleName) and (roles.realmId eq realmId) }
+                .single()[roles.id]
+            userRoles.insert {
+                it[userRoles.userId] = EntityID(userId, users)
+                it[userRoles.roleId] = roleEntityId
             }
         }
     }
 
-    public suspend fun createAdminUser(
+    public fun createAdminUser(
         email: String = "admin@test.com",
-        passwordHash: String = "test_hash"
+        passwordHash: String = "test_hash",
+        realmId: String = "test-realm"
     ): UUID {
-        createRole("admin", "Administrator")
-        val userId = createTestUser(email, passwordHash = passwordHash)
-        assignRoleToUser(userId, "admin")
+        createRole("admin", realmId, "Administrator")
+        val userId = createTestUser(email, passwordHash = passwordHash, realmId = realmId)
+        assignRoleToUser(userId, "admin", realmId)
         return userId
     }
 
-    public suspend fun deleteTestUser(userId: UUID) {
-        kodexTransaction {
-            UserRoles.deleteWhere { UserRoles.userId eq userId }
-            Users.deleteWhere { Users.id eq userId }
+    public fun deleteTestUser(userId: UUID) {
+        db.transaction {
+            userRoles.deleteWhere { userRoles.userId eq userId }
+            users.deleteWhere { users.id eq userId }
         }
     }
 
-    public suspend fun userHasRole(userId: UUID, roleName: String): Boolean {
-        return kodexTransaction {
-            UserRoles.selectAll()
-                .where { (UserRoles.userId eq userId) and (UserRoles.roleId eq roleName) }
-                .count() > 0
+    public fun userHasRole(userId: UUID, roleName: String, realmId: String): Boolean {
+        return db.transaction {
+            userRoles.innerJoin(roles)
+                .selectAll()
+                .where {
+                    (userRoles.userId eq userId) and
+                    (roles.name eq roleName) and
+                    (roles.realmId eq realmId)
+                }
+                .any()
         }
     }
 
-    public suspend fun getUserCount(): Long {
-        return kodexTransaction {
-            Users.selectAll().count()
+    public fun getUserCount(): Long {
+        return db.transaction {
+            users.selectAll().count()
         }
     }
 }

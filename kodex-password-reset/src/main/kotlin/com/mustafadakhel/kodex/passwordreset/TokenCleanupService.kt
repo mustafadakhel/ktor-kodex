@@ -2,9 +2,9 @@ package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.TokenCleanupEvent
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
-import com.mustafadakhel.kodex.util.kodexTransaction
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
@@ -18,21 +18,19 @@ import org.jetbrains.exposed.sql.or
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
-/**
- * Service for cleaning up expired and used password reset tokens.
- */
 public interface TokenCleanupService {
     public suspend fun purgeExpiredTokens(retentionPeriod: Duration = 30.days): Int
 }
 
-/**
- * Default implementation of token cleanup service.
- */
 internal class DefaultTokenCleanupService(
+    private val db: KodexDatabase,
+    private val schema: PasswordResetSchema,
     private val timeZone: TimeZone,
     private val eventBus: EventBus?,
     private val realm: String
 ) : TokenCleanupService {
+
+    private val tokens = schema.passwordResetTokens
 
     override suspend fun purgeExpiredTokens(retentionPeriod: Duration): Int {
         val clockNow = CurrentKotlinInstant
@@ -43,11 +41,11 @@ internal class DefaultTokenCleanupService(
         var totalDeleted = 0
 
         do {
-            val deletedInBatch = kodexTransaction {
-                PasswordResetTokens.deleteWhere(limit = batchSize) {
-                    (PasswordResetTokens.realmId eq realm) and (
-                        (usedAt.isNotNull() and (usedAt less cutoff)) or
-                        ((expiresAt less now) and (createdAt less cutoff))
+            val deletedInBatch = db.transaction {
+                tokens.deleteWhere(limit = batchSize) {
+                    (tokens.realmId eq realm) and (
+                        (tokens.usedAt.isNotNull() and (tokens.usedAt less cutoff)) or
+                        ((tokens.expiresAt less now) and (tokens.createdAt less cutoff))
                     )
                 }
             }

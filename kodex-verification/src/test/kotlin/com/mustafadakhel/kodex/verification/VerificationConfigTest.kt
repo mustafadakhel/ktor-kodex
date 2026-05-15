@@ -318,6 +318,82 @@ class VerificationConfigTest : FunSpec({
         }
     }
 
+    context("Dependency validation") {
+        test("autoSend with dependsOn should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                phone {
+                    autoSend = true
+                    dependsOn(ContactType.Email)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("autoSend=true but also has dependencies") } shouldBe true
+        }
+
+        test("circular dependency should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email {
+                    dependsOn(ContactType.Phone)
+                }
+                phone {
+                    dependsOn(ContactType.Email)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("Circular dependency") } shouldBe true
+        }
+
+        test("self-dependency should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email {
+                    dependsOn(ContactType.Email)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("cannot depend on itself") } shouldBe true
+        }
+    }
+
+    context("Token format security") {
+        test("NumericFormat with length below 4 should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                phone {
+                    tokenFormat = com.mustafadakhel.kodex.tokens.token.NumericFormat(3)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("minimum is 4") } shouldBe true
+        }
+
+        test("NumericFormat with NoOpRateLimiter should fail build") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                phone {
+                    autoSend = false
+                    tokenFormat = com.mustafadakhel.kodex.tokens.token.NumericFormat(6)
+                }
+            }
+
+            val exception = shouldThrow<IllegalStateException> {
+                config.build(testContext)
+            }
+
+            exception.message shouldContain "brute-force"
+        }
+    }
+
     context("Build method validation") {
         test("build throws IllegalStateException for invalid configuration") {
             val config = VerificationConfig().apply {

@@ -2,21 +2,21 @@ package com.mustafadakhel.kodex.sessions
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SessionEvent
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.sessions.database.SessionRepository
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
 import com.mustafadakhel.kodex.sessions.model.Session
 import com.mustafadakhel.kodex.sessions.model.SessionEndReason
 import com.mustafadakhel.kodex.sessions.model.SessionHistoryEntry
-import com.mustafadakhel.kodex.sessions.model.SessionStatus
+import com.mustafadakhel.kodex.sessions.model.SessionHistoryPage
 import com.mustafadakhel.kodex.sessions.security.AnomalyDetector
 import com.mustafadakhel.kodex.sessions.security.GeoLocationService
-import com.mustafadakhel.kodex.util.kodexSuspendedTransaction
-import com.mustafadakhel.kodex.util.kodexTransaction
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.Instant
 import java.util.UUID
 
 internal class DefaultSessionService(
+    private val db: KodexDatabase,
     private val repository: SessionRepository,
     private val config: SessionConfig,
     private val eventBus: EventBus,
@@ -24,15 +24,15 @@ internal class DefaultSessionService(
     private val geoLocationService: GeoLocationService?
 ) : SessionService {
 
-    override suspend fun listActiveSessions(userId: UUID): List<Session> = kodexTransaction {
+    override suspend fun listActiveSessions(userId: UUID): List<Session> = db.transaction {
         repository.findActiveByUserId(userId)
     }
 
-    override suspend fun getSession(sessionId: UUID): Session? = kodexTransaction {
+    override suspend fun getSession(sessionId: UUID): Session? = db.transaction {
         repository.findById(sessionId)
     }
 
-    override suspend fun getSessionByTokenFamily(tokenFamily: UUID): Session? = kodexTransaction {
+    override suspend fun getSessionByTokenFamily(tokenFamily: UUID): Session? = db.transaction {
         repository.findByTokenFamily(tokenFamily)
     }
 
@@ -49,7 +49,7 @@ internal class DefaultSessionService(
         }
 
         val now = CurrentKotlinInstant
-        val (session, revokedEvent, anomalies) = kodexSuspendedTransaction {
+        val (session, revokedEvent, anomalies) = db.suspendTransaction {
             // Create session FIRST to avoid race condition
             val session = repository.create(
                 userId = userId,
@@ -156,7 +156,7 @@ internal class DefaultSessionService(
 
     override suspend fun revokeSession(sessionId: UUID, reason: String) {
         val now = CurrentKotlinInstant
-        val session = kodexTransaction {
+        val session = db.transaction {
             val session = repository.findById(sessionId)
 
             if (session != null) {
@@ -185,7 +185,7 @@ internal class DefaultSessionService(
 
     override suspend fun revokeAllSessions(userId: UUID, exceptSessionId: UUID?) {
         val now = CurrentKotlinInstant
-        val sessionsToRevoke = kodexTransaction {
+        val sessionsToRevoke = db.transaction {
             val sessionsToRevoke = if (exceptSessionId != null) {
                 repository.findActiveByUserId(userId).filter { it.id != exceptSessionId }
             } else {
@@ -221,7 +221,7 @@ internal class DefaultSessionService(
     override suspend fun updateActivity(tokenFamily: UUID, extendExpirationBy: kotlin.time.Duration) {
         val now = CurrentKotlinInstant
         val newExpiresAt = now + extendExpirationBy
-        val session = kodexTransaction {
+        val session = db.transaction {
             val updated = repository.updateActivity(tokenFamily, now, newExpiresAt)
 
             if (updated > 0) {
@@ -245,19 +245,19 @@ internal class DefaultSessionService(
         }
     }
 
-    override suspend fun getSessionHistory(userId: UUID, limit: Int): List<SessionHistoryEntry> = kodexTransaction {
+    override suspend fun getSessionHistory(userId: UUID, limit: Int): List<SessionHistoryEntry> = db.transaction {
         repository.findHistoryByUserId(userId, limit)
     }
 
-    override suspend fun getSessionHistoryPage(userId: UUID, limit: Int, offset: Int): com.mustafadakhel.kodex.sessions.model.SessionHistoryPage = kodexTransaction {
+    override suspend fun getSessionHistoryPage(userId: UUID, limit: Int, offset: Int): SessionHistoryPage = db.transaction {
         val totalCount = repository.countHistoryByUserId(userId)
         val entries = repository.findHistoryByUserId(userId, limit, offset)
-        com.mustafadakhel.kodex.sessions.model.SessionHistoryPage.create(entries, totalCount, offset, limit)
+        SessionHistoryPage.create(entries, totalCount, offset, limit)
     }
 
     override suspend fun archiveExpiredSessions(): Int {
         val now = CurrentKotlinInstant
-        val expiredSessions = kodexTransaction {
+        val expiredSessions = db.transaction {
             repository.markExpired(now)
 
             val expiredSessions = repository.findExpiredSessions()
@@ -287,7 +287,7 @@ internal class DefaultSessionService(
         return expiredSessions.size
     }
 
-    override suspend fun cleanupOldHistory(): Int = kodexTransaction {
+    override suspend fun cleanupOldHistory(): Int = db.transaction {
         val cutoffTime = CurrentKotlinInstant - config.sessionHistoryRetention
         repository.deleteOldHistory(cutoffTime)
     }

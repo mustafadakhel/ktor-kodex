@@ -1,7 +1,7 @@
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.audit.database.AuditLogs
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.audit.schema.AuditSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -21,10 +21,14 @@ public interface AuditRetentionService {
 }
 
 internal class DefaultAuditRetentionService(
+    private val db: KodexDatabase,
+    private val schema: AuditSchema,
     private val retentionPeriod: Duration,
     private val timeZone: TimeZone,
     private val realmId: String
 ) : AuditRetentionService {
+
+    private val auditEvents = schema.auditEvents
 
     override fun cleanupOldAuditLogs(): Int {
         val cutoffDate = calculateCutoffDate()
@@ -32,10 +36,10 @@ internal class DefaultAuditRetentionService(
     }
 
     override fun cleanupAuditLogsOlderThan(cutoffDate: LocalDateTime): Int {
-        return kodexTransaction {
+        return db.transaction {
             val cutoffInstant = cutoffDate.toInstant(timeZone)
-            AuditLogs.deleteWhere {
-                (AuditLogs.realmId eq realmId) and (AuditLogs.timestamp less cutoffInstant)
+            auditEvents.deleteWhere {
+                (auditEvents.realmId eq realmId) and (auditEvents.timestamp less cutoffInstant)
             }
         }
     }
@@ -51,31 +55,21 @@ internal class DefaultAuditRetentionService(
     }
 }
 
-/**
- * Configuration for audit log retention policy.
- *
- * @property retentionPeriod How long to keep audit logs (default: 90 days)
- * @property enabled Whether automatic cleanup is enabled (default: true)
- */
 public data class AuditRetentionConfig(
     val retentionPeriod: Duration = 90.days,
     val enabled: Boolean = true
 )
 
-/**
- * Creates an audit retention service with the specified configuration.
- *
- * @param config Retention policy configuration
- * @param realmId The realm whose audit logs should be cleaned up
- * @param timeZone Time zone for timestamp calculations
- * @return Configured audit retention service
- */
 public fun auditRetentionService(
+    db: KodexDatabase,
+    schema: AuditSchema,
     config: AuditRetentionConfig,
     realmId: String,
     timeZone: TimeZone = TimeZone.UTC
 ): AuditRetentionService {
     return DefaultAuditRetentionService(
+        db = db,
+        schema = schema,
         retentionPeriod = config.retentionPeriod,
         timeZone = timeZone,
         realmId = realmId

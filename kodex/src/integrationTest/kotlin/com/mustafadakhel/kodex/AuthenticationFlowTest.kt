@@ -28,7 +28,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:auth-flow-test-1;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -65,7 +64,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:auth-flow-test-2;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -101,7 +99,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:auth-flow-test-3;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -152,7 +149,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:auth-flow-test-4;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -195,7 +191,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:auth-flow-test-5;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -241,7 +236,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-register-1;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -282,7 +276,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-register-2;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -322,7 +315,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-register-3;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -375,7 +367,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-login-1;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -426,7 +417,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-login-2;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -474,7 +464,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-login-3;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -522,7 +511,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-login-4;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -575,7 +563,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-refresh-1;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -635,7 +622,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-refresh-2;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"
@@ -688,7 +674,6 @@ class AuthenticationFlowTest : FunSpec({
                 application {
                     val kodex = install(Kodex) {
                         database {
-                            driverClassName = "org.h2.Driver"
                             jdbcUrl = "jdbc:h2:mem:test-refresh-3;DB_CLOSE_DELAY=-1;"
                             username = "test"
                             password = "test"

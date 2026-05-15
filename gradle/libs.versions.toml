@@ -13,7 +13,6 @@ libphonenumber = "8.13.27"
 jsoup = "1.18.3"
 kotlinx-datetime = "0.6.2"
 kotlinx-serialization = "1.8.1"
-flyway = "10.22.0"
 micrometer = "1.14.2"
 slf4j = "2.0.17"
 logback = "1.5.15"
@@ -23,7 +22,6 @@ lettuce = "6.5.0.RELEASE"
 testcontainers = "1.20.4"
 
 [libraries]
-exposed-dao = { group = "org.jetbrains.exposed", name = "exposed-dao", version.ref = "exposed" }
 exposed-jdbc = { group = "org.jetbrains.exposed", name = "exposed-jdbc", version.ref = "exposed" }
 exposed-datetime = { group = "org.jetbrains.exposed", name = "exposed-kotlin-datetime", version.ref = "exposed" }
 exposed-json = { group = "org.jetbrains.exposed", name = "exposed-json", version.ref = "exposed" }
@@ -42,7 +40,6 @@ bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", ver
 libphonenumber = { group = "com.googlecode.libphonenumber", name = "libphonenumber", version.ref = "libphonenumber" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
-flyway-core = { group = "org.flywaydb", name = "flyway-core", version.ref = "flyway" }
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }
 slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
@@ -61,7 +58,7 @@ testcontainers = { group = "org.testcontainers", name = "testcontainers", versio
 testcontainers-junit = { group = "org.testcontainers", name = "junit-jupiter", version.ref = "testcontainers" }
 
 [bundles]
-exposed = ["exposed-dao", "exposed-jdbc", "exposed-datetime", "exposed-json"]
+exposed = ["exposed-jdbc", "exposed-datetime", "exposed-json"]
 ktor-server = ["ktor-server-netty", "ktor-server-auth", "ktor-server-auth-jwt"]
 ktor-client = ["ktor-client-core", "ktor-client-cio", "ktor-client-content-negotiation"]
 kotest = ["kotest-runner-junit5", "kotest-assertions-core"]

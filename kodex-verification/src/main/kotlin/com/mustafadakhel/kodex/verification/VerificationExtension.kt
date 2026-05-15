@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.verification
 
+import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.UserEvent
@@ -12,40 +13,56 @@ import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.verification.database.VerifiableContacts
-import com.mustafadakhel.kodex.verification.database.VerificationTokens
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
+import com.mustafadakhel.kodex.verification.schema.VerificationSchema
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Table
 import java.util.UUID
 import kotlin.reflect.KClass
 
-/**
- * Verification extension that manages contact verification (email, phone, custom attributes).
- *
- * This extension:
- * - Creates verifiable contact records on user registration
- * - Checks if required contacts are verified before allowing login
- * - Automatically sends verification based on configured strategy and policies
- * - Provides services for managing verification status and tokens
- *
- * Priority: 50 - runs after lockout checks but before normal hooks.
- */
 public class VerificationExtension internal constructor(
-    public val verificationService: VerificationService,
-    public val tokenCleanupService: TokenCleanupService,
     private val config: VerificationConfig,
-    private val timeZone: TimeZone
-) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider, ServiceProvider {
+    private val timeZone: TimeZone,
+    private val eventBus: EventBus?,
+    private val realm: String,
+    private val rateLimiter: RateLimiter
+) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider, ServiceProvider, DatabaseAwareExtension {
 
     override val priority: Int = 50
 
-    override fun tables(): List<Table> = listOf(
-        VerifiableContacts,
-        VerificationTokens
-    )
+    public lateinit var verificationService: VerificationService
+        private set
+    public lateinit var tokenCleanupService: TokenCleanupService
+        private set
+
+    override fun createSchema(core: CoreSchema): ExtensionSchema = VerificationSchema(core)
+
+    override fun initialize(db: KodexDatabase) {
+        val schema = db.schema<VerificationSchema>()
+
+        verificationService = DefaultVerificationService(
+            db = db,
+            schema = schema,
+            config = config,
+            timeZone = timeZone,
+            eventBus = eventBus,
+            realm = realm,
+            rateLimiter = rateLimiter
+        )
+
+        tokenCleanupService = DefaultTokenCleanupService(
+            db = db,
+            schema = schema,
+            timeZone = timeZone,
+            eventBus = eventBus,
+            realm = realm
+        )
+    }
 
     override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
-        // Verification check is performed after user authentication in afterAuthentication()
         return identifier
     }
 
@@ -74,7 +91,6 @@ public class VerificationExtension internal constructor(
         identifierType: String,
         metadata: LoginMetadata
     ) {
-        // No action needed for verification
     }
 
     override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
@@ -89,59 +105,48 @@ public class VerificationExtension internal constructor(
                 override val eventType = UserEvent.Created::class
 
                 override suspend fun onEvent(event: UserEvent.Created) {
-                    // Create contact records and auto-send verification based on strategy and policies
-
-                    // 1. Create email contact if provided
                     event.email?.let { emailValue ->
-                        val identifier = ContactIdentifier(ContactType.EMAIL)
                         verificationService.setEmail(event.userId, emailValue)
 
-                        // Auto-send if configured
-                        if (shouldSendVerification(identifier)) {
+                        if (shouldSendVerification(ContactType.Email)) {
                             try {
-                                verificationService.sendVerification(event.userId, identifier)
-                            } catch (e: Exception) {
-                                // Log but don't fail user creation if verification sending fails
+                                verificationService.sendVerification(event.userId, ContactType.Email)
+                            } catch (_: Exception) {
                             }
                         }
                     }
 
-                    // 2. Create phone contact if provided
                     event.phone?.let { phoneValue ->
-                        val identifier = ContactIdentifier(ContactType.PHONE)
                         verificationService.setPhone(event.userId, phoneValue)
 
-                        // Auto-send if configured
-                        if (shouldSendVerification(identifier)) {
+                        if (shouldSendVerification(ContactType.Phone)) {
                             try {
-                                verificationService.sendVerification(event.userId, identifier)
-                            } catch (e: Exception) {
-                                // Log but don't fail user creation if verification sending fails
+                                verificationService.sendVerification(event.userId, ContactType.Phone)
+                            } catch (_: Exception) {
                             }
                         }
                     }
                 }
 
-                private fun shouldSendVerification(identifier: ContactIdentifier): Boolean {
-                    val policy = config.getPolicy(identifier)
+                private fun shouldSendVerification(contactType: ContactType): Boolean {
+                    val policy = config.getPolicy(contactType)
 
-                    // Must have a sender configured
                     if (policy?.sender == null) {
                         return false
                     }
 
-                    // Check strategy
+                    if (policy.dependsOn.isNotEmpty()) {
+                        return false
+                    }
+
                     return when (config.strategy) {
                         VerificationConfig.VerificationStrategy.VERIFY_ALL_PROVIDED -> {
-                            // Send if policy exists and autoSend is true, or if no policy (default to true)
                             policy.autoSend
                         }
                         VerificationConfig.VerificationStrategy.VERIFY_REQUIRED_ONLY -> {
-                            // Only send if policy exists, is required, and autoSend is true
                             policy.required && policy.autoSend
                         }
                         VerificationConfig.VerificationStrategy.MANUAL -> {
-                            // Never auto-send in manual mode
                             false
                         }
                     }

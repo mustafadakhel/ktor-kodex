@@ -1,8 +1,10 @@
 package com.mustafadakhel.kodex.sample
 
 import com.mustafadakhel.kodex.Kodex
+import com.mustafadakhel.kodex.service.passwordHashingService
+import com.mustafadakhel.kodex.verification.ContactType
+import com.mustafadakhel.kodex.verification.VerificationSender
 import com.mustafadakhel.kodex.audit.audit
-import com.mustafadakhel.kodex.audit.DatabaseAuditProvider
 import com.mustafadakhel.kodex.lockout.accountLockout
 import com.mustafadakhel.kodex.lockout.AccountLockoutPolicy
 import com.mustafadakhel.kodex.metrics.metrics
@@ -54,13 +56,9 @@ private fun Application.setupAuthentication() {
 
     install(Kodex) {
         database {
-            // Fallback to H2 in-memory for testing if no config provided
-            driverClassName = config.propertyOrNull("db.driver")?.getString()
-                ?: System.getenv("DB_DRIVER")
-                ?: "org.h2.Driver"
             jdbcUrl = config.propertyOrNull("db.jdbcUrl")?.getString()
                 ?: System.getenv("DB_JDBC_URL")
-                ?: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
+                ?: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
             username = config.propertyOrNull("db.username")?.getString()
                 ?: System.getenv("DB_USERNAME")
                 ?: "sa"
@@ -146,7 +144,6 @@ private fun Application.setupAuthentication() {
                 }
 
                 audit {
-                    provider = DatabaseAuditProvider()
                 }
 
                 metrics {
@@ -160,7 +157,7 @@ private fun Application.setupAuthentication() {
                         required = false
                         autoSend = false
                         tokenExpiration = 24.hours
-                        sender = object : com.mustafadakhel.kodex.verification.VerificationSender {
+                        sender = object : VerificationSender {
                             override suspend fun send(contactValue: String, token: String) {
                                 println("Email verification token for $contactValue: $token")
                             }
@@ -171,9 +168,10 @@ private fun Application.setupAuthentication() {
                         required = false
                         autoSend = false
                         tokenExpiration = 10.minutes
-                        sender = object : com.mustafadakhel.kodex.verification.VerificationSender {
+                        dependsOn(ContactType.Email)
+                        sender = object : VerificationSender {
                             override suspend fun send(contactValue: String, token: String) {
-                                println("Phone verification token for $contactValue: $token")
+                                println("Phone verification code for $contactValue: $token")
                             }
                         }
                     }
@@ -195,7 +193,7 @@ private fun Application.setupAuthentication() {
 
                 mfa {
                     requireMfa = false
-                    hashingService = com.mustafadakhel.kodex.service.passwordHashingService()
+                    hashingService = passwordHashingService()
 
                     emailMfa {
                         sender = object : MfaCodeSender {
@@ -260,11 +258,4 @@ private fun Application.setupAuthentication() {
     setupPasswordResetRouting()
     setupSessionRouting()
 
-    // Note: For production, add shutdown hooks to properly cleanup resources:
-    // environment.monitor.subscribe(ApplicationStopped) {
-    //     DefaultRealms.forEach { realm ->
-    //         kodex.servicesOf(realm).extensions.get(SessionExtension::class)?.shutdown()
-    //         kodex.servicesOf(realm).extensions.get(MfaExtension::class)?.shutdown()
-    //     }
-    // }
 }

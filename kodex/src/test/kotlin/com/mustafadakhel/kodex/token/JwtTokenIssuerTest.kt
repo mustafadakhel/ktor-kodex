@@ -28,7 +28,7 @@ class JwtTokenIssuerTest : FunSpec({
         val testSecret = "test-secret-that-is-at-least-32-characters-long"
 
         val userRepository = mockk<UserRepository>()
-        every { userRepository.findRoles(userId, realm.name) } returns roles
+        every { userRepository.findRoles(userId) } returns roles
 
         val secretsConfig = SecretsConfig()
         with(RealmConfigScope(realm)) {

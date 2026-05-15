@@ -3,6 +3,7 @@
 package com.mustafadakhel.kodex.model
 
 import com.auth0.jwt.interfaces.DecodedJWT
+import com.mustafadakhel.kodex.model.TokenType as ModelTokenType
 
 
 public sealed interface Claim<T> {
@@ -102,11 +103,11 @@ public sealed interface Claim<T> {
         override val key: String get() = Key
 
         public data object AccessToken : TokenType {
-            override val value: String = com.mustafadakhel.kodex.model.TokenType.AccessToken.name
+            override val value: String = ModelTokenType.AccessToken.name
         }
 
         public data object RefreshToken : TokenType {
-            override val value: String = com.mustafadakhel.kodex.model.TokenType.RefreshToken.name
+            override val value: String = ModelTokenType.RefreshToken.name
         }
 
         public data class Unknown(override val value: String?) : TokenType
