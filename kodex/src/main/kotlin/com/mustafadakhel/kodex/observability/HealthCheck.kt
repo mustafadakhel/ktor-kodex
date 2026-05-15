@@ -23,7 +23,7 @@ public class KodexHealth(private val db: KodexDatabase) {
         return try {
             val (_, duration) = measureTimedValue {
                 db.transaction {
-                    connection.prepareStatement("SELECT 1", false).executeQuery()
+                    conn.prepareStatement("SELECT 1").executeQuery()
                 }
             }
 

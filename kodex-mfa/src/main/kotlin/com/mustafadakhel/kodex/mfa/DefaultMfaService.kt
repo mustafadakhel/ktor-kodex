@@ -257,7 +257,7 @@ internal class DefaultMfaService(
                     .singleOrNull()
             } ?: return@ensureMinimumResponseTime EnrollmentVerificationResult.Invalid("Invalid challenge")
 
-            val userId = challenge[challenges.userId].value
+            val userId = challenge[challenges.userId]
             val attempts = challenge[challenges.attempts]
             val maxAttempts = challenge[challenges.maxAttempts]
             val expiresAt = challenge[challenges.expiresAt]
@@ -1378,7 +1378,7 @@ internal class DefaultMfaService(
                     (methods.realmId eq realmId) and
                     (methods.isActive eq true)
                 }
-                .map { it[methods.userId].value }
+                .map { it[methods.userId] }
                 .distinct()
                 .count()
                 .toLong()

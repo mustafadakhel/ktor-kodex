@@ -3,12 +3,12 @@ package com.mustafadakhel.kodex.jdbc
 import java.sql.Connection
 import java.sql.ResultSet
 
-internal data class JoinClause(
+public data class JoinClause(
     val table: TableDef,
     val on: WhereClause,
 )
 
-internal class SelectBuilder(
+public class SelectBuilder(
     private val table: TableDef,
     private val conn: Connection,
     private val dialect: DatabaseDialect,

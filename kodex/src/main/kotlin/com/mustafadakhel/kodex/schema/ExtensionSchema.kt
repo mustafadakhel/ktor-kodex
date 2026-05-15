@@ -1,7 +1,8 @@
 package com.mustafadakhel.kodex.schema
 
-import org.jetbrains.exposed.sql.Table
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 
 public interface ExtensionSchema {
-    public fun tables(): List<Table>
+    public fun ddl(dialect: DatabaseDialect): List<String>
+    public fun tableNames(): List<String>
 }

@@ -1,12 +1,12 @@
 package com.mustafadakhel.kodex.mfa.schema
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.mfa.MfaMethodType
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.ReferenceOption.CASCADE
+import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.kotlin.datetime.CurrentDateTime
 import org.jetbrains.exposed.sql.kotlin.datetime.datetime
@@ -23,7 +23,7 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
     public class MfaMethodsTable(core: CoreSchema) : Table("${core.prefix}mfa_methods") {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE)
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val methodType: Column<MfaMethodType> = enumeration("method_type", MfaMethodType::class)
         public val identifier: Column<String?> = varchar("identifier", 255).nullable()
         public val encryptedSecret: Column<String?> = text("encrypted_secret").nullable()
@@ -46,7 +46,7 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
     public class MfaChallengesTable(core: CoreSchema) : Table("${core.prefix}mfa_challenges") {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE)
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val methodId: Column<UUID> = uuid("method_id")
         public val codeHash: Column<String> = varchar("code_hash", 255)
         public val expiresAt: Column<LocalDateTime> = datetime("expires_at")
@@ -59,7 +59,6 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
 
         init {
             index(false, realmId)
-            index(false, userId)
             index(false, methodId)
             index(false, realmId, expiresAt)
             index(false, verifiedAt)
@@ -69,7 +68,7 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
     public class MfaBackupCodesTable(core: CoreSchema) : Table("${core.prefix}mfa_backup_codes") {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE)
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val codeHash: Column<String> = varchar("code_hash", 255)
         public val usedAt: Column<LocalDateTime?> = datetime("used_at").nullable()
         public val createdAt: Column<LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
@@ -78,7 +77,6 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
 
         init {
             index(false, realmId)
-            index(false, userId)
             index(false, realmId, userId, usedAt)
         }
     }
@@ -86,7 +84,7 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
     public class MfaTotpUsedCodesTable(core: CoreSchema) : Table("${core.prefix}mfa_totp_used_codes") {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE)
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val methodId: Column<UUID> = uuid("method_id")
         public val codeHash: Column<String> = varchar("code_hash", 255)
         public val usedAt: Column<LocalDateTime> = datetime("used_at").defaultExpression(CurrentDateTime)
@@ -104,7 +102,7 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
     public class MfaTrustedDevicesTable(core: CoreSchema) : Table("${core.prefix}mfa_trusted_devices") {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE)
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val deviceFingerprint: Column<String> = varchar("device_fingerprint", 256)
         public val deviceName: Column<String?> = varchar("device_name", 128).nullable()
         public val ipAddress: Column<String?> = varchar("ip_address", 45).nullable()
@@ -118,17 +116,24 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
         init {
             uniqueIndex(realmId, userId, deviceFingerprint)
             index(false, realmId)
-            index(false, userId)
             index(false, deviceFingerprint)
             index(false, realmId, expiresAt)
         }
     }
 
-    override fun tables(): List<Table> = listOf(
+    private val allTables: List<Table> = listOf(
         mfaMethods,
         mfaChallenges,
         mfaBackupCodes,
         mfaTotpUsedCodes,
-        mfaTrustedDevices
+        mfaTrustedDevices,
     )
+
+    internal fun exposedTables(): List<Table> = allTables
+
+    override fun ddl(dialect: DatabaseDialect): List<String> =
+        SchemaUtils.createStatements(*allTables.toTypedArray())
+
+    override fun tableNames(): List<String> =
+        allTables.map { it.tableName }
 }

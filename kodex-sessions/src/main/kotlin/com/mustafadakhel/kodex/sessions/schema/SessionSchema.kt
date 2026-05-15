@@ -1,14 +1,14 @@
 package com.mustafadakhel.kodex.sessions.schema
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import com.mustafadakhel.kodex.sessions.model.SessionStatus
-import org.jetbrains.exposed.dao.id.EntityID
+import kotlinx.datetime.LocalDateTime
 import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.ReferenceOption.CASCADE
+import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.kotlin.datetime.datetime
-import kotlinx.datetime.LocalDateTime
 import java.math.BigDecimal
 import java.util.UUID
 
@@ -20,7 +20,7 @@ public class SessionSchema(private val core: CoreSchema) : ExtensionSchema {
     public class SessionsTable(core: CoreSchema) : Table("${core.prefix}sessions") {
         public val id: Column<UUID> = uuid("id")
         public val realmId: Column<String> = varchar("realm_id", 50).index()
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE).index()
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val tokenFamily: Column<UUID> = uuid("token_family").uniqueIndex()
         public val deviceFingerprint: Column<String> = varchar("device_fingerprint", 256).index()
         public val deviceName: Column<String?> = varchar("device_name", 128).nullable()
@@ -42,7 +42,7 @@ public class SessionSchema(private val core: CoreSchema) : ExtensionSchema {
     public class SessionHistoryTable(core: CoreSchema) : Table("${core.prefix}session_history") {
         public val id: Column<UUID> = uuid("id")
         public val realmId: Column<String> = varchar("realm_id", 50).index()
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE).index()
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val sessionId: Column<UUID> = uuid("session_id")
         public val deviceName: Column<String?> = varchar("device_name", 128).nullable()
         public val ipAddress: Column<String?> = varchar("ip_address", 45).nullable()
@@ -54,5 +54,13 @@ public class SessionSchema(private val core: CoreSchema) : ExtensionSchema {
         override val primaryKey: PrimaryKey = PrimaryKey(id)
     }
 
-    override fun tables(): List<Table> = listOf(sessions, sessionHistory)
+    private val allTables: List<Table> = listOf(sessions, sessionHistory)
+
+    internal fun exposedTables(): List<Table> = allTables
+
+    override fun ddl(dialect: DatabaseDialect): List<String> =
+        SchemaUtils.createStatements(*allTables.toTypedArray())
+
+    override fun tableNames(): List<String> =
+        allTables.map { it.tableName }
 }

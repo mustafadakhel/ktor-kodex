@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.util
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.routes.auth.RealmConfigScope
 import com.mustafadakhel.kodex.schema.CoreSchema
@@ -8,7 +9,7 @@ import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.utils.io.KtorDsl
-import org.jetbrains.exposed.sql.Database
+import javax.sql.DataSource
 import kotlin.reflect.KClass
 
 private const val DEFAULT_POOL_SIZE = 10
@@ -18,14 +19,6 @@ private const val DEFAULT_IDLE_TIMEOUT = 600_000L
 private const val DEFAULT_MAX_LIFETIME = 1_800_000L
 private const val DEFAULT_TABLE_PREFIX = "kodex_"
 
-private val TABLE_PREFIX_PATTERN = Regex("[a-zA-Z0-9_]+")
-
-/**
- * Configuration for the [com.mustafadakhel.kodex.Kodex] plugin.
- *
- * Use this scope inside [Kodex.install][com.mustafadakhel.kodex.Kodex.Plugin.install]
- * to set up database access and declare realms.
- */
 @KtorDsl
 public class KodexConfig internal constructor() {
 
@@ -38,32 +31,25 @@ public class KodexConfig internal constructor() {
     internal val tablePrefix: String
         get() = databaseConfig?.tablePrefix ?: DEFAULT_TABLE_PREFIX
 
-    /**
-     * Configure a new database connection managed by Kodex.
-     *
-     * A HikariCP pool is created from the provided settings.
-     * At minimum, [DatabaseConfigScope.jdbcUrl] must be set.
-     */
     public fun database(block: DatabaseConfigScope.() -> Unit) {
         databaseConfig = DatabaseConfigScope().apply(block).build()
     }
 
-    /**
-     * Use an existing Exposed [Database] instance.
-     *
-     * Kodex will not manage the connection lifecycle; the caller
-     * is responsible for closing the database when appropriate.
-     */
     public fun database(
-        db: Database,
+        dataSource: DataSource,
         tablePrefix: String = DEFAULT_TABLE_PREFIX,
-        block: DatabaseOptionsScope.() -> Unit = {}
+        autoCreateTables: Boolean = true,
     ) {
-        val options = DatabaseOptionsScope().apply(block)
+        require(tablePrefix.isNotEmpty() && tablePrefix.all { it.isLetterOrDigit() || it == '_' }) {
+            "tablePrefix must be non-blank and contain only letters, digits, or underscores. Got: \"$tablePrefix\""
+        }
+        val dialect = DatabaseDialect.detect(dataSource)
         databaseConfig = DatabaseConfig(
-            database = db,
+            dataSource = dataSource,
+            dialect = dialect,
             tablePrefix = tablePrefix,
-            autoCreateTables = options.autoCreateTables,
+            autoCreateTables = autoCreateTables,
+            ownsDataSource = false,
         )
     }
 
@@ -75,41 +61,32 @@ public class KodexConfig internal constructor() {
             "Kodex database not configured. Add a database { } block to install(Kodex) { }."
         }
         return KodexDatabase(
-            database = config.database,
+            dataSource = config.dataSource,
+            dialect = config.dialect,
             core = core,
             extensionSchemas = extensionSchemas,
             ownsDataSource = config.ownsDataSource,
-            dataSource = config.dataSource,
         )
     }
 
-    /**
-     * Declare a new realm identified by [name].
-     */
     public fun realm(
         name: String,
-        realmConfigScope: RealmConfigScope.() -> Unit
+        realmConfigScope: RealmConfigScope.() -> Unit,
     ) {
         val realm = Realm(name)
         val config = RealmConfigScope(realm).apply(realmConfigScope)
         realmConfigScopes += config
     }
 
-    /**
-     * Declare a new realm using an existing [Realm] value.
-     */
     public fun realm(
         realm: Realm,
-        realmConfigScope: RealmConfigScope.() -> Unit
+        realmConfigScope: RealmConfigScope.() -> Unit,
     ) {
         val config = RealmConfigScope(realm).apply(realmConfigScope)
         realmConfigScopes += config
     }
 }
 
-/**
- * DSL scope for configuring a new database connection via HikariCP.
- */
 public class DatabaseConfigScope internal constructor() {
     public var jdbcUrl: String? = null
     public var driverClassName: String? = null
@@ -128,7 +105,7 @@ public class DatabaseConfigScope internal constructor() {
         val url = requireNotNull(jdbcUrl) {
             "jdbcUrl is required in database { } configuration."
         }
-        require(tablePrefix.isNotBlank() && TABLE_PREFIX_PATTERN.matches(tablePrefix)) {
+        require(tablePrefix.isNotEmpty() && tablePrefix.all { it.isLetterOrDigit() || it == '_' }) {
             "tablePrefix must be non-blank and contain only letters, digits, or underscores. Got: \"$tablePrefix\""
         }
 
@@ -146,41 +123,32 @@ public class DatabaseConfigScope internal constructor() {
             this.isAutoCommit = false
         }
         val dataSource = HikariDataSource(hikariConfig)
-        val database = Database.connect(dataSource)
+        val dialect = DatabaseDialect.detect(dataSource)
 
         return DatabaseConfig(
-            database = database,
+            dataSource = dataSource,
+            dialect = dialect,
             tablePrefix = tablePrefix,
             autoCreateTables = autoCreateTables,
             ownsDataSource = true,
-            dataSource = dataSource,
         )
     }
 }
 
-/**
- * DSL scope for options when using an existing Exposed [Database].
- */
-public class DatabaseOptionsScope internal constructor() {
-    public var autoCreateTables: Boolean = true
-}
-
 internal data class DatabaseConfig(
-    val database: Database,
+    val dataSource: DataSource,
+    val dialect: DatabaseDialect,
     val tablePrefix: String,
     val autoCreateTables: Boolean,
     val ownsDataSource: Boolean = false,
-    val dataSource: HikariDataSource? = null,
 )
 
 private fun inferDriver(url: String): String = when {
     url.startsWith("jdbc:h2:") -> "org.h2.Driver"
     url.startsWith("jdbc:postgresql:") -> "org.postgresql.Driver"
-    url.startsWith("jdbc:mysql:") -> "com.mysql.cj.jdbc.Driver"
-    url.startsWith("jdbc:mariadb:") -> "org.mariadb.jdbc.Driver"
-    url.startsWith("jdbc:sqlite:") -> "org.sqlite.JDBC"
     else -> error(
-        "Cannot infer JDBC driver for URL \"$url\". " +
-            "Set driverClassName explicitly in database { }."
+        "Unsupported JDBC URL: \"$url\". " +
+            "Kodex supports H2 (jdbc:h2:) and PostgreSQL (jdbc:postgresql:). " +
+            "MySQL, MariaDB, and SQLite are not supported."
     )
 }

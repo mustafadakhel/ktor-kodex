@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.jdbc
 
 import java.sql.Connection
 
-internal class DeleteBuilder(
+public class DeleteBuilder(
     private val table: TableDef,
     private val conn: Connection,
     private val dialect: DatabaseDialect,

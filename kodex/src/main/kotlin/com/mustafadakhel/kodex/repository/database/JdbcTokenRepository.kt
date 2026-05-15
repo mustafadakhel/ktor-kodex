@@ -1,24 +1,20 @@
 package com.mustafadakhel.kodex.repository.database
 
+import com.mustafadakhel.kodex.jdbc.Row
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.isNull
 import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.model.database.PersistedToken
 import com.mustafadakhel.kodex.repository.TokenRepository
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insertAndGetId
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
 internal fun databaseTokenRepository(db: KodexDatabase, realmId: String): TokenRepository =
-    ExposedTokenRepository(db, realmId)
+    JdbcTokenRepository(db, realmId)
 
-internal class ExposedTokenRepository(
+internal class JdbcTokenRepository(
     private val db: KodexDatabase,
     private val realmId: String,
 ) : TokenRepository {
@@ -30,102 +26,103 @@ internal class ExposedTokenRepository(
             "Token realm '${token.realmId}' does not match repository realm '$realmId'"
         }
         return db.transaction {
-            tokens.insertAndGetId {
-                it[tokens.id] = token.id
-                it[tokens.userId] = token.userId
-                it[tokens.type] = token.type.name
-                it[tokens.revoked] = token.revoked
-                it[tokens.tokenHash] = token.tokenHash
-                it[tokens.expiresAt] = token.expiresAt
-                it[tokens.tokenFamily] = token.tokenFamily
-                it[tokens.parentTokenId] = token.parentTokenId
-                it[tokens.firstUsedAt] = token.firstUsedAt
-                it[tokens.lastUsedAt] = token.lastUsedAt
-                it[tokens.realmId] = token.realmId
+            insertReturningKey(tokens, tokens.id) {
+                this[tokens.id] = token.id
+                this[tokens.userId] = token.userId
+                this[tokens.type] = token.type.name
+                this[tokens.revoked] = token.revoked
+                this[tokens.tokenHash] = token.tokenHash
+                this[tokens.expiresAt] = token.expiresAt
+                this[tokens.tokenFamily] = token.tokenFamily
+                this[tokens.parentTokenId] = token.parentTokenId
+                this[tokens.firstUsedAt] = token.firstUsedAt
+                this[tokens.lastUsedAt] = token.lastUsedAt
+                this[tokens.realmId] = token.realmId
             }
-        }.value
+        }
     }
 
     override fun revokeToken(tokenHash: String): Unit = db.transaction {
-        tokens.update({ (tokens.tokenHash eq tokenHash) and (tokens.realmId eq realmId) }) {
-            it[tokens.revoked] = true
+        update(tokens) {
+            this[tokens.revoked] = true
+            where { (tokens.tokenHash eq tokenHash) and (tokens.realmId eq realmId) }
         }
         Unit
     }
 
     override fun revokeToken(tokenId: UUID): Unit = db.transaction {
-        tokens.update({ (tokens.id eq tokenId) and (tokens.realmId eq realmId) }) {
-            it[tokens.revoked] = true
+        update(tokens) {
+            this[tokens.revoked] = true
+            where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
         }
         Unit
     }
 
     override fun findToken(tokenId: UUID): PersistedToken? = db.transaction {
-        tokens.selectAll()
+        select(tokens)
             .where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
-            .singleOrNull()
-            ?.toPersistedToken()
+            .singleOrNull { it.toPersistedToken() }
     }
 
     override fun deleteToken(tokenId: UUID): Unit = db.transaction {
-        val deleted = tokens.deleteWhere {
-            (tokens.id eq tokenId) and (tokens.realmId eq realmId)
-        }
+        val deleted = deleteFrom(tokens)
+            .where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
+            .execute()
         if (deleted == 0) throw NoSuchElementException("Token with id $tokenId not found")
     }
 
     override fun deleteToken(tokenHash: String): Unit = db.transaction {
-        tokens.deleteWhere {
-            (tokens.tokenHash eq tokenHash) and (tokens.realmId eq realmId)
-        }
+        deleteFrom(tokens)
+            .where { (tokens.tokenHash eq tokenHash) and (tokens.realmId eq realmId) }
+            .execute()
         Unit
     }
 
     override fun revokeTokens(userId: UUID): Unit = db.transaction {
-        tokens.update({ (tokens.userId eq userId) and (tokens.realmId eq realmId) }) {
-            it[tokens.revoked] = true
+        update(tokens) {
+            this[tokens.revoked] = true
+            where { (tokens.userId eq userId) and (tokens.realmId eq realmId) }
         }
         Unit
     }
 
     override fun markTokenAsUsedIfUnused(tokenId: UUID, now: LocalDateTime): Boolean = db.transaction {
-        val updated = tokens.update({
-            (tokens.id eq tokenId) and (tokens.realmId eq realmId) and tokens.firstUsedAt.isNull()
-        }) {
-            it[tokens.firstUsedAt] = now
-            it[tokens.lastUsedAt] = now
+        val updated = update(tokens) {
+            this[tokens.firstUsedAt] = now
+            this[tokens.lastUsedAt] = now
+            where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) and tokens.firstUsedAt.isNull() }
         }
         updated > 0
     }
 
     override fun findTokenByHash(tokenHash: String): PersistedToken? = db.transaction {
-        tokens.selectAll()
+        select(tokens)
             .where { (tokens.tokenHash eq tokenHash) and (tokens.realmId eq realmId) }
-            .singleOrNull()
-            ?.toPersistedToken()
+            .singleOrNull { it.toPersistedToken() }
     }
 
     override fun revokeTokenFamily(tokenFamily: UUID): Unit = db.transaction {
-        tokens.selectAll()
+        select(tokens)
             .where { (tokens.tokenFamily eq tokenFamily) and (tokens.realmId eq realmId) }
             .forUpdate()
-            .toList()
+            .map { }
 
-        tokens.update({ (tokens.tokenFamily eq tokenFamily) and (tokens.realmId eq realmId) }) {
-            it[tokens.revoked] = true
+        update(tokens) {
+            this[tokens.revoked] = true
+            where { (tokens.tokenFamily eq tokenFamily) and (tokens.realmId eq realmId) }
         }
         Unit
     }
 
     override fun findTokensByFamily(tokenFamily: UUID): List<PersistedToken> = db.transaction {
-        tokens.selectAll()
+        select(tokens)
             .where { (tokens.tokenFamily eq tokenFamily) and (tokens.realmId eq realmId) }
             .map { it.toPersistedToken() }
     }
 
-    private fun ResultRow.toPersistedToken() = PersistedToken(
-        id = this[tokens.id].value,
-        userId = this[tokens.userId].value,
+    private fun Row.toPersistedToken() = PersistedToken(
+        id = this[tokens.id],
+        userId = this[tokens.userId],
         tokenHash = this[tokens.tokenHash],
         type = TokenType.fromString(this[tokens.type]),
         revoked = this[tokens.revoked],

@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.extension
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import io.kotest.core.spec.style.DescribeSpec
@@ -9,7 +10,6 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
-import org.jetbrains.exposed.sql.Table
 
 // Test extension interfaces
 private interface TestExtension : RealmExtension
@@ -20,19 +20,20 @@ private class TestExtensionImpl(override val priority: Int = 100) : TestExtensio
 private class AnotherExtensionImpl : AnotherExtension
 
 // Stub ExtensionSchema for tests
-private class StubExtensionSchema(private val schemaTables: List<Table>) : ExtensionSchema {
-    override fun tables(): List<Table> = schemaTables
+private class StubExtensionSchema(private val names: List<String>) : ExtensionSchema {
+    override fun ddl(dialect: DatabaseDialect): List<String> = emptyList()
+    override fun tableNames(): List<String> = names
 }
 
 // Persistent extension for table testing
 private class PersistentTestExtension : PersistentExtension {
     companion object {
-        val TestTable = object : Table("test_table") {}
-        val AnotherTestTable = object : Table("another_test_table") {}
+        const val TEST_TABLE = "test_table"
+        const val ANOTHER_TEST_TABLE = "another_test_table"
     }
 
     override fun createSchema(core: CoreSchema): ExtensionSchema =
-        StubExtensionSchema(listOf(TestTable, AnotherTestTable))
+        StubExtensionSchema(listOf(TEST_TABLE, ANOTHER_TEST_TABLE))
 }
 
 // Test service for ServiceProvider testing
@@ -76,10 +77,10 @@ class ExtensionRegistryTest : DescribeSpec({
                 registry.getAllOfType(EventSubscriberProvider::class).shouldBeEmpty()
             }
 
-            it("should return empty tables list") {
+            it("should return empty table names list") {
                 val registry = ExtensionRegistry.empty()
                 val core = CoreSchema("test_")
-                registry.collectSchemas(core).values.flatMap { it.tables() }.shouldBeEmpty()
+                registry.collectSchemas(core).values.flatMap { it.tableNames() }.shouldBeEmpty()
             }
         }
 
@@ -252,17 +253,17 @@ class ExtensionRegistryTest : DescribeSpec({
         describe("collectSchemas") {
             val core = CoreSchema("test_")
 
-            it("should collect tables from persistent extensions") {
+            it("should collect table names from persistent extensions") {
                 val persistentExt = PersistentTestExtension()
                 val registry = ExtensionRegistry.from(
                     mapOf(PersistentExtension::class to persistentExt)
                 )
 
-                val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
-                tables.size shouldBe 2
-                tables shouldContainExactly listOf(
-                    PersistentTestExtension.TestTable,
-                    PersistentTestExtension.AnotherTestTable
+                val names = registry.collectSchemas(core).values.flatMap { it.tableNames() }
+                names.size shouldBe 2
+                names shouldContainExactly listOf(
+                    PersistentTestExtension.TEST_TABLE,
+                    PersistentTestExtension.ANOTHER_TEST_TABLE,
                 )
             }
 
@@ -271,29 +272,28 @@ class ExtensionRegistryTest : DescribeSpec({
                     mapOf(TestExtension::class to TestExtensionImpl())
                 )
 
-                registry.collectSchemas(core).values.flatMap { it.tables() }.shouldBeEmpty()
+                registry.collectSchemas(core).values.flatMap { it.tableNames() }.shouldBeEmpty()
             }
 
             it("should return empty list for empty registry") {
                 val registry = ExtensionRegistry.empty()
-                registry.collectSchemas(core).values.flatMap { it.tables() }.shouldBeEmpty()
+                registry.collectSchemas(core).values.flatMap { it.tableNames() }.shouldBeEmpty()
             }
 
-            it("should flatten tables from multiple persistent extensions") {
-                val table1 = object : Table("table1") {}
-                val table2 = object : Table("table2") {}
-
+            it("should flatten table names from multiple persistent extensions") {
                 val ext1 = object : PersistentExtension {
                     override fun createSchema(core: CoreSchema): ExtensionSchema =
                         object : ExtensionSchema {
-                            override fun tables() = listOf(table1)
+                            override fun ddl(dialect: DatabaseDialect) = emptyList<String>()
+                            override fun tableNames() = listOf("table1")
                         }
                 }
 
                 val ext2 = object : PersistentExtension {
                     override fun createSchema(core: CoreSchema): ExtensionSchema =
                         object : ExtensionSchema {
-                            override fun tables() = listOf(table2)
+                            override fun ddl(dialect: DatabaseDialect) = emptyList<String>()
+                            override fun tableNames() = listOf("table2")
                         }
                 }
 
@@ -301,9 +301,9 @@ class ExtensionRegistryTest : DescribeSpec({
                     mapOf(PersistentExtension::class to listOf(ext1, ext2))
                 )
 
-                val tables = registry.collectSchemas(core).values.flatMap { it.tables() }
-                tables.size shouldBe 2
-                tables shouldContainExactly listOf(table1, table2)
+                val names = registry.collectSchemas(core).values.flatMap { it.tableNames() }
+                names.size shouldBe 2
+                names shouldContainExactly listOf("table1", "table2")
             }
         }
 

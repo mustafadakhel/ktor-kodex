@@ -2,10 +2,12 @@ package com.mustafadakhel.kodex.audit.schema
 
 import com.mustafadakhel.kodex.audit.ActorType
 import com.mustafadakhel.kodex.audit.EventResult
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.Column
+import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 import java.util.UUID
@@ -30,5 +32,13 @@ public class AuditSchema(private val core: CoreSchema) : ExtensionSchema {
         override val primaryKey: PrimaryKey = PrimaryKey(id)
     }
 
-    override fun tables(): List<Table> = listOf(auditEvents)
+    private val allTables: List<Table> = listOf(auditEvents)
+
+    internal fun exposedTables(): List<Table> = allTables
+
+    override fun ddl(dialect: DatabaseDialect): List<String> =
+        SchemaUtils.createStatements(*allTables.toTypedArray())
+
+    override fun tableNames(): List<String> =
+        allTables.map { it.tableName }
 }

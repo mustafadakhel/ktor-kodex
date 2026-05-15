@@ -1,51 +1,82 @@
 package com.mustafadakhel.kodex.schema
 
+import com.mustafadakhel.kodex.jdbc.ConnectionScope
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.Transaction
-import org.jetbrains.exposed.sql.exists
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import kotlinx.coroutines.withContext
+import javax.sql.DataSource
 import kotlin.reflect.KClass
 
 public class KodexDatabase(
-    internal val database: Database,
+    public val dataSource: DataSource,
+    public val dialect: DatabaseDialect,
     public val core: CoreSchema,
     @PublishedApi internal val extensionSchemas: Map<KClass<out ExtensionSchema>, ExtensionSchema> = emptyMap(),
     internal val ownsDataSource: Boolean = false,
-    internal val dataSource: HikariDataSource? = null
 ) {
-    public fun <R> transaction(statement: Transaction.() -> R): R =
-        org.jetbrains.exposed.sql.transactions.transaction(db = database, statement = statement)
+    public fun <R> transaction(block: ConnectionScope.() -> R): R {
+        dataSource.connection.use { conn ->
+            conn.autoCommit = false
+            try {
+                val result = ConnectionScope(conn, dialect).block()
+                conn.commit()
+                return result
+            } catch (e: Throwable) {
+                try { conn.rollback() } catch (re: Throwable) { e.addSuppressed(re) }
+                throw e
+            }
+        }
+    }
 
-    public suspend fun <R> suspendTransaction(statement: suspend Transaction.() -> R): R =
-        newSuspendedTransaction(Dispatchers.IO, db = database, statement = statement)
+    public suspend fun <R> suspendTransaction(block: suspend ConnectionScope.() -> R): R =
+        withContext(Dispatchers.IO) {
+            dataSource.connection.use { conn ->
+                conn.autoCommit = false
+                try {
+                    val result = ConnectionScope(conn, dialect).block()
+                    conn.commit()
+                    result
+                } catch (e: Throwable) {
+                    try { conn.rollback() } catch (re: Throwable) { e.addSuppressed(re) }
+                    throw e
+                }
+            }
+        }
 
     public fun createSchema() {
         transaction {
-            SchemaUtils.create(*allTables.toTypedArray())
+            val statements = coreDDL() + extensionSchemas.values.flatMap { it.ddl(dialect) }
+            conn.createStatement().use { stmt ->
+                for (sql in statements) {
+                    stmt.execute(sql)
+                }
+            }
         }
     }
 
     public fun validateSchema() {
         transaction {
-            val missing = allTables.filter { !it.exists() }
+            val rs = conn.metaData.getTables(null, null, null, arrayOf("TABLE"))
+            val existing = mutableSetOf<String>()
+            while (rs.next()) {
+                existing.add(rs.getString("TABLE_NAME").uppercase())
+            }
+
+            val expected = coreTableNames() + extensionSchemas.values.flatMap { it.tableNames() }
+            val missing = expected.filter { it.uppercase() !in existing }
             if (missing.isNotEmpty()) {
-                val names = missing.joinToString { it.tableName }
                 error(
-                    "Required Kodex tables missing: $names. " +
-                    "Run your migration tool first, or set autoCreateTables = true. " +
-                    "Use generateDDL() to get the required SQL."
+                    "Required Kodex tables missing: ${missing.joinToString()}. " +
+                        "Run your migration tool first, or set autoCreateTables = true. " +
+                        "Use generateDDL() to get the required SQL."
                 )
             }
         }
     }
 
-    public fun generateDDL(): List<String> = transaction {
-        allTables.flatMap { SchemaUtils.createStatements(it) }
-    }
+    public fun generateDDL(): List<String> =
+        coreDDL() + extensionSchemas.values.flatMap { it.ddl(dialect) }
 
     public inline fun <reified T : ExtensionSchema> schema(): T =
         extensionSchemas[T::class] as? T
@@ -55,9 +86,14 @@ public class KodexDatabase(
         extensionSchemas[T::class] as? T
 
     public fun close() {
-        if (ownsDataSource) dataSource?.close()
+        if (ownsDataSource) (dataSource as? HikariDataSource)?.close()
     }
 
-    private val allTables: List<Table> =
-        core.tables() + extensionSchemas.values.flatMap { it.tables() }
+    private fun coreTableNames(): List<String> =
+        core.tables().map { it.tableName }
+
+    private fun coreDDL(): List<String> =
+        core.tables().flatMap { table ->
+            listOf(table.createTableDDL(dialect)) + table.createIndexDDL(dialect)
+        }
 }

@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.repository
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.schema.CoreSchema
@@ -10,7 +11,7 @@ import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.contain
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.sql.Database
+import org.h2.jdbcx.JdbcDataSource
 import java.util.*
 
 class UserCustomAttributesValidationTest : DescribeSpec({
@@ -21,12 +22,11 @@ class UserCustomAttributesValidationTest : DescribeSpec({
     val now = LocalDateTime(2024, 1, 15, 10, 30)
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:attr_validation_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:attr_validation_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        db = KodexDatabase(database, core)
+        db = KodexDatabase(ds, DatabaseDialect.H2, core)
         db.createSchema()
         userRepository = databaseUserRepository(db, testRealm)
         userRepository.seedRoles(listOf(Role("U", "")))

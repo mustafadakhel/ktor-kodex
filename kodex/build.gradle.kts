@@ -103,7 +103,6 @@ dependencies {
     api(libs.kotlinx.datetime)
     implementation(project(":kodex-tokens"))
     api(libs.slf4j.api)
-    implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
     compileOnly(libs.micrometer.core)

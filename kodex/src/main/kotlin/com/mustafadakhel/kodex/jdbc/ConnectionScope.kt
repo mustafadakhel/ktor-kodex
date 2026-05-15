@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.jdbc
 
 import java.sql.Connection
 
-internal class ConnectionScope(
+public class ConnectionScope(
     @PublishedApi internal val conn: Connection,
     public val dialect: DatabaseDialect,
 ) {

@@ -1,11 +1,12 @@
 package com.mustafadakhel.kodex.observability
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import org.jetbrains.exposed.sql.Database
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 
 class HealthCheckTest : FunSpec({
@@ -13,12 +14,11 @@ class HealthCheckTest : FunSpec({
     lateinit var db: KodexDatabase
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:health_check_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:health_check_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        db = KodexDatabase(database, core)
+        db = KodexDatabase(ds, DatabaseDialect.H2, core)
         db.createSchema()
     }
 

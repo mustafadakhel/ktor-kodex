@@ -1,5 +1,14 @@
 package com.mustafadakhel.kodex.repository.database
 
+import com.mustafadakhel.kodex.jdbc.ConnectionScope
+import com.mustafadakhel.kodex.jdbc.ConstraintViolationMapper
+import com.mustafadakhel.kodex.jdbc.InsertBuilder
+import com.mustafadakhel.kodex.jdbc.Row
+import com.mustafadakhel.kodex.jdbc.UpdateBuilder
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.eqColumn
+import com.mustafadakhel.kodex.jdbc.inList
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.UserProfile
 import com.mustafadakhel.kodex.model.UserStatus
@@ -10,27 +19,14 @@ import com.mustafadakhel.kodex.model.database.UserProfileEntity
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.update.FieldUpdate
-import org.jetbrains.exposed.exceptions.ExposedSQLException
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.statements.UpdateBuilder
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.insertAndGetId
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.statements.UpdateStatement
-import org.jetbrains.exposed.sql.upsert
+import java.sql.SQLException
 import java.util.UUID
 
 internal fun databaseUserRepository(db: KodexDatabase, realmId: String): UserRepository =
-    ExposedUserRepository(db, realmId)
+    JdbcUserRepository(db, realmId)
 
-internal class ExposedUserRepository(
+internal class JdbcUserRepository(
     private val db: KodexDatabase,
     private val realmId: String,
 ) : UserRepository {
@@ -42,67 +38,76 @@ internal class ExposedUserRepository(
     private val customAttrs get() = db.core.userCustomAttributes
 
     override fun getAll(): List<UserEntity> = db.transaction {
-        users.selectAll()
+        select(users)
             .where { users.realmId eq realmId }
             .map { it.toUserEntity() }
     }
 
     override fun getAllFull(): List<FullUserEntity> = db.transaction {
-        val userRows = users.selectAll()
+        val userRows = select(users)
             .where { users.realmId eq realmId }
-            .toList()
+            .map { it.toUserEntity() }
 
         if (userRows.isEmpty()) return@transaction emptyList()
 
-        val userIds = userRows.map { it[users.id] }
+        val userIds = userRows.map { it.id }
 
         val userRolesMap = loadRolesByUserIds(userIds)
         val userProfilesMap = loadProfilesByUserIds(userIds)
         val userAttributesMap = loadCustomAttributesByUserIds(userIds)
 
-        userRows.map { row ->
-            val userId = row[users.id].value
-            row.toFullUserEntity(
-                roles = userRolesMap[userId] ?: emptyList(),
-                profile = userProfilesMap[userId],
-                customAttributes = userAttributesMap[userId] ?: emptyMap(),
+        userRows.map { user ->
+            FullUserEntity(
+                id = user.id,
+                createdAt = user.createdAt,
+                updatedAt = user.updatedAt,
+                phoneNumber = user.phoneNumber,
+                email = user.email,
+                lastLoggedIn = user.lastLoggedIn,
+                status = user.status,
+                roles = userRolesMap[user.id] ?: emptyList(),
+                profile = userProfilesMap[user.id],
+                customAttributes = userAttributesMap[user.id] ?: emptyMap(),
             )
         }
     }
 
     override fun findById(userId: UUID): UserEntity? = db.transaction {
-        users.selectAll()
+        select(users)
             .where { (users.id eq userId) and (users.realmId eq realmId) }
-            .firstOrNull()
-            ?.toUserEntity()
+            .firstOrNull { it.toUserEntity() }
     }
 
     override fun findByPhone(phone: String): UserEntity? = db.transaction {
-        users.selectAll()
+        select(users)
             .where { (users.phoneNumber eq phone) and (users.realmId eq realmId) }
-            .firstOrNull()
-            ?.toUserEntity()
+            .firstOrNull { it.toUserEntity() }
     }
 
     override fun findByEmail(email: String): UserEntity? = db.transaction {
-        users.selectAll()
+        select(users)
             .where { (users.email eq email) and (users.realmId eq realmId) }
-            .firstOrNull()
-            ?.toUserEntity()
+            .firstOrNull { it.toUserEntity() }
     }
 
     override fun findFullById(userId: UUID): FullUserEntity? = db.transaction {
-        val row = users.selectAll()
+        val user = select(users)
             .where { (users.id eq userId) and (users.realmId eq realmId) }
-            .firstOrNull()
+            .firstOrNull { it.toUserEntity() }
             ?: return@transaction null
 
-        val entityId = row[users.id]
-        val rolesForUser = loadRolesForUser(entityId)
-        val profile = loadProfileForUser(entityId)
-        val attributes = loadCustomAttributesForUser(entityId)
+        val rolesForUser = loadRolesForUser(userId)
+        val profile = loadProfileForUser(userId)
+        val attributes = loadCustomAttributesForUser(userId)
 
-        row.toFullUserEntity(
+        FullUserEntity(
+            id = user.id,
+            createdAt = user.createdAt,
+            updatedAt = user.updatedAt,
+            phoneNumber = user.phoneNumber,
+            email = user.email,
+            lastLoggedIn = user.lastLoggedIn,
+            status = user.status,
             roles = rolesForUser,
             profile = profile,
             customAttributes = attributes,
@@ -125,38 +130,39 @@ internal class ExposedUserRepository(
 
                 val roleIdMap = lookupRoleIds(roleNames)
 
-                val realmValue = this@ExposedUserRepository.realmId
-                val newUserId = users.insertAndGetId {
-                    it[users.passwordHash] = hashedPassword
-                    it[users.createdAt] = currentTime
-                    it[users.updatedAt] = currentTime
-                    it[users.email] = email
-                    it[users.phoneNumber] = phone
-                    it[users.realmId] = realmValue
+                val realmValue = this@JdbcUserRepository.realmId
+                val newUserId = insertReturningKey(users, users.id) {
+                    this[users.passwordHash] = hashedPassword
+                    this[users.createdAt] = currentTime
+                    this[users.updatedAt] = currentTime
+                    this[users.email] = email
+                    this[users.phoneNumber] = phone
+                    this[users.realmId] = realmValue
                 }
 
                 for (roleName in roleNames) {
-                    userRoles.insert {
-                        it[userRoles.userId] = newUserId
-                        it[userRoles.roleId] = roleIdMap.getValue(roleName)
+                    insertInto(userRoles) {
+                        this[userRoles.userId] = newUserId
+                        this[userRoles.roleId] = roleIdMap.getValue(roleName)
                     }
                 }
 
-                if (profile != null) insertProfile(newUserId.value, profile)
-                if (customAttributes != null) insertCustomAttributes(newUserId.value, customAttributes)
+                if (profile != null) insertProfile(newUserId, profile)
+                if (customAttributes != null) insertCustomAttributes(newUserId, customAttributes)
 
-                val createdRow = users.selectAll()
+                val createdUser = select(users)
                     .where { users.id eq newUserId }
-                    .single()
+                    .firstOrNull { it.toUserEntity() }
+                    ?: error("User $newUserId not found after insert")
 
-                UserRepository.CreateUserResult.Success(createdRow.toUserEntity())
+                UserRepository.CreateUserResult.Success(createdUser)
             }
-        } catch (e: ExposedSQLException) {
+        } catch (e: SQLException) {
             mapCreateConstraintViolation(e)
         }
     }
 
-    private fun mapCreateConstraintViolation(e: ExposedSQLException): UserRepository.CreateUserResult =
+    private fun mapCreateConstraintViolation(e: SQLException): UserRepository.CreateUserResult =
         when (detectDuplicateField(e)) {
             DuplicateField.EMAIL -> UserRepository.CreateUserResult.EmailAlreadyExists
             DuplicateField.PHONE -> UserRepository.CreateUserResult.PhoneAlreadyExists
@@ -164,31 +170,19 @@ internal class ExposedUserRepository(
         }
 
     override fun getHashedPassword(userId: UUID): String? = db.transaction {
-        users.selectAll()
+        select(users)
             .where { (users.id eq userId) and (users.realmId eq realmId) }
-            .firstOrNull()
-            ?.get(users.passwordHash)
+            .firstOrNull { it[users.passwordHash] }
     }
 
     override fun seedRoles(roles: List<Role>): Unit = db.transaction {
-        val rolesTable = this@ExposedUserRepository.roles
-        val realmValue = this@ExposedUserRepository.realmId
+        val rolesTable = this@JdbcUserRepository.roles
+        val realmValue = this@JdbcUserRepository.realmId
         for (role in roles) {
-            val existing = rolesTable.selectAll()
-                .where { (rolesTable.name eq role.name) and (rolesTable.realmId eq realmValue) }
-                .singleOrNull()
-            if (existing != null) {
-                rolesTable.update({
-                    (rolesTable.name eq role.name) and (rolesTable.realmId eq realmValue)
-                }) {
-                    it[rolesTable.description] = role.description
-                }
-            } else {
-                rolesTable.insert {
-                    it[rolesTable.name] = role.name
-                    it[rolesTable.realmId] = realmValue
-                    it[rolesTable.description] = role.description
-                }
+            upsert(rolesTable, conflictColumns = listOf(rolesTable.name, rolesTable.realmId)) {
+                this[rolesTable.name] = role.name
+                this[rolesTable.realmId] = realmValue
+                this[rolesTable.description] = role.description
             }
         }
     }
@@ -204,13 +198,14 @@ internal class ExposedUserRepository(
             db.transaction {
                 if (!userExistsInRealm(userId)) return@transaction UserRepository.UpdateUserResult.NotFound
 
-                users.update({ users.id eq userId }) {
-                    applyFieldUpdates(it, email, phone, status, currentTime)
+                update(users) {
+                    applyFieldUpdates(this, email, phone, status, currentTime)
+                    where { users.id eq userId }
                 }
 
                 UserRepository.UpdateUserResult.Success
             }
-        } catch (e: ExposedSQLException) {
+        } catch (e: SQLException) {
             mapUpdateConstraintViolation(e)
         }
     }
@@ -225,17 +220,17 @@ internal class ExposedUserRepository(
     override fun findRoles(userId: UUID): List<RoleEntity> = db.transaction {
         if (!userExistsInRealm(userId)) return@transaction emptyList()
 
-        userRoles.innerJoin(roles)
-            .selectAll()
+        select(userRoles)
+            .innerJoin(roles) { userRoles.roleId eqColumn roles.id }
             .where {
                 (userRoles.userId eq userId) and
-                (roles.realmId eq realmId)
+                    (roles.realmId eq realmId)
             }
             .map { it.toRoleEntity() }
     }
 
     override fun getAllRoles(): List<RoleEntity> = db.transaction {
-        roles.selectAll()
+        select(roles)
             .where { roles.realmId eq realmId }
             .map { it.toRoleEntity() }
     }
@@ -243,30 +238,30 @@ internal class ExposedUserRepository(
     override fun findProfileByUserId(userId: UUID): UserProfileEntity? = db.transaction {
         if (!userExistsInRealm(userId)) return@transaction null
 
-        profiles.selectAll()
+        select(profiles)
             .where { profiles.userId eq userId }
-            .firstOrNull()
-            ?.toProfileEntity()
+            .firstOrNull { it.toProfileEntity() }
     }
 
     override fun updateProfileByUserId(userId: UUID, profile: UserProfile): UserRepository.UpdateProfileResult =
         db.transaction {
-            val userRow = users.selectAll()
+            val userEntity = select(users)
                 .where { (users.id eq userId) and (users.realmId eq realmId) }
-                .firstOrNull()
+                .firstOrNull { it.toUserEntity() }
                 ?: return@transaction UserRepository.UpdateProfileResult.NotFound
 
             upsertProfile(userId, profile)
 
-            UserRepository.UpdateProfileResult.Success(userRow.toUserEntity())
+            UserRepository.UpdateProfileResult.Success(userEntity)
         }
 
     override fun findCustomAttributesByUserId(userId: UUID): Map<String, String> = db.transaction {
         if (!userExistsInRealm(userId)) return@transaction emptyMap()
 
-        customAttrs.selectAll()
+        select(customAttrs)
             .where { customAttrs.userId eq userId }
-            .associate { it[customAttrs.key] to it[customAttrs.value] }
+            .map { it[customAttrs.key] to it[customAttrs.value] }
+            .toMap()
     }
 
     override fun replaceAllCustomAttributesByUserId(
@@ -276,7 +271,7 @@ internal class ExposedUserRepository(
         if (!userExistsInRealm(userId)) return@transaction UserRepository.UpdateUserResult.NotFound
 
         validateCustomAttributes(customAttributes)
-        customAttrs.deleteWhere { customAttrs.userId eq userId }
+        deleteFrom(customAttrs).where { customAttrs.userId eq userId }.execute()
         insertCustomAttributes(userId, customAttributes)
 
         UserRepository.UpdateUserResult.Success
@@ -294,27 +289,25 @@ internal class ExposedUserRepository(
     }
 
     override fun updateLastLogin(userId: UUID, loginTime: LocalDateTime): Boolean = db.transaction {
-        val updated = users.update({
-            (users.id eq userId) and (users.realmId eq realmId)
-        }) {
-            it[users.lastLoginAt] = loginTime
+        val updated = update(users) {
+            this[users.lastLoginAt] = loginTime
+            where { (users.id eq userId) and (users.realmId eq realmId) }
         }
         updated > 0
     }
 
     override fun updatePassword(userId: UUID, hashedPassword: String): Boolean = db.transaction {
-        val updated = users.update({
-            (users.id eq userId) and (users.realmId eq realmId)
-        }) {
-            it[users.passwordHash] = hashedPassword
+        val updated = update(users) {
+            this[users.passwordHash] = hashedPassword
+            where { (users.id eq userId) and (users.realmId eq realmId) }
         }
         updated > 0
     }
 
     override fun deleteUser(userId: UUID): UserRepository.DeleteResult = db.transaction {
-        val deleted = users.deleteWhere {
-            (users.id eq userId) and (users.realmId eq realmId)
-        }
+        val deleted = deleteFrom(users)
+            .where { (users.id eq userId) and (users.realmId eq realmId) }
+            .execute()
         if (deleted > 0) UserRepository.DeleteResult.Success
         else UserRepository.DeleteResult.NotFound
     }
@@ -332,17 +325,16 @@ internal class ExposedUserRepository(
             db.transaction {
                 if (!userExistsInRealm(userId)) return@transaction UserRepository.UpdateUserResult.NotFound
 
-                users.update({ users.id eq userId }) {
-                    applyFieldUpdates(it, email, phone, status, currentTime)
+                update(users) {
+                    applyFieldUpdates(this, email, phone, status, currentTime)
+                    where { users.id eq userId }
                 }
 
                 when (profile) {
                     is FieldUpdate.NoChange -> {}
-                    is FieldUpdate.SetValue -> {
-                        upsertProfile(userId, profile.value)
-                    }
+                    is FieldUpdate.SetValue -> upsertProfile(userId, profile.value)
                     is FieldUpdate.ClearValue -> {
-                        profiles.deleteWhere { profiles.userId eq userId }
+                        deleteFrom(profiles).where { profiles.userId eq userId }.execute()
                     }
                 }
 
@@ -350,110 +342,144 @@ internal class ExposedUserRepository(
                     is FieldUpdate.NoChange -> {}
                     is FieldUpdate.SetValue -> upsertCustomAttributes(userId, customAttributes.value)
                     is FieldUpdate.ClearValue -> {
-                        customAttrs.deleteWhere { customAttrs.userId eq userId }
+                        deleteFrom(customAttrs).where { customAttrs.userId eq userId }.execute()
                     }
                 }
 
                 UserRepository.UpdateUserResult.Success
             }
-        } catch (e: ExposedSQLException) {
+        } catch (e: SQLException) {
             mapUpdateConstraintViolation(e)
         }
     }
 
-    private fun loadRolesByUserIds(
-        userIds: List<EntityID<UUID>>,
+    private fun ConnectionScope.loadRolesByUserIds(
+        userIds: List<UUID>,
     ): Map<UUID, List<RoleEntity>> {
         val result = mutableMapOf<UUID, MutableList<RoleEntity>>()
-        userRoles.innerJoin(roles)
-            .selectAll()
+        select(userRoles)
+            .innerJoin(roles) { userRoles.roleId eqColumn roles.id }
             .where {
                 (userRoles.userId inList userIds) and
-                (roles.realmId eq realmId)
+                    (roles.realmId eq realmId)
             }
-            .forEach { row ->
-                val uid = row[userRoles.userId].value
-                result.getOrPut(uid) { mutableListOf() }.add(row.toRoleEntity())
+            .map { row ->
+                val uid = row[userRoles.userId]
+                val role = row.toRoleEntity()
+                uid to role
+            }
+            .forEach { (uid, role) ->
+                result.getOrPut(uid) { mutableListOf() }.add(role)
             }
         return result
     }
 
-    private fun loadProfilesByUserIds(
-        userIds: List<EntityID<UUID>>,
+    private fun ConnectionScope.loadProfilesByUserIds(
+        userIds: List<UUID>,
     ): Map<UUID, UserProfileEntity> =
-        profiles.selectAll()
+        select(profiles)
             .where { profiles.userId inList userIds }
-            .associate { row ->
-                row[profiles.userId].value to row.toProfileEntity()
-            }
+            .map { row -> row[profiles.userId] to row.toProfileEntity() }
+            .toMap()
 
-    private fun loadCustomAttributesByUserIds(
-        userIds: List<EntityID<UUID>>,
-    ): Map<UUID, Map<String, String>> =
-        customAttrs.selectAll()
+    private fun ConnectionScope.loadCustomAttributesByUserIds(
+        userIds: List<UUID>,
+    ): Map<UUID, Map<String, String>> {
+        val result = mutableMapOf<UUID, MutableMap<String, String>>()
+        select(customAttrs)
             .where { customAttrs.userId inList userIds }
-            .groupBy { it[customAttrs.userId].value }
-            .mapValues { (_, rows) ->
-                rows.associate { it[customAttrs.key] to it[customAttrs.value] }
+            .map { row ->
+                Triple(row[customAttrs.userId], row[customAttrs.key], row[customAttrs.value])
             }
+            .forEach { (uid, key, value) ->
+                result.getOrPut(uid) { mutableMapOf() }[key] = value
+            }
+        return result
+    }
 
-    private fun loadRolesForUser(userEntityId: EntityID<UUID>): List<RoleEntity> =
-        userRoles.innerJoin(roles)
-            .selectAll()
+    private fun ConnectionScope.loadRolesForUser(
+        userId: UUID,
+    ): List<RoleEntity> =
+        select(userRoles)
+            .innerJoin(roles) { userRoles.roleId eqColumn roles.id }
             .where {
-                (userRoles.userId eq userEntityId) and
-                (roles.realmId eq realmId)
+                (userRoles.userId eq userId) and
+                    (roles.realmId eq realmId)
             }
             .map { it.toRoleEntity() }
 
-    private fun loadProfileForUser(userEntityId: EntityID<UUID>): UserProfileEntity? =
-        profiles.selectAll()
-            .where { profiles.userId eq userEntityId }
-            .firstOrNull()
-            ?.toProfileEntity()
+    private fun ConnectionScope.loadProfileForUser(
+        userId: UUID,
+    ): UserProfileEntity? =
+        select(profiles)
+            .where { profiles.userId eq userId }
+            .firstOrNull { it.toProfileEntity() }
 
-    private fun loadCustomAttributesForUser(userEntityId: EntityID<UUID>): Map<String, String> =
-        customAttrs.selectAll()
-            .where { customAttrs.userId eq userEntityId }
-            .associate { it[customAttrs.key] to it[customAttrs.value] }
+    private fun ConnectionScope.loadCustomAttributesForUser(
+        userId: UUID,
+    ): Map<String, String> =
+        select(customAttrs)
+            .where { customAttrs.userId eq userId }
+            .map { it[customAttrs.key] to it[customAttrs.value] }
+            .toMap()
 
-    private fun insertProfile(userId: UUID, profile: UserProfile) {
-        profiles.insert {
-            it[profiles.userId] = EntityID(userId, users)
-            setProfileFields(it, profile)
+    private fun ConnectionScope.insertProfile(
+        userId: UUID,
+        profile: UserProfile,
+    ) {
+        insertInto(profiles) {
+            this[profiles.userId] = userId
+            setProfileFields(this, profile)
         }
     }
 
-    private fun upsertProfile(userId: UUID, profile: UserProfile) {
-        val updated = profiles.update({ profiles.userId eq userId }) {
-            setProfileFields(it, profile)
+    private fun ConnectionScope.upsertProfile(
+        userId: UUID,
+        profile: UserProfile,
+    ) {
+        val updated = update(profiles) {
+            setProfileFields(this, profile)
+            where { profiles.userId eq userId }
         }
         if (updated == 0) insertProfile(userId, profile)
     }
 
-    private fun setProfileFields(stmt: UpdateBuilder<*>, profile: UserProfile) {
+    private fun setProfileFields(stmt: InsertBuilder, profile: UserProfile) {
         stmt[profiles.firstName] = profile.firstName
         stmt[profiles.lastName] = profile.lastName
         stmt[profiles.address] = profile.address
         stmt[profiles.profilePicture] = profile.profilePicture
     }
 
-    private fun insertCustomAttributes(userId: UUID, attributes: Map<String, String>) {
+    private fun setProfileFields(stmt: UpdateBuilder, profile: UserProfile) {
+        stmt[profiles.firstName] = profile.firstName
+        stmt[profiles.lastName] = profile.lastName
+        stmt[profiles.address] = profile.address
+        stmt[profiles.profilePicture] = profile.profilePicture
+    }
+
+    private fun ConnectionScope.insertCustomAttributes(
+        userId: UUID,
+        attributes: Map<String, String>,
+    ) {
         validateCustomAttributes(attributes)
-        val entityId = EntityID(userId, users)
         for ((attrKey, attrValue) in attributes) {
-            customAttrs.insert {
-                it[customAttrs.userId] = entityId
-                it[customAttrs.key] = attrKey
-                it[customAttrs.value] = attrValue
+            insertInto(customAttrs) {
+                this[customAttrs.userId] = userId
+                this[customAttrs.key] = attrKey
+                this[customAttrs.value] = attrValue
             }
         }
     }
 
-    private fun upsertCustomAttributes(userId: UUID, attributes: Map<String, String>) {
-        val existing = customAttrs.selectAll()
+    private fun ConnectionScope.upsertCustomAttributes(
+        userId: UUID,
+        attributes: Map<String, String>,
+    ) {
+        val existing = select(customAttrs)
             .where { customAttrs.userId eq userId }
-            .associate { it[customAttrs.key] to it[customAttrs.id] }
+            .map { it[customAttrs.key] to it[customAttrs.id] }
+            .toMap()
 
         val newKeysCount = attributes.keys.count { it !in existing }
         val totalAfterUpdate = existing.size + newKeysCount
@@ -461,26 +487,26 @@ internal class ExposedUserRepository(
             "Too many custom attributes after update (max: $MAX_ATTRIBUTES_PER_USER, would be: $totalAfterUpdate)"
         }
 
-        val entityId = EntityID(userId, users)
         for ((attrKey, attrValue) in attributes) {
             validateKey(attrKey)
             validateValue(attrKey, attrValue)
             val existingId = existing[attrKey]
             if (existingId != null) {
-                customAttrs.update({ customAttrs.id eq existingId }) {
-                    it[customAttrs.value] = attrValue
+                update(customAttrs) {
+                    this[customAttrs.value] = attrValue
+                    where { customAttrs.id eq existingId }
                 }
             } else {
-                customAttrs.insert {
-                    it[customAttrs.userId] = entityId
-                    it[customAttrs.key] = attrKey
-                    it[customAttrs.value] = attrValue
+                insertInto(customAttrs) {
+                    this[customAttrs.userId] = userId
+                    this[customAttrs.key] = attrKey
+                    this[customAttrs.value] = attrValue
                 }
             }
         }
     }
 
-    private fun replaceRolesForUser(
+    private fun ConnectionScope.replaceRolesForUser(
         userId: UUID,
         roleNames: List<String>,
     ): UserRepository.UpdateRolesResult {
@@ -491,50 +517,57 @@ internal class ExposedUserRepository(
 
         val roleIdMap = lookupRoleIds(roleNames)
 
-        userRoles.deleteWhere { userRoles.userId eq userId }
+        deleteFrom(userRoles).where { userRoles.userId eq userId }.execute()
 
-        val entityId = EntityID(userId, users)
         for (roleName in roleNames) {
-            userRoles.insert {
-                it[userRoles.userId] = entityId
-                it[userRoles.roleId] = roleIdMap.getValue(roleName)
+            insertInto(userRoles) {
+                this[userRoles.userId] = userId
+                this[userRoles.roleId] = roleIdMap.getValue(roleName)
             }
         }
         return UserRepository.UpdateRolesResult.Success
     }
 
-    private fun userExistsInRealm(userId: UUID): Boolean =
-        users.selectAll()
+    private fun ConnectionScope.userExistsInRealm(userId: UUID): Boolean =
+        select(users)
             .where { (users.id eq userId) and (users.realmId eq realmId) }
             .any()
 
-    private fun findFirstInvalidRole(roleNames: List<String>): String? {
+    private fun ConnectionScope.findFirstInvalidRole(
+        roleNames: List<String>,
+    ): String? {
         if (roleNames.isEmpty()) return null
-        val existingRoles = roles.selectAll()
+        val existingRoles = select(roles)
             .where { (roles.name inList roleNames) and (roles.realmId eq realmId) }
             .map { it[roles.name] }
             .toSet()
         return roleNames.firstOrNull { it !in existingRoles }
     }
 
-    private fun lookupRoleIds(roleNames: List<String>): Map<String, EntityID<UUID>> =
-        roles.selectAll()
+    private fun ConnectionScope.lookupRoleIds(
+        roleNames: List<String>,
+    ): Map<String, UUID> =
+        select(roles)
             .where { (roles.name inList roleNames) and (roles.realmId eq realmId) }
-            .associate { it[roles.name] to it[roles.id] }
+            .map { it[roles.name] to it[roles.id] }
+            .toMap()
 
-    private fun mapUpdateConstraintViolation(e: ExposedSQLException): UserRepository.UpdateUserResult =
+    private fun mapUpdateConstraintViolation(e: SQLException): UserRepository.UpdateUserResult =
         when (detectDuplicateField(e)) {
             DuplicateField.EMAIL -> UserRepository.UpdateUserResult.EmailAlreadyExists
             DuplicateField.PHONE -> UserRepository.UpdateUserResult.PhoneAlreadyExists
             null -> throw e
         }
 
-    private fun detectDuplicateField(e: ExposedSQLException): DuplicateField? {
-        if (e.sqlState?.startsWith("23") != true) return null
-        val msg = e.message ?: return null
-        return when {
-            msg.contains(users.emailRealmIndex, ignoreCase = true) -> DuplicateField.EMAIL
-            msg.contains(users.phoneRealmIndex, ignoreCase = true) -> DuplicateField.PHONE
+    private fun detectDuplicateField(e: SQLException): DuplicateField? {
+        val matchedIndex = ConstraintViolationMapper.detectDuplicateIndex(
+            e,
+            users.emailRealmIndex,
+            users.phoneRealmIndex,
+        ) ?: return null
+        return when (matchedIndex) {
+            users.emailRealmIndex -> DuplicateField.EMAIL
+            users.phoneRealmIndex -> DuplicateField.PHONE
             else -> null
         }
     }
@@ -542,7 +575,7 @@ internal class ExposedUserRepository(
     private enum class DuplicateField { EMAIL, PHONE }
 
     private fun applyFieldUpdates(
-        stmt: UpdateStatement,
+        stmt: UpdateBuilder,
         email: FieldUpdate<String>,
         phone: FieldUpdate<String>,
         status: FieldUpdate<UserStatus>,
@@ -595,8 +628,8 @@ internal class ExposedUserRepository(
         }
     }
 
-    private fun ResultRow.toUserEntity() = UserEntity(
-        id = this[users.id].value,
+    private fun Row.toUserEntity() = UserEntity(
+        id = this[users.id],
         createdAt = this[users.createdAt],
         updatedAt = this[users.updatedAt],
         phoneNumber = this[users.phoneNumber],
@@ -605,32 +638,15 @@ internal class ExposedUserRepository(
         status = this[users.status],
     )
 
-    private fun ResultRow.toFullUserEntity(
-        roles: List<RoleEntity>,
-        profile: UserProfileEntity?,
-        customAttributes: Map<String, String>,
-    ) = FullUserEntity(
-        id = this[users.id].value,
-        createdAt = this[users.createdAt],
-        updatedAt = this[users.updatedAt],
-        phoneNumber = this[users.phoneNumber],
-        email = this[users.email],
-        lastLoggedIn = this[users.lastLoginAt],
-        status = this[users.status],
-        roles = roles,
-        profile = profile,
-        customAttributes = customAttributes,
-    )
-
-    private fun ResultRow.toProfileEntity() = UserProfileEntity(
-        userId = this[profiles.userId].value,
+    private fun Row.toProfileEntity() = UserProfileEntity(
+        userId = this[profiles.userId],
         firstName = this[profiles.firstName],
         lastName = this[profiles.lastName],
         address = this[profiles.address],
         profilePicture = this[profiles.profilePicture],
     )
 
-    private fun ResultRow.toRoleEntity() = RoleEntity(
+    private fun Row.toRoleEntity() = RoleEntity(
         name = this[roles.name],
         description = this[roles.description],
     )

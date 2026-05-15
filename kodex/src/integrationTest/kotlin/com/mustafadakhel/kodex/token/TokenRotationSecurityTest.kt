@@ -1,6 +1,8 @@
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
 import com.mustafadakhel.kodex.model.Realm
@@ -26,7 +28,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.mockk
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Database
+import org.h2.jdbcx.JdbcDataSource
 import java.util.*
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -79,12 +81,11 @@ class TokenRotationSecurityTest : FunSpec({
     }
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:rotation_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:rotation_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        db = KodexDatabase(database, core)
+        db = KodexDatabase(ds, DatabaseDialect.H2, core)
         db.createSchema()
 
         userRepository = databaseUserRepository(db, realm.name)
@@ -175,7 +176,8 @@ class TokenRotationSecurityTest : FunSpec({
 
             val tokens = db.core.tokens
             val allRevoked = db.transaction {
-                tokens.select(tokens.revoked)
+                select(tokens)
+                    .columns(tokens.revoked)
                     .where { tokens.userId eq testUserId }
                     .map { it[tokens.revoked] }
             }
@@ -199,7 +201,8 @@ class TokenRotationSecurityTest : FunSpec({
 
             val tokens = db.core.tokens
             val allRevoked = db.transaction {
-                tokens.select(tokens.revoked)
+                select(tokens)
+                    .columns(tokens.revoked)
                     .where { tokens.userId eq testUserId }
                     .map { it[tokens.revoked] }
             }
@@ -336,10 +339,9 @@ class TokenRotationSecurityTest : FunSpec({
 
             val tokens = db.core.tokens
             val firstUsedAt = db.transaction {
-                tokens.select(tokens.columns)
+                select(tokens)
                     .where { tokens.id eq tokenId }
-                    .firstOrNull()
-                    ?.getOrNull(tokens.firstUsedAt)
+                    .firstOrNull { it[tokens.firstUsedAt] }
             }
 
             firstUsedAt shouldNotBe null
@@ -363,10 +365,9 @@ class TokenRotationSecurityTest : FunSpec({
             val tokens = db.core.tokens
             val families = db.transaction {
                 listOf(token1Id, token2Id, token3Id).mapNotNull { id ->
-                    tokens.select(tokens.tokenFamily)
+                    select(tokens)
                         .where { tokens.id eq id }
-                        .firstOrNull()
-                        ?.getOrNull(tokens.tokenFamily)
+                        .firstOrNull { it[tokens.tokenFamily] }
                 }
             }.distinct()
 
@@ -387,10 +388,9 @@ class TokenRotationSecurityTest : FunSpec({
 
             val tokens = db.core.tokens
             val parentTokenId = db.transaction {
-                tokens.select(tokens.parentTokenId)
+                select(tokens)
                     .where { tokens.id eq token2Id }
-                    .firstOrNull()
-                    ?.getOrNull(tokens.parentTokenId)
+                    .firstOrNull { it[tokens.parentTokenId] }
             }
 
             parentTokenId shouldBe token1Id

@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.schema
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.kotest.assertions.throwables.shouldThrow
@@ -7,16 +8,17 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Table
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 
-private class TestExtensionSchema(private val schemaTables: List<Table>) : ExtensionSchema {
-    override fun tables(): List<Table> = schemaTables
+private class TestExtensionSchema(private val names: List<String> = emptyList()) : ExtensionSchema {
+    override fun ddl(dialect: DatabaseDialect): List<String> = emptyList()
+    override fun tableNames(): List<String> = names
 }
 
 private class AnotherExtensionSchema : ExtensionSchema {
-    override fun tables(): List<Table> = emptyList()
+    override fun ddl(dialect: DatabaseDialect): List<String> = emptyList()
+    override fun tableNames(): List<String> = emptyList()
 }
 
 class KodexDatabaseTest : FunSpec({
@@ -24,12 +26,11 @@ class KodexDatabaseTest : FunSpec({
     context("validateSchema") {
 
         test("throws IllegalStateException when tables are missing") {
-            val database = Database.connect(
-                "jdbc:h2:mem:validate_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver"
-            )
+            val ds = JdbcDataSource().apply {
+                setUrl("jdbc:h2:mem:validate_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+            }
             val core = CoreSchema("test_")
-            val db = KodexDatabase(database, core)
+            val db = KodexDatabase(ds, DatabaseDialect.H2, core)
 
             val exception = shouldThrow<IllegalStateException> {
                 db.validateSchema()
@@ -42,12 +43,11 @@ class KodexDatabaseTest : FunSpec({
     context("generateDDL") {
 
         test("returns non-empty list of CREATE TABLE statements") {
-            val database = Database.connect(
-                "jdbc:h2:mem:ddl_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver"
-            )
+            val ds = JdbcDataSource().apply {
+                setUrl("jdbc:h2:mem:ddl_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+            }
             val core = CoreSchema("test_")
-            val db = KodexDatabase(database, core)
+            val db = KodexDatabase(ds, DatabaseDialect.H2, core)
 
             val ddl = db.generateDDL()
 
@@ -60,14 +60,14 @@ class KodexDatabaseTest : FunSpec({
     context("schema and schemaOrNull") {
 
         test("schema returns registered extension schema") {
-            val database = Database.connect(
-                "jdbc:h2:mem:schema_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver"
-            )
+            val ds = JdbcDataSource().apply {
+                setUrl("jdbc:h2:mem:schema_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+            }
             val core = CoreSchema("test_")
             val testSchema = TestExtensionSchema(emptyList())
             val db = KodexDatabase(
-                database = database,
+                dataSource = ds,
+                dialect = DatabaseDialect.H2,
                 core = core,
                 extensionSchemas = mapOf(TestExtensionSchema::class to testSchema)
             )
@@ -78,12 +78,11 @@ class KodexDatabaseTest : FunSpec({
         }
 
         test("schemaOrNull returns null for unregistered extension schema") {
-            val database = Database.connect(
-                "jdbc:h2:mem:schema_null_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver"
-            )
+            val ds = JdbcDataSource().apply {
+                setUrl("jdbc:h2:mem:schema_null_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+            }
             val core = CoreSchema("test_")
-            val db = KodexDatabase(database, core)
+            val db = KodexDatabase(ds, DatabaseDialect.H2, core)
 
             val result = db.schemaOrNull<AnotherExtensionSchema>()
 
@@ -91,12 +90,11 @@ class KodexDatabaseTest : FunSpec({
         }
 
         test("schema throws for unregistered extension schema") {
-            val database = Database.connect(
-                "jdbc:h2:mem:schema_throw_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-                driver = "org.h2.Driver"
-            )
+            val ds = JdbcDataSource().apply {
+                setUrl("jdbc:h2:mem:schema_throw_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+            }
             val core = CoreSchema("test_")
-            val db = KodexDatabase(database, core)
+            val db = KodexDatabase(ds, DatabaseDialect.H2, core)
 
             val exception = shouldThrow<IllegalStateException> {
                 db.schema<AnotherExtensionSchema>()
@@ -116,13 +114,12 @@ class KodexDatabaseTest : FunSpec({
                 isAutoCommit = false
             }
             val dataSource = HikariDataSource(hikariConfig)
-            val database = Database.connect(dataSource)
             val core = CoreSchema("test_")
             val db = KodexDatabase(
-                database = database,
+                dataSource = dataSource,
+                dialect = DatabaseDialect.H2,
                 core = core,
-                ownsDataSource = true,
-                dataSource = dataSource
+                ownsDataSource = true
             )
 
             db.close()
@@ -138,13 +135,12 @@ class KodexDatabaseTest : FunSpec({
                 isAutoCommit = false
             }
             val dataSource = HikariDataSource(hikariConfig)
-            val database = Database.connect(dataSource)
             val core = CoreSchema("test_")
             val db = KodexDatabase(
-                database = database,
+                dataSource = dataSource,
+                dialect = DatabaseDialect.H2,
                 core = core,
-                ownsDataSource = false,
-                dataSource = dataSource
+                ownsDataSource = false
             )
 
             db.close()

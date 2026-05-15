@@ -1,7 +1,10 @@
 package com.mustafadakhel.kodex.repository
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.UserProfile
+import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.RoleEntity
 import com.mustafadakhel.kodex.repository.UserRepository.*
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
@@ -16,13 +19,8 @@ import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.deleteAll
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
 import kotlinx.datetime.LocalDateTime
+import org.h2.jdbcx.JdbcDataSource
 import java.util.*
 
 class ExposedUserRepositoryTest : FunSpec({
@@ -33,23 +31,22 @@ class ExposedUserRepositoryTest : FunSpec({
     val testRealm = "test-realm"
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:user_repo_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:user_repo_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        db = KodexDatabase(database, core)
+        db = KodexDatabase(ds, DatabaseDialect.H2, core)
         db.createSchema()
         userRepository = databaseUserRepository(db, testRealm)
     }
 
     afterEach {
         db.transaction {
-            db.core.userRoles.deleteAll()
-            db.core.userCustomAttributes.deleteAll()
-            db.core.userProfiles.deleteAll()
-            db.core.users.deleteAll()
-            db.core.roles.deleteAll()
+            deleteFrom(db.core.userRoles).executeAll()
+            deleteFrom(db.core.userCustomAttributes).executeAll()
+            deleteFrom(db.core.userProfiles).executeAll()
+            deleteFrom(db.core.users).executeAll()
+            deleteFrom(db.core.roles).executeAll()
         }
     }
 
@@ -474,12 +471,12 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.NoChange,
                 phone = FieldUpdate.NoChange,
-                status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
+                status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
                 currentTime = now
             )
 
             result shouldBe UpdateUserResult.Success
-            userRepository.findById(user.id)!!.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
+            userRepository.findById(user.id)!!.status shouldBe UserStatus.SUSPENDED
         }
     }
 
@@ -496,7 +493,7 @@ class ExposedUserRepositoryTest : FunSpec({
                 userId = user.id,
                 email = FieldUpdate.SetValue("new@example.com"),
                 phone = FieldUpdate.SetValue("+2222222222"),
-                status = FieldUpdate.SetValue(com.mustafadakhel.kodex.model.UserStatus.SUSPENDED),
+                status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
                 profile = FieldUpdate.SetValue(UserProfile("NewFirst", "NewLast", "New Address", "new.jpg")),
                 customAttributes = FieldUpdate.SetValue(mapOf("new" to "attr")),
                 currentTime = now
@@ -506,7 +503,7 @@ class ExposedUserRepositoryTest : FunSpec({
             val updated = userRepository.findById(user.id)!!
             updated.email shouldBe "new@example.com"
             updated.phoneNumber shouldBe "+2222222222"
-            updated.status shouldBe com.mustafadakhel.kodex.model.UserStatus.SUSPENDED
+            updated.status shouldBe UserStatus.SUSPENDED
         }
 
         test("should handle ClearValue for email in batch update") {
@@ -631,14 +628,15 @@ class ExposedUserRepositoryTest : FunSpec({
             ) as CreateUserResult.Success).user
 
             val userId = user.id
+            val tokens = db.core.tokens
 
             db.transaction {
-                db.core.tokens.insert {
-                    it[db.core.tokens.userId] = EntityID(userId, db.core.users)
-                    it[db.core.tokens.tokenHash] = "test_token_hash"
-                    it[db.core.tokens.type] = "access"
-                    it[db.core.tokens.expiresAt] = now
-                    it[db.core.tokens.realmId] = testRealm
+                insertInto(tokens) {
+                    set(tokens.userId, userId)
+                    set(tokens.tokenHash, "test_token_hash")
+                    set(tokens.type, "access")
+                    set(tokens.expiresAt, now)
+                    set(tokens.realmId, testRealm)
                 }
             }
 
@@ -646,8 +644,8 @@ class ExposedUserRepositoryTest : FunSpec({
             userRepository.findProfileByUserId(userId)!!.firstName shouldBe "Jane"
             userRepository.findCustomAttributesByUserId(userId) shouldBe mapOf("dept" to "eng", "level" to "senior")
             db.transaction {
-                db.core.tokens.selectAll()
-                    .where { db.core.tokens.userId eq userId }
+                select(tokens)
+                    .where { tokens.userId eq userId }
                     .count()
             } shouldBe 1L
 
@@ -655,27 +653,30 @@ class ExposedUserRepositoryTest : FunSpec({
 
             userRepository.findById(userId).shouldBeNull()
 
+            val userRoles = db.core.userRoles
             db.transaction {
-                db.core.userRoles.selectAll()
-                    .where { db.core.userRoles.userId eq userId }
+                select(userRoles)
+                    .where { userRoles.userId eq userId }
                     .count()
             } shouldBe 0L
 
             db.transaction {
-                db.core.tokens.selectAll()
-                    .where { db.core.tokens.userId eq userId }
+                select(tokens)
+                    .where { tokens.userId eq userId }
                     .count()
             } shouldBe 0L
 
+            val userProfiles = db.core.userProfiles
             db.transaction {
-                db.core.userProfiles.selectAll()
-                    .where { db.core.userProfiles.userId eq userId }
+                select(userProfiles)
+                    .where { userProfiles.userId eq userId }
                     .count()
             } shouldBe 0L
 
+            val userCustomAttributes = db.core.userCustomAttributes
             db.transaction {
-                db.core.userCustomAttributes.selectAll()
-                    .where { db.core.userCustomAttributes.userId eq userId }
+                select(userCustomAttributes)
+                    .where { userCustomAttributes.userId eq userId }
                     .count()
             } shouldBe 0L
         }

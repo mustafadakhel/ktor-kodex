@@ -90,7 +90,7 @@ internal class DefaultPasswordResetService(
                 }
                 .singleOrNull()
 
-            contact?.get(contacts.userId)?.value
+            contact?.get(contacts.userId)
         }
 
         if (userId == null) {
@@ -181,7 +181,7 @@ internal class DefaultPasswordResetService(
                 return@transaction TokenVerificationResult.Invalid(validation.reason!!)
             }
 
-            TokenVerificationResult.Valid(resetToken[tokens.userId].value)
+            TokenVerificationResult.Valid(resetToken[tokens.userId])
         }
 
         when (result) {
@@ -229,7 +229,7 @@ internal class DefaultPasswordResetService(
                 return@transaction TokenConsumptionResult.Invalid(validation.reason!!)
             }
 
-            val userId = resetToken[tokens.userId].value
+            val userId = resetToken[tokens.userId]
 
             tokens.update({
                 (tokens.realmId eq realm) and (tokens.token eq hashedToken)

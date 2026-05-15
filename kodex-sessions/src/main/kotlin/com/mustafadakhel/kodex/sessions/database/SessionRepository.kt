@@ -331,7 +331,7 @@ public class SessionRepository(
     private fun ResultRow.toSession() = Session(
         id = this[sessions.id],
         realmId = this[sessions.realmId],
-        userId = this[sessions.userId].value,
+        userId = this[sessions.userId],
         tokenFamily = this[sessions.tokenFamily],
         deviceFingerprint = this[sessions.deviceFingerprint],
         deviceName = this[sessions.deviceName],
@@ -351,7 +351,7 @@ public class SessionRepository(
     private fun ResultRow.toSessionHistoryEntry() = SessionHistoryEntry(
         id = this[history.id],
         realmId = this[history.realmId],
-        userId = this[history.userId].value,
+        userId = this[history.userId],
         sessionId = this[history.sessionId],
         deviceName = this[history.deviceName],
         ipAddress = this[history.ipAddress],

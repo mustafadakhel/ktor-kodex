@@ -1,14 +1,10 @@
 package com.mustafadakhel.kodex.test
 
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.eqColumn
 import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.schema.KodexDatabase
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.insertAndGetId
-import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
 
 /**
@@ -29,29 +25,29 @@ public class TestDatabaseSetup(private val db: KodexDatabase) {
     ): UUID {
         val realm = realmId
         return db.transaction {
-            users.insertAndGetId {
-                it[users.passwordHash] = passwordHash
-                it[users.email] = email
+            insertReturningKey(users, users.id) {
+                set(users.passwordHash, passwordHash)
+                set(users.email, email)
                 if (phone != null) {
-                    it[users.phoneNumber] = phone
+                    set(users.phoneNumber, phone)
                 }
-                it[users.status] = status
-                it[users.realmId] = realm
-            }.value
+                set(users.status, status)
+                set(users.realmId, realm)
+            }
         }
     }
 
     public fun createRole(roleName: String, realmId: String, description: String? = null) {
         val realm = realmId
         db.transaction {
-            val exists = roles.selectAll()
+            val exists = select(roles)
                 .where { (roles.name eq roleName) and (roles.realmId eq realm) }
                 .any()
             if (!exists) {
-                roles.insert {
-                    it[roles.name] = roleName
-                    it[roles.realmId] = realm
-                    it[roles.description] = description
+                insertInto(roles) {
+                    set(roles.name, roleName)
+                    set(roles.realmId, realm)
+                    set(roles.description, description)
                 }
             }
         }
@@ -59,12 +55,13 @@ public class TestDatabaseSetup(private val db: KodexDatabase) {
 
     public fun assignRoleToUser(userId: UUID, roleName: String, realmId: String) {
         db.transaction {
-            val roleEntityId = roles.selectAll()
+            val roleId = select(roles)
                 .where { (roles.name eq roleName) and (roles.realmId eq realmId) }
-                .single()[roles.id]
-            userRoles.insert {
-                it[userRoles.userId] = EntityID(userId, users)
-                it[userRoles.roleId] = roleEntityId
+                .singleOrNull { it[roles.id] }
+                ?: error("Role '$roleName' not found in realm '$realmId'")
+            insertInto(userRoles) {
+                set(userRoles.userId, userId)
+                set(userRoles.roleId, roleId)
             }
         }
     }
@@ -82,19 +79,19 @@ public class TestDatabaseSetup(private val db: KodexDatabase) {
 
     public fun deleteTestUser(userId: UUID) {
         db.transaction {
-            userRoles.deleteWhere { userRoles.userId eq userId }
-            users.deleteWhere { users.id eq userId }
+            deleteFrom(userRoles).where { userRoles.userId eq userId }.execute()
+            deleteFrom(users).where { users.id eq userId }.execute()
         }
     }
 
     public fun userHasRole(userId: UUID, roleName: String, realmId: String): Boolean {
         return db.transaction {
-            userRoles.innerJoin(roles)
-                .selectAll()
+            select(userRoles)
+                .innerJoin(roles) { userRoles.roleId eqColumn roles.id }
                 .where {
                     (userRoles.userId eq userId) and
-                    (roles.name eq roleName) and
-                    (roles.realmId eq realmId)
+                        (roles.name eq roleName) and
+                        (roles.realmId eq realmId)
                 }
                 .any()
         }
@@ -102,7 +99,7 @@ public class TestDatabaseSetup(private val db: KodexDatabase) {
 
     public fun getUserCount(): Long {
         return db.transaction {
-            users.selectAll().count()
+            select(users).count()
         }
     }
 }

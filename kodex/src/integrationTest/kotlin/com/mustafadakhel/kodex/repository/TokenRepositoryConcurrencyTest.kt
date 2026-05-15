@@ -1,22 +1,23 @@
 package com.mustafadakhel.kodex.repository
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.model.database.PersistedToken
 import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.now
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
-import io.kotest.matchers.collections.shouldHaveSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
-import com.mustafadakhel.kodex.util.now
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Database
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.random.Random
 
@@ -36,12 +37,11 @@ class TokenRepositoryConcurrencyTest : FunSpec({
     val testRealm = "test-realm"
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:token_toctou_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:token_toctou_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        db = KodexDatabase(database, core)
+        db = KodexDatabase(ds, DatabaseDialect.H2, core)
         db.createSchema()
         testSetup = TestDatabaseSetup(db)
         repository = databaseTokenRepository(db, testRealm)

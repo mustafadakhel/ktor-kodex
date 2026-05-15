@@ -1,11 +1,11 @@
 package com.mustafadakhel.kodex.lockout.schema
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.ReferenceOption.CASCADE
+import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.kotlin.datetime.CurrentDateTime
 import org.jetbrains.exposed.sql.kotlin.datetime.datetime
@@ -40,7 +40,7 @@ public class LockoutSchema(private val core: CoreSchema) : ExtensionSchema {
     public class AccountLocksTable(core: CoreSchema) : Table("${core.prefix}account_locks") {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<EntityID<UUID>> = reference("user_id", core.users, onDelete = CASCADE)
+        public val userId: Column<UUID> = uuid("user_id").index()
         public val lockedUntil: Column<LocalDateTime?> = datetime("locked_until").nullable()
         public val reason: Column<String> = varchar("reason", 255)
         public val lockedAt: Column<LocalDateTime> = datetime("locked_at").defaultExpression(CurrentDateTime)
@@ -53,5 +53,13 @@ public class LockoutSchema(private val core: CoreSchema) : ExtensionSchema {
         }
     }
 
-    override fun tables(): List<Table> = listOf(failedLoginAttempts, accountLocks)
+    private val allTables: List<Table> = listOf(failedLoginAttempts, accountLocks)
+
+    internal fun exposedTables(): List<Table> = allTables
+
+    override fun ddl(dialect: DatabaseDialect): List<String> =
+        SchemaUtils.createStatements(*allTables.toTypedArray())
+
+    override fun tableNames(): List<String> =
+        allTables.map { it.tableName }
 }

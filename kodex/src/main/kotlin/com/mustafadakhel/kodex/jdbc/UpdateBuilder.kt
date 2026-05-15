@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.jdbc
 
 import java.sql.Connection
 
-internal class UpdateBuilder(private val table: TableDef, private val conn: Connection) {
+public class UpdateBuilder(private val table: TableDef, private val conn: Connection) {
 
     private val columnValues = mutableListOf<Pair<Column<*>, Any?>>()
     private var whereClause: WhereClause? = null

@@ -1,6 +1,9 @@
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
 import com.mustafadakhel.kodex.model.Realm
@@ -28,8 +31,7 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeEmpty
 import io.mockk.mockk
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.and
+import org.h2.jdbcx.JdbcDataSource
 import java.util.*
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -80,12 +82,11 @@ class DefaultTokenManagerTest : FunSpec({
     }
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:token_mgr_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:token_mgr_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        db = KodexDatabase(database, core)
+        db = KodexDatabase(ds, DatabaseDialect.H2, core)
         db.createSchema()
 
         userRepository = databaseUserRepository(db, realm.name)
@@ -123,10 +124,10 @@ class DefaultTokenManagerTest : FunSpec({
         test("should persist tokens to database") {
             tokenManager.issueNewTokens(testUserId)
 
-            // Verify via the core tokens table
+            val tokens = db.core.tokens
             val tokenCount = db.transaction {
-                db.core.tokens.select(db.core.tokens.id)
-                    .where { db.core.tokens.userId eq testUserId }
+                select(tokens)
+                    .where { tokens.userId eq testUserId }
                     .count()
             }
 
@@ -242,7 +243,7 @@ class DefaultTokenManagerTest : FunSpec({
 
             val tokens = db.core.tokens
             val revokedCount = db.transaction {
-                tokens.select(tokens.revoked)
+                select(tokens)
                     .where {
                         (tokens.userId eq testUserId) and
                         (tokens.type eq TokenType.AccessToken.name) and
@@ -260,7 +261,8 @@ class DefaultTokenManagerTest : FunSpec({
 
             val tokens = db.core.tokens
             val allTokens = db.transaction {
-                tokens.select(tokens.revoked)
+                select(tokens)
+                    .columns(tokens.revoked)
                     .where { tokens.userId eq testUserId }
                     .map { it[tokens.revoked] }
             }
@@ -274,7 +276,7 @@ class DefaultTokenManagerTest : FunSpec({
 
             val tokens = db.core.tokens
             val accessTokenCount = db.transaction {
-                tokens.select(tokens.id)
+                select(tokens)
                     .where {
                         (tokens.userId eq testUserId) and
                         (tokens.type eq TokenType.AccessToken.name)

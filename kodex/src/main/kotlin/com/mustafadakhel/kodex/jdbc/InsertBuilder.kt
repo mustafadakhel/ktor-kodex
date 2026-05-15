@@ -3,7 +3,7 @@ package com.mustafadakhel.kodex.jdbc
 import java.sql.Connection
 import java.sql.PreparedStatement
 
-internal class InsertBuilder(private val table: TableDef, private val conn: Connection) {
+public class InsertBuilder(private val table: TableDef, private val conn: Connection) {
 
     private val columnValues = mutableListOf<Pair<Column<*>, Any?>>()
 
