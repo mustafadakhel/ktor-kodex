@@ -189,15 +189,15 @@ class UpdateResultTest : DescribeSpec({
                 changedFields = mapOf(
                     UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "a", "b"),
                     UserField.PHONE.key to FieldChange(UserField.PHONE.key, "c", "d"),
-                    "name" to FieldChange("name", "e", "f")
+                    UserField.STATUS.key to FieldChange(UserField.STATUS.key, "ACTIVE", "SUSPENDED")
                 )
             )
 
             val fieldNames = changeSet.changedFieldNames()
             fieldNames.size shouldBe 3
             fieldNames shouldContain "email"
-            fieldNames shouldContain "phone"
-            fieldNames shouldContain "name"
+            fieldNames shouldContain "phoneNumber"
+            fieldNames shouldContain "status"
         }
 
         it("should return empty list when no changes") {

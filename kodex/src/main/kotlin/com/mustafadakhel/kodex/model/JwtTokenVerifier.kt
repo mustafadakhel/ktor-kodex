@@ -77,7 +77,7 @@ internal class JwtTokenVerifier(
         tokenValue: String,
         userId: UUID,
     ) {
-        val now = now(timeZone)
+        val now = now(TimeZone.UTC)
 
         if (storedToken.userId != userId)
             throw KodexThrowable.Authorization.SuspiciousToken("Token user ID does not match expected user ID")

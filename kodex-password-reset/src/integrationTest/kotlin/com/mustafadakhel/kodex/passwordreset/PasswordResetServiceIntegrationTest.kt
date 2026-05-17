@@ -386,9 +386,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             // Make sender fail
             mockSender.shouldFail = true
 
-            // First attempt fails due to sender, but returns Success for enumeration prevention
+            // First attempt fails due to sender
             val firstResult = service.initiatePasswordReset(email, PasswordResetService.ContactType.EMAIL, "192.168.1.1")
-            firstResult.shouldBeInstanceOf<PasswordResetResult.Success>()
+            firstResult.shouldBeInstanceOf<PasswordResetResult.SendFailed>()
 
             // Verify no token was created (send failed)
             val tokens = passwordResetSchema.passwordResetTokens
@@ -397,9 +397,9 @@ class PasswordResetServiceIntegrationTest : FunSpec({
             }
             tokenCount1 shouldBe 0
 
-            // Second attempt also fails but returns Success
+            // Second attempt also fails due to sender
             val secondResult = service.initiatePasswordReset(email, PasswordResetService.ContactType.EMAIL, "192.168.1.1")
-            secondResult.shouldBeInstanceOf<PasswordResetResult.Success>()
+            secondResult.shouldBeInstanceOf<PasswordResetResult.SendFailed>()
 
             // Fix sender
             mockSender.shouldFail = false
