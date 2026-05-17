@@ -1,18 +1,18 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.lockout
 
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.greater
+import com.mustafadakhel.kodex.jdbc.less
 import com.mustafadakhel.kodex.lockout.schema.LockoutSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
 
 internal interface AccountLockoutService {
@@ -25,6 +25,7 @@ internal interface AccountLockoutService {
     fun lockAccount(userId: UUID, lockedUntil: LocalDateTime, reason: String)
     fun unlockAccount(userId: UUID)
     fun isAccountLocked(userId: UUID, currentTime: LocalDateTime): Boolean
+    fun sweepOldAttempts(olderThan: LocalDateTime): Int
 }
 
 internal class DefaultAccountLockoutService(
@@ -45,10 +46,10 @@ internal class DefaultAccountLockoutService(
             val clockNow = CurrentKotlinInstant
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
-            val recentAttempts = failedAttempts.selectAll().where {
-                (failedAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
-                (failedAttempts.identifier eq identifier) and
-                (failedAttempts.attemptedAt greater windowStart)
+            val recentAttempts = select(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and
+                    (failedAttempts.identifier eq identifier) and
+                    (failedAttempts.attemptedAt greater windowStart)
             }.count()
 
             if (recentAttempts >= policy.maxFailedAttempts) {
@@ -69,10 +70,10 @@ internal class DefaultAccountLockoutService(
             val clockNow = CurrentKotlinInstant
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
-            val recentAttempts = failedAttempts.selectAll().where {
-                (failedAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
-                (failedAttempts.ipAddress eq ipAddress) and
-                (failedAttempts.attemptedAt greater windowStart)
+            val recentAttempts = select(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and
+                    (failedAttempts.ipAddress eq ipAddress) and
+                    (failedAttempts.attemptedAt greater windowStart)
             }.count()
 
             val ipThreshold = policy.maxFailedAttempts * 4
@@ -100,19 +101,19 @@ internal class DefaultAccountLockoutService(
             val nowLocal = clockNow.toLocalDateTime(TimeZone.UTC)
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
-            failedAttempts.deleteWhere {
-                (failedAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
-                (failedAttempts.identifier eq identifier) and
-                (failedAttempts.attemptedAt less windowStart)
-            }
+            deleteFrom(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and
+                    (failedAttempts.identifier eq identifier) and
+                    (failedAttempts.attemptedAt less windowStart)
+            }.execute()
 
-            failedAttempts.insert {
-                it[failedAttempts.realmId] = this@DefaultAccountLockoutService.realmId
-                it[failedAttempts.identifier] = identifier
-                it[failedAttempts.userId] = userId
-                it[failedAttempts.ipAddress] = ipAddress
-                it[failedAttempts.attemptedAt] = nowLocal
-                it[failedAttempts.reason] = reason
+            insertInto(failedAttempts) {
+                this[failedAttempts.realmId] = realmId
+                this[failedAttempts.identifier] = identifier
+                this[failedAttempts.userId] = userId
+                this[failedAttempts.ipAddress] = ipAddress
+                this[failedAttempts.attemptedAt] = nowLocal
+                this[failedAttempts.reason] = reason
             }
         }
     }
@@ -124,14 +125,14 @@ internal class DefaultAccountLockoutService(
             val clockNow = CurrentKotlinInstant
             val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
-            val accountAttempts = failedAttempts.selectAll().where {
-                (failedAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and
-                (failedAttempts.userId eq userId) and
-                (failedAttempts.attemptedAt greater windowStart)
+            val accountAttempts = select(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and
+                    (failedAttempts.userId eq userId) and
+                    (failedAttempts.attemptedAt greater windowStart)
             }.count()
 
             if (accountAttempts >= policy.maxFailedAttempts) {
-                val lockedUntil = (clockNow + policy.lockoutDuration).toLocalDateTime(timeZone)
+                val lockedUntil = (clockNow + policy.lockoutDuration).toLocalDateTime(TimeZone.UTC)
                 LockAccountResult.ShouldLock(
                     lockedUntil = lockedUntil,
                     attemptCount = accountAttempts.toInt()
@@ -144,17 +145,17 @@ internal class DefaultAccountLockoutService(
 
     override fun clearFailedAttemptsForIdentifier(identifier: String) {
         db.transaction {
-            failedAttempts.deleteWhere {
-                (failedAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and (failedAttempts.identifier eq identifier)
-            }
+            deleteFrom(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and (failedAttempts.identifier eq identifier)
+            }.execute()
         }
     }
 
     override fun clearFailedAttemptsForUser(userId: UUID) {
         db.transaction {
-            failedAttempts.deleteWhere {
-                (failedAttempts.realmId eq this@DefaultAccountLockoutService.realmId) and (failedAttempts.userId eq userId)
-            }
+            deleteFrom(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and (failedAttempts.userId eq userId)
+            }.execute()
         }
     }
 
@@ -163,37 +164,44 @@ internal class DefaultAccountLockoutService(
             val clockNow = CurrentKotlinInstant
             val nowLocal = clockNow.toLocalDateTime(TimeZone.UTC)
 
-            locks.deleteWhere {
-                (locks.realmId eq this@DefaultAccountLockoutService.realmId) and (locks.userId eq userId)
-            }
-            locks.insert {
-                it[locks.realmId] = this@DefaultAccountLockoutService.realmId
-                it[locks.userId] = userId
-                it[locks.lockedUntil] = lockedUntil
-                it[locks.reason] = reason
-                it[locks.lockedAt] = nowLocal
+            deleteFrom(locks).where {
+                (locks.realmId eq realmId) and (locks.userId eq userId)
+            }.execute()
+
+            insertInto(locks) {
+                this[locks.realmId] = realmId
+                this[locks.userId] = userId
+                this[locks.lockedUntil] = lockedUntil
+                this[locks.reason] = reason
+                this[locks.lockedAt] = nowLocal
             }
         }
     }
 
     override fun unlockAccount(userId: UUID) {
         db.transaction {
-            locks.deleteWhere {
-                (locks.realmId eq this@DefaultAccountLockoutService.realmId) and (locks.userId eq userId)
-            }
+            deleteFrom(locks).where {
+                (locks.realmId eq realmId) and (locks.userId eq userId)
+            }.execute()
         }
     }
 
     override fun isAccountLocked(userId: UUID, currentTime: LocalDateTime): Boolean {
         return db.transaction {
-            locks.selectAll().where {
-                (locks.realmId eq this@DefaultAccountLockoutService.realmId) and (locks.userId eq userId)
-            }
-                .singleOrNull()
-                ?.let { row ->
-                    val lockedUntil = row[locks.lockedUntil]
-                    lockedUntil == null || lockedUntil > currentTime
-                } ?: false
+            select(locks).where {
+                (locks.realmId eq realmId) and (locks.userId eq userId)
+            }.singleOrNull { row ->
+                val lockedUntil = row[locks.lockedUntil]
+                lockedUntil == null || lockedUntil > currentTime
+            } ?: false
+        }
+    }
+
+    override fun sweepOldAttempts(olderThan: LocalDateTime): Int {
+        return db.transaction {
+            deleteFrom(failedAttempts).where {
+                (failedAttempts.realmId eq realmId) and (failedAttempts.attemptedAt less olderThan)
+            }.execute()
         }
     }
 }

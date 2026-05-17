@@ -17,6 +17,12 @@ public data class ForeignKeyDef(
     public val onDelete: ReferenceAction,
 )
 
+public data class DeferredForeignKeyDef(
+    public val targetTableName: String,
+    public val targetColumnName: String,
+    public val onDelete: ReferenceAction,
+)
+
 public data class IndexDef(
     public val name: String,
     public val columns: List<Column<*>>,
@@ -27,7 +33,7 @@ public data class PrimaryKeyDef(public val columns: List<Column<*>>) {
     public constructor(vararg cols: Column<*>) : this(cols.toList())
 }
 
-public abstract class TableDef(public val tableName: String) {
+public abstract class TableDef(public val tableName: String, protected val tablePrefix: String = "") {
     init {
         require(tableName.isNotEmpty() && tableName.all { it.isLetterOrDigit() || it == '_' }) {
             "Table name must contain only letters, digits, or underscores. Got: \"$tableName\""
@@ -81,19 +87,19 @@ public abstract class TableDef(public val tableName: String) {
 
     @Suppress("UNCHECKED_CAST")
     public fun <T : Any> Column<T>.nullable(): Column<T?> {
-        val nullable = Column(name, NullableSqlType(sqlType), table, nullable = true, defaultExpression, autoGenerate, references)
+        val nullable = Column(name, NullableSqlType(sqlType), table, nullable = true, defaultExpression, autoGenerate, references, deferredReferences)
         replaceColumn(this, nullable)
         return nullable as Column<T?>
     }
 
     public fun <T> Column<T>.default(expression: String): Column<T> {
-        val withDefault = Column(name, sqlType, table, nullable, expression, autoGenerate, references)
+        val withDefault = Column(name, sqlType, table, nullable, expression, autoGenerate, references, deferredReferences)
         replaceColumn(this, withDefault)
         return withDefault
     }
 
     public fun <T> Column<T>.autoGenerate(): Column<T> {
-        val withAuto = Column(name, sqlType, table, nullable, defaultExpression, autoGenerate = true, references)
+        val withAuto = Column(name, sqlType, table, nullable, defaultExpression, autoGenerate = true, references, deferredReferences)
         replaceColumn(this, withAuto)
         return withAuto
     }
@@ -109,6 +115,17 @@ public abstract class TableDef(public val tableName: String) {
         onDelete: ReferenceAction = ReferenceAction.NO_ACTION,
     ): Column<T> {
         val withRef = Column(this.name, sqlType, table, nullable, defaultExpression, autoGenerate, ForeignKeyDef(otherColumn, onDelete))
+        replaceColumn(this, withRef)
+        return withRef
+    }
+
+    public fun <T> Column<T>.references(
+        coreTable: CoreTable,
+        onDelete: ReferenceAction = ReferenceAction.NO_ACTION,
+    ): Column<T> {
+        val targetTableName = "${tablePrefix}${coreTable.tableSuffix}"
+        val deferred = DeferredForeignKeyDef(targetTableName, coreTable.idColumnName, onDelete)
+        val withRef = Column(name, sqlType, table, nullable, defaultExpression, autoGenerate, references, deferred)
         replaceColumn(this, withRef)
         return withRef
     }
@@ -135,8 +152,16 @@ public abstract class TableDef(public val tableName: String) {
         }
         defs.add("PRIMARY KEY (${primaryKey.columns.joinToString(", ") { it.name }})")
         for (col in columns) {
-            val fk = col.references ?: continue
-            defs.add("FOREIGN KEY (${col.name}) REFERENCES ${fk.targetColumn.table.tableName}(${fk.targetColumn.name}) ON DELETE ${fk.onDelete.sql}")
+            val fk = col.references
+            val deferred = col.deferredReferences
+            when {
+                fk != null -> defs.add(
+                    "FOREIGN KEY (${col.name}) REFERENCES ${fk.targetColumn.table.tableName}(${fk.targetColumn.name}) ON DELETE ${fk.onDelete.sql}"
+                )
+                deferred != null -> defs.add(
+                    "FOREIGN KEY (${col.name}) REFERENCES ${deferred.targetTableName}(${deferred.targetColumnName}) ON DELETE ${deferred.onDelete.sql}"
+                )
+            }
         }
         append(defs.joinToString(", "))
         append(")")

@@ -16,4 +16,7 @@ internal interface TokenRepository {
     fun findTokenByHash(tokenHash: String): PersistedToken?
     fun revokeTokenFamily(tokenFamily: UUID)
     fun findTokensByFamily(tokenFamily: UUID): List<PersistedToken>
+
+    fun consumeAndDeleteToken(tokenId: UUID, userId: UUID): PersistedToken?
+    fun consumeAndRevokeToken(tokenId: UUID, userId: UUID, now: LocalDateTime): PersistedToken?
 }

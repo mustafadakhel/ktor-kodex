@@ -6,8 +6,8 @@ import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import java.util.*
 
 internal interface TokenManager {
-    suspend fun issueNewTokens(userId: UUID): TokenPair
-    suspend fun issueNewTokensWithFamily(userId: UUID): TokenPairWithFamily
+    suspend fun issueNewTokens(userId: UUID, additionalClaims: Map<String, Any> = emptyMap()): TokenPair
+    suspend fun issueNewTokensWithFamily(userId: UUID, additionalClaims: Map<String, Any> = emptyMap()): TokenPairWithFamily
     suspend fun refreshTokens(userId: UUID, refreshToken: String): TokenPair
     suspend fun refreshTokensWithFamily(userId: UUID, refreshToken: String): TokenPairWithFamily
     fun verifyToken(

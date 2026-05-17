@@ -3,12 +3,15 @@ package com.mustafadakhel.kodex.verification
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.tokens.token.HexFormat
 import com.mustafadakhel.kodex.tokens.token.NumericFormat
 import com.mustafadakhel.kodex.tokens.token.TokenFormat
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
 import com.mustafadakhel.kodex.validation.validate
+import com.mustafadakhel.kodex.verification.schema.VerificationSchema
 import io.ktor.utils.io.*
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -322,7 +325,9 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
         return null
     }
 
-    override fun build(context: ExtensionContext): VerificationExtension {
+    override fun schema(tablePrefix: String): ExtensionSchema = VerificationSchema(tablePrefix)
+
+    override fun build(context: ExtensionContext, db: KodexDatabase): VerificationExtension {
         // Validate configuration before building
         val validationResult = validate()
         if (!validationResult.isValid()) {
@@ -341,12 +346,31 @@ public class VerificationConfig : ExtensionConfig(), ValidatableConfig {
             )
         }
 
-        return VerificationExtension(
+        val realm = context.realm.name
+        val schema = db.schema<VerificationSchema>()
+
+        val verificationService = DefaultVerificationService(
+            db = db,
+            schema = schema,
             config = this,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.name,
+            realm = realm,
             rateLimiter = context.rateLimiter
+        )
+
+        val tokenCleanupService = DefaultTokenCleanupService(
+            db = db,
+            schema = schema,
+            timeZone = context.timeZone,
+            eventBus = context.eventBus,
+            realm = realm
+        )
+
+        return VerificationExtension(
+            config = this,
+            verificationService = verificationService,
+            tokenCleanupService = tokenCleanupService
         )
     }
 }

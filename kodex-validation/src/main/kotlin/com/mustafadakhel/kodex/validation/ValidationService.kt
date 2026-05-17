@@ -26,7 +26,12 @@ internal data class ValidationConfigImpl(
     val email: EmailValidationConfig,
     val phone: PhoneValidationConfig,
     val password: PasswordValidationConfig,
-    val customAttributes: CustomAttributeValidationConfig
+    val customAttributes: CustomAttributeValidationConfig,
+    val profile: ProfileValidationConfig = ProfileValidationConfig()
+)
+
+internal data class ProfileValidationConfig(
+    val maxProfilePictureLength: Int = 2048
 )
 
 internal data class EmailValidationConfig(
@@ -39,8 +44,8 @@ internal data class PhoneValidationConfig(
 )
 
 internal data class PasswordValidationConfig(
-    val minLength: Int = 8,
-    val minScore: Int = 2,
+    val minLength: Int = 12,
+    val minScore: Int = 3,
     val commonPasswords: Set<String> = CommonPasswords.default
 )
 

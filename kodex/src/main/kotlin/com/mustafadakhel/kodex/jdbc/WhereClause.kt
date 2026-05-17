@@ -1,7 +1,10 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.jdbc
 
 import java.sql.PreparedStatement
 
+@InternalKodexApi
 public class BoundParam(
     @PublishedApi internal val sqlType: SqlType<*>,
     @PublishedApi internal val value: Any?,
@@ -27,7 +30,15 @@ public infix fun <T> Column<T>.neq(value: T): WhereClause =
 public infix fun <T : Comparable<T>> Column<T>.less(value: T): WhereClause =
     WhereClause("${qualifiedName} < ?", listOf(BoundParam(sqlType, value)))
 
+@JvmName("lessNullable")
+public infix fun <T : Comparable<T>> Column<T?>.less(value: T): WhereClause =
+    WhereClause("${qualifiedName} < ?", listOf(BoundParam(sqlType, value)))
+
 public infix fun <T : Comparable<T>> Column<T>.greater(value: T): WhereClause =
+    WhereClause("${qualifiedName} > ?", listOf(BoundParam(sqlType, value)))
+
+@JvmName("greaterNullable")
+public infix fun <T : Comparable<T>> Column<T?>.greater(value: T): WhereClause =
     WhereClause("${qualifiedName} > ?", listOf(BoundParam(sqlType, value)))
 
 public infix fun <T> Column<T>.inList(values: List<T>): WhereClause =

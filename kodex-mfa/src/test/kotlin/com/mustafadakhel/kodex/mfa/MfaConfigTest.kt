@@ -28,13 +28,13 @@ class MfaConfigTest : FunSpec({
         config.maxVerifyAttempts shouldBe 5
         config.sessionExpiration shouldBe 5.minutes
         config.maxActiveSessions shouldBe 3
-        config.totpEnabled shouldBe true
-        config.totpIssuer shouldBe "KodexAuth"
-        config.totpAlgorithm shouldBe TotpAlgorithm.SHA1
-        config.totpDigits shouldBe 6
-        config.totpPeriod shouldBe 30.seconds
-        config.backupCodesCount shouldBe 10
-        config.backupCodeLength shouldBe 8
+        config.totp.enabled shouldBe true
+        config.totp.issuer shouldBe "KodexAuth"
+        config.totp.algorithm shouldBe TotpAlgorithm.SHA1
+        config.totp.digits shouldBe 6
+        config.totp.period shouldBe 30.seconds
+        config.backup.codeCount shouldBe 10
+        config.backup.codeLength shouldBe 8
     }
 
     test("should validate successfully with required configs") {
@@ -83,7 +83,7 @@ class MfaConfigTest : FunSpec({
 
     test("should fail validation with invalid totpDigits") {
         val config = MfaConfig().apply {
-            totpDigits = 5
+            totpMfa { digits = 5 }
             secretEncryption = AesGcmSecretEncryption(AesGcmSecretEncryption.generateKey())
             hashingService = mockHashingService
         }
@@ -118,12 +118,12 @@ class MfaConfigTest : FunSpec({
             timeStepWindow = 2
         }
 
-        config.totpEnabled shouldBe true
-        config.totpIssuer shouldBe "TestApp"
-        config.totpAlgorithm shouldBe TotpAlgorithm.SHA256
-        config.totpDigits shouldBe 8
-        config.totpPeriod shouldBe 60.seconds
-        config.totpTimeStepWindow shouldBe 2
+        config.totp.enabled shouldBe true
+        config.totp.issuer shouldBe "TestApp"
+        config.totp.algorithm shouldBe TotpAlgorithm.SHA256
+        config.totp.digits shouldBe 8
+        config.totp.period shouldBe 60.seconds
+        config.totp.timeStepWindow shouldBe 2
     }
 
     test("should support backup codes configuration") {
@@ -134,8 +134,8 @@ class MfaConfigTest : FunSpec({
             codeLength = 10
         }
 
-        config.backupCodesCount shouldBe 15
-        config.backupCodeLength shouldBe 10
+        config.backup.codeCount shouldBe 15
+        config.backup.codeLength shouldBe 10
     }
 
     test("should have empty requiredRolesForMfa by default") {

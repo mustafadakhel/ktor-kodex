@@ -8,6 +8,7 @@ public class Column<T>(
     public val defaultExpression: String? = null,
     public val autoGenerate: Boolean = false,
     public val references: ForeignKeyDef? = null,
+    public val deferredReferences: DeferredForeignKeyDef? = null,
 ) {
     init {
         require(name.isNotEmpty() && name.all { it.isLetterOrDigit() || it == '_' }) {

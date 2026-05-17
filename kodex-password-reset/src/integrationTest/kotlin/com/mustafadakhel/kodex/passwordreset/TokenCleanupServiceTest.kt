@@ -1,5 +1,9 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.passwordreset
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
@@ -10,10 +14,7 @@ import io.kotest.matchers.shouldBe
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -27,23 +28,21 @@ class TokenCleanupServiceTest : FunSpec({
     val timeZone = TimeZone.UTC
 
     beforeEach {
-        val database = Database.connect(
-            url = "jdbc:h2:mem:pr_cleanup_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:pr_cleanup_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        schema = PasswordResetSchema(core)
-        db = KodexDatabase(database, core, mapOf(PasswordResetSchema::class to schema))
+        schema = PasswordResetSchema(core.prefix)
+        db = KodexDatabase(
+            dataSource = ds,
+            dialect = DatabaseDialect.H2,
+            core = core,
+            extensionSchemas = mapOf(PasswordResetSchema::class to schema)
+        )
         db.createSchema()
         testSetup = TestDatabaseSetup(db)
 
         cleanupService = DefaultTokenCleanupService(db, schema, timeZone, null, "test-realm")
-    }
-
-    afterEach {
-        db.transaction {
-            SchemaUtils.drop(schema.passwordResetTokens, schema.passwordResetContacts)
-        }
     }
 
     context("Token Cleanup") {
@@ -55,26 +54,26 @@ class TokenCleanupServiceTest : FunSpec({
             val tokens = schema.passwordResetTokens
 
             db.transaction {
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.token] = TokenHasher.hash("old-used-token")
-                    it[tokens.contactValue] = "test@example.com"
-                    it[tokens.createdAt] = oldDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = oldDate
-                    it[tokens.ipAddress] = "192.168.1.1"
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.token, TokenHasher.hash("old-used-token"))
+                    set(tokens.contactValue, "test@example.com")
+                    set(tokens.createdAt, oldDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, oldDate)
+                    set(tokens.ipAddress, "192.168.1.1")
                 }
 
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.token] = TokenHasher.hash("recent-used-token")
-                    it[tokens.contactValue] = "test2@example.com"
-                    it[tokens.createdAt] = recentDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = recentDate
-                    it[tokens.ipAddress] = "192.168.1.2"
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.token, TokenHasher.hash("recent-used-token"))
+                    set(tokens.contactValue, "test2@example.com")
+                    set(tokens.createdAt, recentDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, recentDate)
+                    set(tokens.ipAddress, "192.168.1.2")
                 }
             }
 
@@ -83,7 +82,7 @@ class TokenCleanupServiceTest : FunSpec({
             deletedCount shouldBe 1
 
             db.transaction {
-                val remainingTokens = tokens.selectAll().map { it[tokens.token] }
+                val remainingTokens = select(tokens).map { it[tokens.token] }
                 remainingTokens shouldBe listOf(TokenHasher.hash("recent-used-token"))
             }
         }
@@ -95,15 +94,15 @@ class TokenCleanupServiceTest : FunSpec({
             val tokens = schema.passwordResetTokens
 
             db.transaction {
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.token] = TokenHasher.hash("active-token")
-                    it[tokens.contactValue] = "test@example.com"
-                    it[tokens.createdAt] = recentDate
-                    it[tokens.expiresAt] = now.plus(23.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = null
-                    it[tokens.ipAddress] = null
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.token, TokenHasher.hash("active-token"))
+                    set(tokens.contactValue, "test@example.com")
+                    set(tokens.createdAt, recentDate)
+                    set(tokens.expiresAt, now.plus(23.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, null)
+                    set(tokens.ipAddress, null)
                 }
             }
 
@@ -125,28 +124,28 @@ class TokenCleanupServiceTest : FunSpec({
 
             db.transaction {
                 repeat(2500) { index ->
-                    tokens.insert {
-                        it[tokens.realmId] = "test-realm"
-                        it[tokens.userId] = userId
-                        it[tokens.token] = TokenHasher.hash("expired-token-$index")
-                        it[tokens.contactValue] = "test$index@example.com"
-                        it[tokens.createdAt] = oldDate
-                        it[tokens.expiresAt] = now.minus(2.days).toLocalDateTime(timeZone)
-                        it[tokens.usedAt] = null
-                        it[tokens.ipAddress] = null
+                    insertInto(tokens) {
+                        set(tokens.realmId, "test-realm")
+                        set(tokens.userId, userId)
+                        set(tokens.token, TokenHasher.hash("expired-token-$index"))
+                        set(tokens.contactValue, "test$index@example.com")
+                        set(tokens.createdAt, oldDate)
+                        set(tokens.expiresAt, now.minus(2.days).toLocalDateTime(timeZone))
+                        set(tokens.usedAt, null)
+                        set(tokens.ipAddress, null)
                     }
                 }
             }
 
             db.transaction {
-                tokens.selectAll().count() shouldBe 2500
+                select(tokens).count() shouldBe 2500
             }
 
             val deletedCount = cleanupService.purgeExpiredTokens(retentionPeriod = 30.days)
             deletedCount shouldBe 2500
 
             db.transaction {
-                tokens.selectAll().count() shouldBe 0
+                select(tokens).count() shouldBe 0
             }
         }
     }

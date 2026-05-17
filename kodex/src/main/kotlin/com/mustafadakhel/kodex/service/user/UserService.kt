@@ -34,7 +34,7 @@ public interface UserService {
         roleNames: List<String> = emptyList(),
         customAttributes: Map<String, String>? = null,
         profile: UserProfile? = null
-    ): User?
+    ): User
 
     public suspend fun updateUser(command: UpdateCommand): UpdateResult
 

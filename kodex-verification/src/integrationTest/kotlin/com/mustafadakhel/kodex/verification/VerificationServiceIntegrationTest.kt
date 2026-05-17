@@ -1,17 +1,20 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.EventSubscriber
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.tokens.token.TokenHasher
 import com.mustafadakhel.kodex.verification.schema.VerificationSchema
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -28,9 +31,7 @@ import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.model.UserStatus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.selectAll
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 
@@ -88,29 +89,23 @@ class VerificationServiceIntegrationTest : FunSpec({
     val mockSender = MockVerificationSender()
 
     beforeTest {
-        val database = Database.connect(
-            "jdbc:h2:mem:test_verification_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:test_verification_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        verificationSchema = VerificationSchema(core)
-        db = KodexDatabase(database, core, mapOf(VerificationSchema::class to verificationSchema))
+        verificationSchema = VerificationSchema(core.prefix)
+        db = KodexDatabase(
+            dataSource = ds,
+            dialect = DatabaseDialect.H2,
+            core = core,
+            extensionSchemas = mapOf(VerificationSchema::class to verificationSchema)
+        )
         db.createSchema()
         testSetup = com.mustafadakhel.kodex.test.TestDatabaseSetup(db)
         userCounter = 0
         mockSender.reset()
         // Clear rate limiter state between tests
         testContext.rateLimiter.clearAll()
-    }
-
-    afterTest {
-        db.transaction {
-            SchemaUtils.drop(
-                verificationSchema.verificationTokens,
-                verificationSchema.verifiableContacts,
-                *db.core.tables().reversed().toTypedArray()
-            )
-        }
     }
 
     context("End-to-End Verification Flow") {
@@ -125,9 +120,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "user@example.com"
@@ -151,10 +145,9 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val tokens = verificationSchema.verificationTokens
             val tokenInDb = db.transaction {
-                tokens
-                    .selectAll()
+                select(tokens)
                     .where { tokens.userId eq userId }
-                    .singleOrNull()
+                    .singleOrNull { row -> row[tokens.token] }
             }
             tokenInDb.shouldNotBeNull()
 
@@ -169,13 +162,11 @@ class VerificationServiceIntegrationTest : FunSpec({
             verifiedContact.verifiedAt.shouldNotBeNull()
 
             val usedToken = db.transaction {
-                tokens
-                    .selectAll()
+                select(tokens)
                     .where { tokens.userId eq userId }
-                    .singleOrNull()
+                    .singleOrNull { row -> row[tokens.usedAt] }
             }
             usedToken.shouldNotBeNull()
-            usedToken[tokens.usedAt].shouldNotBeNull()
         }
 
         test("invalid token should fail verification") {
@@ -186,9 +177,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -213,9 +203,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -226,14 +215,14 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val tokens = verificationSchema.verificationTokens
             db.transaction {
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[contactType] = "email"
-                    it[token] = TokenHasher.hash(expiredToken)
-                    it[createdAt] = expiredTime
-                    it[expiresAt] = expiredTime  // Already expired
-                    it[usedAt] = null
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "email")
+                    set(tokens.token, TokenHasher.hash(expiredToken))
+                    set(tokens.createdAt, expiredTime)
+                    set(tokens.expiresAt, expiredTime)  // Already expired
+                    set(tokens.usedAt, null)
                 }
             }
 
@@ -253,9 +242,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -274,9 +262,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 strategy = VerificationConfig.VerificationStrategy.MANUAL
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             val email = "test@example.com"
@@ -295,9 +282,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -324,9 +310,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -336,7 +321,7 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val tokens = verificationSchema.verificationTokens
             val pendingTokenCount = db.transaction {
-                tokens.selectAll()
+                select(tokens)
                     .where { (tokens.userId eq userId) and (tokens.realmId eq "test-realm") }
                     .count()
             }
@@ -345,7 +330,7 @@ class VerificationServiceIntegrationTest : FunSpec({
             verificationService.setEmail(userId, "new@example.com")
 
             val remainingTokenCount = db.transaction {
-                tokens.selectAll()
+                select(tokens)
                     .where { (tokens.userId eq userId) and (tokens.realmId eq "test-realm") }
                     .count()
             }
@@ -361,9 +346,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -373,13 +357,13 @@ class VerificationServiceIntegrationTest : FunSpec({
 
             val tokens = verificationSchema.verificationTokens
             db.transaction {
-                tokens.selectAll().where { tokens.userId eq userId }.count()
+                select(tokens).where { tokens.userId eq userId }.count()
             } shouldBe 1
 
             verificationService.removeContact(userId, ContactType.Email)
             verificationService.getContact(userId, ContactType.Email).shouldBeNull()
             db.transaction {
-                tokens.selectAll().where { tokens.userId eq userId }.count()
+                select(tokens).where { tokens.userId eq userId }.count()
             } shouldBe 0
         }
 
@@ -388,9 +372,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 strategy = VerificationConfig.VerificationStrategy.MANUAL
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -426,9 +409,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -458,9 +440,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -500,9 +481,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -526,9 +506,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -551,9 +530,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -592,9 +570,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -622,9 +599,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -648,9 +624,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -670,9 +645,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 strategy = VerificationConfig.VerificationStrategy.MANUAL
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
 
@@ -697,9 +671,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "unverified@example.com")
@@ -736,9 +709,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "verified@example.com")
@@ -778,9 +750,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "unverified@example.com")
@@ -813,9 +784,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -848,9 +818,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")
@@ -875,9 +844,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userA = testSetup.createTestUser(email = "userA_${++userCounter}@test.com", realmId = "test-realm")
             val userB = testSetup.createTestUser(email = "userB_${++userCounter}@test.com", realmId = "test-realm")
@@ -913,9 +881,8 @@ class VerificationServiceIntegrationTest : FunSpec({
                 email { sender = mockSender }
             }
 
-            val extension = config.build(testContext) as VerificationExtension
-            extension.initialize(db)
-            val verificationService = extension.verificationService
+            val extension = config.build(testContext, db) as VerificationExtension
+            val verificationService = extension.getService(VerificationService::class)!!
 
             val userId = testSetup.createTestUser(email = "testuser${++userCounter}@test.com", realmId = "test-realm")
             verificationService.setEmail(userId, "user@example.com")

@@ -1,6 +1,9 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.jdbc.and
 import com.mustafadakhel.kodex.jdbc.eq
@@ -67,11 +70,14 @@ class DefaultTokenManagerTest : FunSpec({
             timeZone = TimeZone.UTC,
             tokenPersistence = mapOf(TokenType.AccessToken to true, TokenType.RefreshToken to true),
             tokenRepository = tokenRepository, hashingService = saltedHashingService(),
-            userRepository = userRepository, realm = realm
+            realm = realm
         )
+
+        val signatureVerifier = JwtSignatureVerifier(secretsConfig)
 
         return DefaultTokenManager(
             jwtTokenIssuer = jwtTokenIssuer, jwtTokenVerifier = jwtTokenVerifier,
+            signatureVerifier = signatureVerifier,
             tokenValidity = TokenValidity(access = 15.minutes, refresh = 7.hours),
             tokenRepository = tokenRepository, userRepository = userRepository,
             tokenPersistence = mapOf(TokenType.AccessToken to true, TokenType.RefreshToken to true),

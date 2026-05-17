@@ -78,6 +78,20 @@ public open class KodexThrowable(
             clientMessage = "Session has been invalidated for security reasons"
         )
 
+        public data object AccountSuspended : Authorization(
+            "Account is suspended",
+            clientMessage = "Account is suspended"
+        ) {
+            private fun readResolve(): Any = AccountSuspended
+        }
+
+        public data object AccountPending : Authorization(
+            "Account is pending activation",
+            clientMessage = "Account is pending activation"
+        ) {
+            private fun readResolve(): Any = AccountPending
+        }
+
         public data class InsufficientPermissions(
             val requiredRole: String,
             val userId: UUID

@@ -367,4 +367,39 @@ internal class HookExecutor(
             )
         }
     }
+
+    suspend fun executeAfterLogout(userId: UUID, tokenFamily: UUID?, metadata: LogoutMetadata) {
+        val failures = mutableListOf<HookFailure>()
+
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        hook.afterLogout(userId, tokenFamily, metadata)
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            hook.afterLogout(userId, tokenFamily, metadata)
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            hook.afterLogout(userId, tokenFamily, metadata)
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in afterLogout", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during afterLogout execution",
+                failures
+            )
+        }
+    }
 }

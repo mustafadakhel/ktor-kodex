@@ -22,7 +22,7 @@ import java.util.*
  * Concurrency tests for ExposedTokenRepository to verify atomic operations
  * and race condition handling.
  */
-class ExposedTokenRepositoryConcurrencyTest : FunSpec({
+class JdbcTokenRepositoryConcurrencyTest : FunSpec({
 
     lateinit var tokenRepository: TokenRepository
     lateinit var db: KodexDatabase

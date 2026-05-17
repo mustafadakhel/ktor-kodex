@@ -34,7 +34,6 @@ public sealed interface UserEvent : KodexEvent {
         override val userId: UUID,
         val actorId: UUID,
         val changes: Map<String, String>,
-        val fieldChanges: List<FieldChange> = emptyList(),
         override val requestId: UUID? = null,
         override val correlationId: UUID? = requestId,
         override val tags: Map<String, String> = emptyMap()
@@ -49,7 +48,6 @@ public sealed interface UserEvent : KodexEvent {
         override val userId: UUID,
         val actorId: UUID,
         val changes: Map<String, String>,
-        val fieldChanges: List<FieldChange> = emptyList(),
         override val requestId: UUID? = null,
         override val correlationId: UUID? = requestId,
         override val tags: Map<String, String> = emptyMap()

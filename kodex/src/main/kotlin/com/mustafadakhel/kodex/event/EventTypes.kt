@@ -17,19 +17,6 @@ public enum class FailureReason {
     UNKNOWN
 }
 
-public enum class ChangeType {
-    ADDED,
-    MODIFIED,
-    REMOVED
-}
-
-public data class FieldChange(
-    val fieldName: String,
-    val oldValue: Any?,
-    val newValue: Any?,
-    val changeType: ChangeType
-)
-
 public data class RequestContext(
     val requestId: UUID?,
     val sessionId: UUID?,

@@ -1,108 +1,106 @@
 package com.mustafadakhel.kodex.mfa.schema
 
-import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.Column
+import com.mustafadakhel.kodex.jdbc.CoreTable
+import com.mustafadakhel.kodex.jdbc.PrimaryKeyDef
+import com.mustafadakhel.kodex.jdbc.ReferenceAction
+import com.mustafadakhel.kodex.jdbc.TableDef
 import com.mustafadakhel.kodex.mfa.MfaMethodType
-import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.kotlin.datetime.CurrentDateTime
-import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 import java.util.UUID
 
-public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
+public class MfaSchema(private val prefix: String) : ExtensionSchema {
 
-    public val mfaMethods: MfaMethodsTable = MfaMethodsTable(core)
-    public val mfaChallenges: MfaChallengesTable = MfaChallengesTable(core)
-    public val mfaBackupCodes: MfaBackupCodesTable = MfaBackupCodesTable(core)
-    public val mfaTotpUsedCodes: MfaTotpUsedCodesTable = MfaTotpUsedCodesTable(core)
-    public val mfaTrustedDevices: MfaTrustedDevicesTable = MfaTrustedDevicesTable(core)
+    public val mfaMethods: MfaMethodsTable = MfaMethodsTable(prefix)
+    public val mfaChallenges: MfaChallengesTable = MfaChallengesTable(prefix)
+    public val mfaBackupCodes: MfaBackupCodesTable = MfaBackupCodesTable(prefix)
+    public val mfaTotpUsedCodes: MfaTotpUsedCodesTable = MfaTotpUsedCodesTable(prefix)
+    public val mfaTrustedDevices: MfaTrustedDevicesTable = MfaTrustedDevicesTable(prefix)
 
-    public class MfaMethodsTable(core: CoreSchema) : Table("${core.prefix}mfa_methods") {
+    public class MfaMethodsTable(prefix: String) : TableDef("${prefix}mfa_methods", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<UUID> = uuid("user_id").index()
-        public val methodType: Column<MfaMethodType> = enumeration("method_type", MfaMethodType::class)
+        public val userId: Column<UUID> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).index()
+        public val methodType: Column<MfaMethodType> = enumByName<MfaMethodType>("method_type", 10)
         public val identifier: Column<String?> = varchar("identifier", 255).nullable()
         public val encryptedSecret: Column<String?> = text("encrypted_secret").nullable()
         public val encryptionNonce: Column<String?> = varchar("encryption_nonce", 32).nullable()
-        public val isActive: Column<Boolean> = bool("is_active").default(true)
-        public val isPrimary: Column<Boolean> = bool("is_primary").default(false)
-        public val enrolledAt: Column<LocalDateTime> = datetime("enrolled_at").defaultExpression(CurrentDateTime)
+        public val isActive: Column<Boolean> = bool("is_active").default("TRUE")
+        public val isPrimary: Column<Boolean> = bool("is_primary").default("FALSE")
+        public val enrolledAt: Column<LocalDateTime> = datetime("enrolled_at").default("CURRENT_TIMESTAMP")
         public val lastUsedAt: Column<LocalDateTime?> = datetime("last_used_at").nullable()
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
             uniqueIndex(realmId, userId, methodType, identifier)
-            index(false, realmId, userId, isActive)
-            index(false, realmId, userId, isPrimary)
-            index(false, realmId)
+            index(realmId, userId, isActive)
+            index(realmId, userId, isPrimary)
+            index(realmId)
         }
     }
 
-    public class MfaChallengesTable(core: CoreSchema) : Table("${core.prefix}mfa_challenges") {
+    public class MfaChallengesTable(prefix: String) : TableDef("${prefix}mfa_challenges", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<UUID> = uuid("user_id").index()
+        public val userId: Column<UUID> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).index()
         public val methodId: Column<UUID> = uuid("method_id")
         public val codeHash: Column<String> = varchar("code_hash", 255)
         public val expiresAt: Column<LocalDateTime> = datetime("expires_at")
-        public val createdAt: Column<LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
-        public val attempts: Column<Int> = integer("attempts").default(0)
-        public val maxAttempts: Column<Int> = integer("max_attempts").default(5)
+        public val createdAt: Column<LocalDateTime> = datetime("created_at").default("CURRENT_TIMESTAMP")
+        public val attempts: Column<Int> = integer("attempts").default("0")
+        public val maxAttempts: Column<Int> = integer("max_attempts").default("5")
         public val verifiedAt: Column<LocalDateTime?> = datetime("verified_at").nullable()
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
-            index(false, realmId)
-            index(false, methodId)
-            index(false, realmId, expiresAt)
-            index(false, verifiedAt)
+            index(realmId)
+            index(methodId)
+            index(realmId, expiresAt)
+            index(verifiedAt)
         }
     }
 
-    public class MfaBackupCodesTable(core: CoreSchema) : Table("${core.prefix}mfa_backup_codes") {
+    public class MfaBackupCodesTable(prefix: String) : TableDef("${prefix}mfa_backup_codes", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<UUID> = uuid("user_id").index()
+        public val userId: Column<UUID> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).index()
         public val codeHash: Column<String> = varchar("code_hash", 255)
         public val usedAt: Column<LocalDateTime?> = datetime("used_at").nullable()
-        public val createdAt: Column<LocalDateTime> = datetime("created_at").defaultExpression(CurrentDateTime)
+        public val createdAt: Column<LocalDateTime> = datetime("created_at").default("CURRENT_TIMESTAMP")
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
-            index(false, realmId)
-            index(false, realmId, userId, usedAt)
+            index(realmId)
+            index(realmId, userId, usedAt)
         }
     }
 
-    public class MfaTotpUsedCodesTable(core: CoreSchema) : Table("${core.prefix}mfa_totp_used_codes") {
+    public class MfaTotpUsedCodesTable(prefix: String) : TableDef("${prefix}mfa_totp_used_codes", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<UUID> = uuid("user_id").index()
+        public val userId: Column<UUID> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).index()
         public val methodId: Column<UUID> = uuid("method_id")
         public val codeHash: Column<String> = varchar("code_hash", 255)
-        public val usedAt: Column<LocalDateTime> = datetime("used_at").defaultExpression(CurrentDateTime)
+        public val usedAt: Column<LocalDateTime> = datetime("used_at").default("CURRENT_TIMESTAMP")
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
-            index(false, realmId)
-            index(false, userId, methodId)
-            index(false, realmId, usedAt)
+            index(realmId)
+            index(userId, methodId)
+            index(realmId, usedAt)
             uniqueIndex(realmId, userId, methodId, codeHash)
         }
     }
 
-    public class MfaTrustedDevicesTable(core: CoreSchema) : Table("${core.prefix}mfa_trusted_devices") {
+    public class MfaTrustedDevicesTable(prefix: String) : TableDef("${prefix}mfa_trusted_devices", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<UUID> = uuid("user_id").index()
+        public val userId: Column<UUID> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).index()
         public val deviceFingerprint: Column<String> = varchar("device_fingerprint", 256)
         public val deviceName: Column<String?> = varchar("device_name", 128).nullable()
         public val ipAddress: Column<String?> = varchar("ip_address", 45).nullable()
@@ -111,29 +109,21 @@ public class MfaSchema(private val core: CoreSchema) : ExtensionSchema {
         public val lastUsedAt: Column<LocalDateTime?> = datetime("last_used_at").nullable()
         public val expiresAt: Column<LocalDateTime?> = datetime("expires_at").nullable()
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
             uniqueIndex(realmId, userId, deviceFingerprint)
-            index(false, realmId)
-            index(false, deviceFingerprint)
-            index(false, realmId, expiresAt)
+            index(realmId)
+            index(deviceFingerprint)
+            index(realmId, expiresAt)
         }
     }
 
-    private val allTables: List<Table> = listOf(
+    override fun tables(): List<TableDef> = listOf(
         mfaMethods,
         mfaChallenges,
         mfaBackupCodes,
         mfaTotpUsedCodes,
         mfaTrustedDevices,
     )
-
-    internal fun exposedTables(): List<Table> = allTables
-
-    override fun ddl(dialect: DatabaseDialect): List<String> =
-        SchemaUtils.createStatements(*allTables.toTypedArray())
-
-    override fun tableNames(): List<String> =
-        allTables.map { it.tableName }
 }

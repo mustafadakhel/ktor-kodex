@@ -1,3 +1,5 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.jdbc
 
 import io.kotest.matchers.nulls.shouldBeNull
@@ -197,6 +199,45 @@ class ConnectionScopeTest {
                 val name = select(users).where { users.email eq "alice@test.com" }
                     .firstOrNull { row -> row[users.name] }
                 name shouldBe "Alice Updated"
+            }
+        }
+    }
+
+    @Nested
+    inner class InsertOrIgnoreTests {
+
+        @Test
+        fun `insertOrIgnore returns 1 on new row`() {
+            withScope {
+                val result = insertOrIgnore(users, listOf(users.email)) {
+                    this[users.id] = UUID.randomUUID()
+                    this[users.name] = "Alice"
+                    this[users.email] = "alice@test.com"
+                }
+                result shouldBe 1
+                select(users).count() shouldBe 1
+            }
+        }
+
+        @Test
+        fun `insertOrIgnore returns 0 on conflict and preserves existing row`() {
+            val originalId = UUID.randomUUID()
+            withScope {
+                insertInto(users) {
+                    this[users.id] = originalId
+                    this[users.name] = "Alice"
+                    this[users.email] = "alice@test.com"
+                }
+                val result = insertOrIgnore(users, listOf(users.email)) {
+                    this[users.id] = UUID.randomUUID()
+                    this[users.name] = "Alice Duplicate"
+                    this[users.email] = "alice@test.com"
+                }
+                result shouldBe 0
+                select(users).count() shouldBe 1
+                val name = select(users).where { users.email eq "alice@test.com" }
+                    .firstOrNull { row -> row[users.name] }
+                name shouldBe "Alice"
             }
         }
     }

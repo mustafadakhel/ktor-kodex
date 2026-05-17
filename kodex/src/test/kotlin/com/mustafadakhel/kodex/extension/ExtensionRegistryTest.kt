@@ -1,15 +1,17 @@
 package com.mustafadakhel.kodex.extension
 
-import com.mustafadakhel.kodex.jdbc.DatabaseDialect
-import com.mustafadakhel.kodex.schema.CoreSchema
-import com.mustafadakhel.kodex.schema.ExtensionSchema
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.mockk.mockk
+import kotlinx.datetime.TimeZone
 
 // Test extension interfaces
 private interface TestExtension : RealmExtension
@@ -18,23 +20,6 @@ private interface AnotherExtension : RealmExtension
 // Concrete test extensions
 private class TestExtensionImpl(override val priority: Int = 100) : TestExtension
 private class AnotherExtensionImpl : AnotherExtension
-
-// Stub ExtensionSchema for tests
-private class StubExtensionSchema(private val names: List<String>) : ExtensionSchema {
-    override fun ddl(dialect: DatabaseDialect): List<String> = emptyList()
-    override fun tableNames(): List<String> = names
-}
-
-// Persistent extension for table testing
-private class PersistentTestExtension : PersistentExtension {
-    companion object {
-        const val TEST_TABLE = "test_table"
-        const val ANOTHER_TEST_TABLE = "another_test_table"
-    }
-
-    override fun createSchema(core: CoreSchema): ExtensionSchema =
-        StubExtensionSchema(listOf(TEST_TABLE, ANOTHER_TEST_TABLE))
-}
 
 // Test service for ServiceProvider testing
 private interface TestService {
@@ -77,11 +62,6 @@ class ExtensionRegistryTest : DescribeSpec({
                 registry.getAllOfType(EventSubscriberProvider::class).shouldBeEmpty()
             }
 
-            it("should return empty table names list") {
-                val registry = ExtensionRegistry.empty()
-                val core = CoreSchema("test_")
-                registry.collectSchemas(core).values.flatMap { it.tableNames() }.shouldBeEmpty()
-            }
         }
 
         describe("from") {
@@ -250,63 +230,6 @@ class ExtensionRegistryTest : DescribeSpec({
             }
         }
 
-        describe("collectSchemas") {
-            val core = CoreSchema("test_")
-
-            it("should collect table names from persistent extensions") {
-                val persistentExt = PersistentTestExtension()
-                val registry = ExtensionRegistry.from(
-                    mapOf(PersistentExtension::class to persistentExt)
-                )
-
-                val names = registry.collectSchemas(core).values.flatMap { it.tableNames() }
-                names.size shouldBe 2
-                names shouldContainExactly listOf(
-                    PersistentTestExtension.TEST_TABLE,
-                    PersistentTestExtension.ANOTHER_TEST_TABLE,
-                )
-            }
-
-            it("should return empty list when no persistent extensions") {
-                val registry = ExtensionRegistry.from(
-                    mapOf(TestExtension::class to TestExtensionImpl())
-                )
-
-                registry.collectSchemas(core).values.flatMap { it.tableNames() }.shouldBeEmpty()
-            }
-
-            it("should return empty list for empty registry") {
-                val registry = ExtensionRegistry.empty()
-                registry.collectSchemas(core).values.flatMap { it.tableNames() }.shouldBeEmpty()
-            }
-
-            it("should flatten table names from multiple persistent extensions") {
-                val ext1 = object : PersistentExtension {
-                    override fun createSchema(core: CoreSchema): ExtensionSchema =
-                        object : ExtensionSchema {
-                            override fun ddl(dialect: DatabaseDialect) = emptyList<String>()
-                            override fun tableNames() = listOf("table1")
-                        }
-                }
-
-                val ext2 = object : PersistentExtension {
-                    override fun createSchema(core: CoreSchema): ExtensionSchema =
-                        object : ExtensionSchema {
-                            override fun ddl(dialect: DatabaseDialect) = emptyList<String>()
-                            override fun tableNames() = listOf("table2")
-                        }
-                }
-
-                val registry = ExtensionRegistry.fromLists(
-                    mapOf(PersistentExtension::class to listOf(ext1, ext2))
-                )
-
-                val names = registry.collectSchemas(core).values.flatMap { it.tableNames() }
-                names.size shouldBe 2
-                names shouldContainExactly listOf("table1", "table2")
-            }
-        }
-
         describe("priority") {
             it("should use default priority 100") {
                 val extension = object : RealmExtension {}
@@ -379,7 +302,7 @@ class ExtensionRegistryTest : DescribeSpec({
         class TestExtensionConfig : ExtensionConfig() {
             var value: String = "default"
 
-            override fun build(context: ExtensionContext): RealmExtension {
+            override fun build(context: ExtensionContext, db: KodexDatabase): RealmExtension {
                 return object : RealmExtension {
                     val configValue = value
                 }
@@ -390,15 +313,16 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "custom"
 
-            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
+            val mockEventBus = mockk<EventBus>()
+            val mockDb = mockk<KodexDatabase>()
             val context = extensionContext(
-                realm = com.mustafadakhel.kodex.model.Realm("test"),
-                timeZone = kotlinx.datetime.TimeZone.UTC,
+                realm = Realm("test"),
+                timeZone = TimeZone.UTC,
                 eventBus = mockEventBus,
-                rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
+                rateLimiter = NoOpRateLimiter()
             )
 
-            val extension = config.build(context)
+            val extension = config.build(context, mockDb)
             extension.shouldNotBeNull()
         }
 
@@ -406,21 +330,22 @@ class ExtensionRegistryTest : DescribeSpec({
             val config = TestExtensionConfig()
             config.value = "configured"
 
-            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
+            val mockEventBus = mockk<EventBus>()
+            val mockDb = mockk<KodexDatabase>()
             val context = extensionContext(
-                realm = com.mustafadakhel.kodex.model.Realm("test"),
-                timeZone = kotlinx.datetime.TimeZone.UTC,
+                realm = Realm("test"),
+                timeZone = TimeZone.UTC,
                 eventBus = mockEventBus,
-                rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
+                rateLimiter = NoOpRateLimiter()
             )
 
-            val extension = config.build(context) as? RealmExtension
+            val extension = config.build(context, mockDb) as? RealmExtension
             extension.shouldNotBeNull()
         }
 
         it("should use context in build") {
             class ContextAwareConfig : ExtensionConfig() {
-                override fun build(context: ExtensionContext): RealmExtension {
+                override fun build(context: ExtensionContext, db: KodexDatabase): RealmExtension {
                     return object : RealmExtension {
                         val realmOwner = context.realm.name
                         val timeZone = context.timeZone
@@ -429,15 +354,16 @@ class ExtensionRegistryTest : DescribeSpec({
             }
 
             val config = ContextAwareConfig()
-            val mockEventBus = mockk<com.mustafadakhel.kodex.event.EventBus>()
+            val mockEventBus = mockk<EventBus>()
+            val mockDb = mockk<KodexDatabase>()
             val context = extensionContext(
-                realm = com.mustafadakhel.kodex.model.Realm("my-realm"),
-                timeZone = kotlinx.datetime.TimeZone.of("America/New_York"),
+                realm = Realm("my-realm"),
+                timeZone = TimeZone.of("America/New_York"),
                 eventBus = mockEventBus,
-                rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
+                rateLimiter = NoOpRateLimiter()
             )
 
-            val extension = config.build(context)
+            val extension = config.build(context, mockDb)
             extension.shouldNotBeNull()
         }
     }

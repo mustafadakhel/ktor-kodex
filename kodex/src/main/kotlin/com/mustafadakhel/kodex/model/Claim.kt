@@ -99,6 +99,36 @@ public sealed interface Claim<T> {
         }
     }
 
+    public data class NotBefore(
+        override val value: Long?
+    ) : NumberClaim {
+        override val key: String = Key
+
+        public companion object {
+            public const val Key: String = "nbf"
+        }
+    }
+
+    public data class IssuedAt(
+        override val value: Long?
+    ) : NumberClaim {
+        override val key: String = Key
+
+        public companion object {
+            public const val Key: String = "iat"
+        }
+    }
+
+    public data class AuthenticationMethods(
+        override val value: List<String?>
+    ) : ListClaim<String> {
+        override val key: String = Key
+
+        public companion object {
+            public const val Key: String = "amr"
+        }
+    }
+
     public sealed interface TokenType : StringClaim {
         override val key: String get() = Key
 
@@ -132,6 +162,10 @@ public sealed interface Claim<T> {
                 Custom.Key -> Custom(value?.asMap() ?: emptyMap())
                 JwtId.Key -> JwtId(value?.asString())
                 Subject.Key -> Subject(value?.asString())
+                AuthenticationMethods.Key -> AuthenticationMethods(value?.asList(String::class.java) ?: emptyList())
+                NotBefore.Key -> NotBefore(value?.asLong())
+                IssuedAt.Key -> IssuedAt(value?.asLong())
+                ExpiresAt.Key -> ExpiresAt(value?.asLong())
                 TokenType.Key -> when (value?.asString()) {
                     TokenType.AccessToken.value -> TokenType.AccessToken
                     TokenType.RefreshToken.value -> TokenType.RefreshToken

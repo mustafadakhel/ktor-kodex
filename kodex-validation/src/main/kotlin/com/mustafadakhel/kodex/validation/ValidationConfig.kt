@@ -2,6 +2,7 @@ package com.mustafadakhel.kodex.validation
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.ktor.utils.io.*
 
 /**
@@ -40,6 +41,7 @@ public class ValidationConfig : ExtensionConfig() {
     private val phoneConfig = PhoneConfigScope()
     private val passwordConfig = PasswordConfigScope()
     private val customAttributesConfig = CustomAttributesConfigScope()
+    private val profileConfig = ProfileConfigScope()
 
     public fun email(block: EmailConfigScope.() -> Unit) {
         emailConfig.apply(block)
@@ -57,15 +59,20 @@ public class ValidationConfig : ExtensionConfig() {
         customAttributesConfig.apply(block)
     }
 
-    override fun build(context: ExtensionContext): ValidationExtension {
+    public fun profile(block: ProfileConfigScope.() -> Unit) {
+        profileConfig.apply(block)
+    }
+
+    override fun build(context: ExtensionContext, db: KodexDatabase): ValidationExtension {
         val configImpl = ValidationConfigImpl(
             email = emailConfig.build(),
             phone = phoneConfig.build(),
             password = passwordConfig.build(),
-            customAttributes = customAttributesConfig.build()
+            customAttributes = customAttributesConfig.build(),
+            profile = profileConfig.build()
         )
         val service = validationService(configImpl)
-        return ValidationExtension(service)
+        return ValidationExtension(service, configImpl.profile)
     }
 }
 
@@ -200,5 +207,16 @@ public class AttributeRuleScope internal constructor(
         minLength = minLength,
         allowedValues = allowedValues,
         customValidator = customValidator
+    )
+}
+
+@KtorDsl
+public class ProfileConfigScope internal constructor() {
+
+    /** Maximum length for profilePicture URL (default: 2048) */
+    public var maxProfilePictureLength: Int = 2048
+
+    internal fun build(): ProfileValidationConfig = ProfileValidationConfig(
+        maxProfilePictureLength = maxProfilePictureLength
     )
 }

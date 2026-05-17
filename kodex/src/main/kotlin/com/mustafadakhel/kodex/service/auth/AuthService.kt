@@ -22,4 +22,13 @@ public interface AuthService {
 
     /** Resets user password without verifying old password (admin operation). */
     public suspend fun resetPassword(userId: UUID, newPassword: String)
+
+    /** Logs out the user by revoking their tokens and triggering session cleanup. */
+    public suspend fun logout(
+        userId: UUID,
+        tokenFamily: UUID? = null,
+        ipAddress: String = "",
+        userAgent: String? = null,
+        reason: String = "user_initiated"
+    )
 }

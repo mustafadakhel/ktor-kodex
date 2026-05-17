@@ -59,4 +59,47 @@ class JwtTokenIssuerTest : FunSpec({
         decoded.getClaim("realm").asString() shouldBe realm.name
         decoded.keyId shouldMatch "[0-9a-f]{16}"
     }
+
+    test("additionalClaims cannot overwrite reserved claim keys") {
+        val realm = Realm("test-realm")
+        val userId = UUID.randomUUID()
+        val roles = listOf(RoleEntity("user", null))
+        val testSecret = "test-secret-that-is-at-least-32-characters-long"
+
+        val userRepository = mockk<UserRepository>()
+        every { userRepository.findRoles(userId) } returns roles
+
+        val secretsConfig = SecretsConfig()
+        with(RealmConfigScope(realm)) {
+            secretsConfig.apply { this@with.raw(testSecret) }
+        }
+
+        val claimsConfig = ClaimsConfig().apply {
+            issuer("issuer")
+            audience("audience")
+        }
+
+        val issuer = JwtTokenIssuer(
+            secretsConfig = secretsConfig,
+            claimsConfig = claimsConfig,
+            userRepository = userRepository,
+            realm = realm
+        )
+
+        val generated = issuer.issue(
+            userId, 10000L, Claim.TokenType.AccessToken,
+            additionalClaims = mapOf(
+                "roles" to listOf("SUPERADMIN"),
+                "realm" to "admin-realm",
+                "customField" to "allowed-value"
+            )
+        )
+        val decoded = JWT.require(Algorithm.HMAC512(testSecret)).build().verify(generated.token)
+
+        // Reserved keys should retain system values, not attacker-supplied ones
+        decoded.getClaim("roles").asList(String::class.java) shouldContainExactly listOf("user")
+        decoded.getClaim("realm").asString() shouldBe "test-realm"
+        // Non-reserved keys should pass through
+        decoded.getClaim("customField").asString() shouldBe "allowed-value"
+    }
 })

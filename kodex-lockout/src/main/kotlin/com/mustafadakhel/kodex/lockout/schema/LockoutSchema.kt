@@ -1,65 +1,49 @@
 package com.mustafadakhel.kodex.lockout.schema
 
-import com.mustafadakhel.kodex.jdbc.DatabaseDialect
-import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.jdbc.Column
+import com.mustafadakhel.kodex.jdbc.CoreTable
+import com.mustafadakhel.kodex.jdbc.PrimaryKeyDef
+import com.mustafadakhel.kodex.jdbc.ReferenceAction
+import com.mustafadakhel.kodex.jdbc.TableDef
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlinx.datetime.LocalDateTime
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.kotlin.datetime.CurrentDateTime
-import org.jetbrains.exposed.sql.kotlin.datetime.datetime
 import java.util.UUID
 
-public class LockoutSchema(private val core: CoreSchema) : ExtensionSchema {
+public class LockoutSchema(private val prefix: String) : ExtensionSchema {
 
-    public val failedLoginAttempts: FailedLoginAttemptsTable = FailedLoginAttemptsTable(core)
-    public val accountLocks: AccountLocksTable = AccountLocksTable(core)
+    public val failedLoginAttempts: FailedLoginAttemptsTable = FailedLoginAttemptsTable(prefix)
+    public val accountLocks: AccountLocksTable = AccountLocksTable(prefix)
 
-    public class FailedLoginAttemptsTable(core: CoreSchema) : Table("${core.prefix}failed_login_attempts") {
+    public class FailedLoginAttemptsTable(prefix: String) : TableDef("${prefix}failed_login_attempts", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
-        public val realmId: Column<String> = varchar("realm_id", 50)
-        public val identifier: Column<String> = varchar("identifier", 255)
-        public val userId: Column<UUID?> = uuid("user_id").nullable()
-        public val ipAddress: Column<String?> = varchar("ip_address", 45).nullable()
-        public val attemptedAt: Column<LocalDateTime> = datetime("attempted_at").defaultExpression(CurrentDateTime)
+        public val realmId: Column<String> = varchar("realm_id", 50).index()
+        public val identifier: Column<String> = varchar("identifier", 255).index()
+        public val userId: Column<UUID?> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).nullable().index()
+        public val ipAddress: Column<String?> = varchar("ip_address", 45).nullable().index()
+        public val attemptedAt: Column<LocalDateTime> = datetime("attempted_at").default("CURRENT_TIMESTAMP").index()
         public val reason: Column<String> = varchar("reason", 255)
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
-            index(false, realmId)
-            index(false, identifier)
-            index(false, userId)
-            index(false, ipAddress)
-            index(false, realmId, identifier, attemptedAt)
-            index(false, attemptedAt)
+            index(realmId, identifier, attemptedAt)
         }
     }
 
-    public class AccountLocksTable(core: CoreSchema) : Table("${core.prefix}account_locks") {
+    public class AccountLocksTable(prefix: String) : TableDef("${prefix}account_locks", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
-        public val realmId: Column<String> = varchar("realm_id", 50)
-        public val userId: Column<UUID> = uuid("user_id").index()
+        public val realmId: Column<String> = varchar("realm_id", 50).index()
+        public val userId: Column<UUID> = uuid("user_id").references(CoreTable.Users, ReferenceAction.CASCADE).index()
         public val lockedUntil: Column<LocalDateTime?> = datetime("locked_until").nullable()
         public val reason: Column<String> = varchar("reason", 255)
-        public val lockedAt: Column<LocalDateTime> = datetime("locked_at").defaultExpression(CurrentDateTime)
+        public val lockedAt: Column<LocalDateTime> = datetime("locked_at").default("CURRENT_TIMESTAMP")
 
-        override val primaryKey: PrimaryKey = PrimaryKey(id)
+        override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
 
         init {
             uniqueIndex(realmId, userId)
-            index(false, realmId)
         }
     }
 
-    private val allTables: List<Table> = listOf(failedLoginAttempts, accountLocks)
-
-    internal fun exposedTables(): List<Table> = allTables
-
-    override fun ddl(dialect: DatabaseDialect): List<String> =
-        SchemaUtils.createStatements(*allTables.toTypedArray())
-
-    override fun tableNames(): List<String> =
-        allTables.map { it.tableName }
+    override fun tables(): List<TableDef> = listOf(failedLoginAttempts, accountLocks)
 }

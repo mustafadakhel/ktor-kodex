@@ -5,9 +5,13 @@ import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -18,8 +22,8 @@ internal class DefaultEventBus() : EventBus {
 
     private val logger = LoggerFactory.getLogger(DefaultEventBus::class.java)
     private val subscribers = ConcurrentHashMap<KClass<*>, CopyOnWriteArrayList<EventSubscriber<*>>>()
-    private val eventQueue = Channel<KodexEvent>(capacity = 1024)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val eventQueue = Channel<KodexEvent>(capacity = 1024, onBufferOverflow = BufferOverflow.SUSPEND)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val allowedSubscribers = ConcurrentHashMap.newKeySet<EventSubscriber<*>>()
 
@@ -43,7 +47,11 @@ internal class DefaultEventBus() : EventBus {
     }
 
     override suspend fun publish(event: KodexEvent) {
-        eventQueue.send(event)
+        val result = eventQueue.trySend(event)
+        if (result.isFailure && !result.isClosed) {
+            logger.warn("Event queue full, applying backpressure for event: {}", event::class.simpleName)
+            eventQueue.send(event)
+        }
     }
 
     override fun <T : KodexEvent> subscribe(subscriber: EventSubscriber<T>) {
@@ -58,15 +66,11 @@ internal class DefaultEventBus() : EventBus {
     }
 
     private fun <T : KodexEvent> subscribeInternal(subscriber: EventSubscriber<T>) {
-        val subscriberList = subscribers.computeIfAbsent(subscriber.eventType) {
-            CopyOnWriteArrayList()
+        subscribers.compute(subscriber.eventType) { _, existing ->
+            val list = existing ?: CopyOnWriteArrayList()
+            list.add(subscriber)
+            CopyOnWriteArrayList(list.sortedByDescending { it.priority })
         }
-
-        subscriberList.add(subscriber)
-
-        val sorted = subscriberList.sortedByDescending { it.priority }
-        subscriberList.clear()
-        subscriberList.addAll(sorted)
     }
 
     override fun <T : KodexEvent> unsubscribe(subscriber: EventSubscriber<T>) {
@@ -112,6 +116,11 @@ internal class DefaultEventBus() : EventBus {
 
     override fun shutdown() {
         eventQueue.close()
+        runBlocking {
+            withTimeoutOrNull(5000) {
+                scope.coroutineContext[Job]?.children?.forEach { it.join() }
+            }
+        }
         scope.cancel()
     }
 }

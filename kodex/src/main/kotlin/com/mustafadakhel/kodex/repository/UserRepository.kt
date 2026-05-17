@@ -101,7 +101,7 @@ public interface UserRepository {
 
     public sealed interface UpdateUserResult : UpdateResult {
         public data object Success : UpdateUserResult
-        public object NotFound : UpdateUserResult, UpdateResult.NotFound
+        public data object NotFound : UpdateUserResult, UpdateResult.NotFound
         public data object EmailAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
         public data object PhoneAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
         public data class InvalidRole(val roleName: String) : UpdateUserResult, UpdateResult.NotFound
@@ -114,11 +114,12 @@ public interface UserRepository {
 
     public sealed interface UpdateRolesResult : UpdateResult {
         public data object Success : UpdateRolesResult
+        public data object UserNotFound : UpdateRolesResult, UpdateResult.NotFound
         public data class InvalidRole(val roleName: String) : UpdateRolesResult, UpdateResult.NotFound
     }
 
     public sealed interface DeleteResult {
-        public object NotFound : DeleteResult
-        public object Success : DeleteResult
+        public data object NotFound : DeleteResult
+        public data object Success : DeleteResult
     }
 }

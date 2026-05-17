@@ -3,6 +3,7 @@ package com.mustafadakhel.kodex.sessions.cleanup
 import com.mustafadakhel.kodex.observability.KodexLogger
 import com.mustafadakhel.kodex.sessions.SessionConfig
 import com.mustafadakhel.kodex.sessions.SessionService
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.*
 import kotlin.time.Duration
 
@@ -10,7 +11,7 @@ public class SessionCleanupService(
     private val sessionService: SessionService,
     private val config: SessionConfig
 ) {
-    private var cleanupJob: Job? = null
+    @Volatile private var cleanupJob: Job? = null
     private val logger = KodexLogger.logger<SessionCleanupService>()
 
     /**
@@ -23,6 +24,8 @@ public class SessionCleanupService(
             while (isActive) {
                 try {
                     cleanup()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logger.error("Session cleanup failed: ${e.message}", e)
                 }

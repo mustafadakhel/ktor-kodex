@@ -1,13 +1,12 @@
 [versions]
 ktor = "3.2.1"
-exposed = "0.61.0"
 h2 = "2.3.232"
 hikari = "6.3.0"
 kotest = "5.9.1"
 mockk = "1.14.4"
 coroutines = "1.10.2"
 kotlin = "2.1.21"
-kodex = "0.3.1"
+kodex = "0.4.0"
 bouncycastle = "1.80"
 libphonenumber = "8.13.27"
 jsoup = "1.18.3"
@@ -22,9 +21,6 @@ lettuce = "6.5.0.RELEASE"
 testcontainers = "1.20.4"
 
 [libraries]
-exposed-jdbc = { group = "org.jetbrains.exposed", name = "exposed-jdbc", version.ref = "exposed" }
-exposed-datetime = { group = "org.jetbrains.exposed", name = "exposed-kotlin-datetime", version.ref = "exposed" }
-exposed-json = { group = "org.jetbrains.exposed", name = "exposed-json", version.ref = "exposed" }
 h2-database = { group = "com.h2database", name = "h2", version.ref = "h2" }
 hikari = { group = "com.zaxxer", name = "HikariCP", version.ref = "hikari" }
 ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty", version.ref = "ktor" }
@@ -58,7 +54,6 @@ testcontainers = { group = "org.testcontainers", name = "testcontainers", versio
 testcontainers-junit = { group = "org.testcontainers", name = "junit-jupiter", version.ref = "testcontainers" }
 
 [bundles]
-exposed = ["exposed-jdbc", "exposed-datetime", "exposed-json"]
 ktor-server = ["ktor-server-netty", "ktor-server-auth", "ktor-server-auth-jwt"]
 ktor-client = ["ktor-client-core", "ktor-client-cio", "ktor-client-content-negotiation"]
 kotest = ["kotest-runner-junit5", "kotest-assertions-core"]

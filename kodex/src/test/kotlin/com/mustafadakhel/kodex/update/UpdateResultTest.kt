@@ -27,7 +27,7 @@ class UpdateResultTest : DescribeSpec({
             val user = createTestFullUser()
             val changes = ChangeSet(
                 timestamp = CurrentKotlinInstant,
-                changedFields = mapOf("email" to FieldChange("email", "old@test.com", "new@test.com"))
+                changedFields = mapOf(UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "old@test.com", "new@test.com"))
             )
 
             val result = UpdateResult.Success(user, changes)
@@ -39,7 +39,7 @@ class UpdateResultTest : DescribeSpec({
         it("should return true for hasChanges when fields changed") {
             val changes = ChangeSet(
                 timestamp = CurrentKotlinInstant,
-                changedFields = mapOf("email" to FieldChange("email", "old", "new"))
+                changedFields = mapOf(UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "old", "new"))
             )
             val result = UpdateResult.Success(createTestFullUser(), changes)
 
@@ -154,8 +154,8 @@ class UpdateResultTest : DescribeSpec({
     describe("ChangeSet") {
         it("should track changed fields") {
             val changes = mapOf(
-                "email" to FieldChange("email", "old@test.com", "new@test.com"),
-                "phone" to FieldChange("phone", "+1234", "+5678")
+                UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "old@test.com", "new@test.com"),
+                UserField.PHONE.key to FieldChange(UserField.PHONE.key, "+1234", "+5678")
             )
             val changeSet = ChangeSet(CurrentKotlinInstant, changes)
 
@@ -165,7 +165,7 @@ class UpdateResultTest : DescribeSpec({
         it("should check if field was changed") {
             val changeSet = ChangeSet(
                 timestamp = CurrentKotlinInstant,
-                changedFields = mapOf("email" to FieldChange("email", "old", "new"))
+                changedFields = mapOf(UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "old", "new"))
             )
 
             changeSet.hasFieldChange("email") shouldBe true
@@ -187,8 +187,8 @@ class UpdateResultTest : DescribeSpec({
             val changeSet = ChangeSet(
                 timestamp = CurrentKotlinInstant,
                 changedFields = mapOf(
-                    "email" to FieldChange("email", "a", "b"),
-                    "phone" to FieldChange("phone", "c", "d"),
+                    UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "a", "b"),
+                    UserField.PHONE.key to FieldChange(UserField.PHONE.key, "c", "d"),
                     "name" to FieldChange("name", "e", "f")
                 )
             )

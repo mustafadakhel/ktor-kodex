@@ -1,5 +1,10 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.verification
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.test.TestDatabaseSetup
@@ -10,10 +15,7 @@ import io.kotest.matchers.shouldBe
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -27,23 +29,21 @@ class TokenCleanupServiceTest : FunSpec({
     val timeZone = TimeZone.UTC
 
     beforeEach {
-        val database = Database.connect(
-            url = "jdbc:h2:mem:v_cleanup_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:v_cleanup_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        schema = VerificationSchema(core)
-        db = KodexDatabase(database, core, mapOf(VerificationSchema::class to schema))
+        schema = VerificationSchema(core.prefix)
+        db = KodexDatabase(
+            dataSource = ds,
+            dialect = DatabaseDialect.H2,
+            core = core,
+            extensionSchemas = mapOf(VerificationSchema::class to schema)
+        )
         db.createSchema()
         testSetup = TestDatabaseSetup(db)
 
         cleanupService = DefaultTokenCleanupService(db, schema, timeZone, null, "test-realm")
-    }
-
-    afterEach {
-        db.transaction {
-            SchemaUtils.drop(schema.verificationTokens, schema.verifiableContacts)
-        }
     }
 
     context("Token Cleanup") {
@@ -55,24 +55,24 @@ class TokenCleanupServiceTest : FunSpec({
             val tokens = schema.verificationTokens
 
             db.transaction {
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.contactType] = "email"
-                    it[tokens.token] = TokenHasher.hash("old-used-token")
-                    it[tokens.createdAt] = oldDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = oldDate
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "email")
+                    set(tokens.token, TokenHasher.hash("old-used-token"))
+                    set(tokens.createdAt, oldDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, oldDate)
                 }
 
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.contactType] = "email"
-                    it[tokens.token] = TokenHasher.hash("recent-used-token")
-                    it[tokens.createdAt] = recentDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = recentDate
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "email")
+                    set(tokens.token, TokenHasher.hash("recent-used-token"))
+                    set(tokens.createdAt, recentDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, recentDate)
                 }
             }
 
@@ -81,7 +81,7 @@ class TokenCleanupServiceTest : FunSpec({
             deletedCount shouldBe 1
 
             db.transaction {
-                val remainingTokens = tokens.selectAll().map { it[tokens.token] }
+                val remainingTokens = select(tokens).map { it[tokens.token] }
                 remainingTokens shouldBe listOf(TokenHasher.hash("recent-used-token"))
             }
         }
@@ -93,14 +93,14 @@ class TokenCleanupServiceTest : FunSpec({
             val tokens = schema.verificationTokens
 
             db.transaction {
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.contactType] = "email"
-                    it[tokens.token] = TokenHasher.hash("active-token")
-                    it[tokens.createdAt] = recentDate
-                    it[tokens.expiresAt] = now.plus(23.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = null
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "email")
+                    set(tokens.token, TokenHasher.hash("active-token"))
+                    set(tokens.createdAt, recentDate)
+                    set(tokens.expiresAt, now.plus(23.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, null)
                 }
             }
 
@@ -121,34 +121,34 @@ class TokenCleanupServiceTest : FunSpec({
             val tokens = schema.verificationTokens
 
             db.transaction {
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.contactType] = "email"
-                    it[tokens.token] = TokenHasher.hash("old-email-token")
-                    it[tokens.createdAt] = oldDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = oldDate
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "email")
+                    set(tokens.token, TokenHasher.hash("old-email-token"))
+                    set(tokens.createdAt, oldDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, oldDate)
                 }
 
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.contactType] = "phone"
-                    it[tokens.token] = TokenHasher.hash("old-phone-token")
-                    it[tokens.createdAt] = oldDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = oldDate
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "phone")
+                    set(tokens.token, TokenHasher.hash("old-phone-token"))
+                    set(tokens.createdAt, oldDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, oldDate)
                 }
 
-                tokens.insert {
-                    it[tokens.realmId] = "test-realm"
-                    it[tokens.userId] = userId
-                    it[tokens.contactType] = "discord"
-                    it[tokens.token] = TokenHasher.hash("old-custom-token")
-                    it[tokens.createdAt] = oldDate
-                    it[tokens.expiresAt] = now.plus(1.hours).toLocalDateTime(timeZone)
-                    it[tokens.usedAt] = oldDate
+                insertInto(tokens) {
+                    set(tokens.realmId, "test-realm")
+                    set(tokens.userId, userId)
+                    set(tokens.contactType, "discord")
+                    set(tokens.token, TokenHasher.hash("old-custom-token"))
+                    set(tokens.createdAt, oldDate)
+                    set(tokens.expiresAt, now.plus(1.hours).toLocalDateTime(timeZone))
+                    set(tokens.usedAt, oldDate)
                 }
             }
 
@@ -157,7 +157,7 @@ class TokenCleanupServiceTest : FunSpec({
             deletedCount shouldBe 3
 
             db.transaction {
-                tokens.selectAll().count() shouldBe 0
+                select(tokens).count() shouldBe 0
             }
         }
 
@@ -169,20 +169,20 @@ class TokenCleanupServiceTest : FunSpec({
 
             db.transaction {
                 repeat(2500) { index ->
-                    tokens.insert {
-                        it[tokens.realmId] = "test-realm"
-                        it[tokens.userId] = userId
-                        it[tokens.contactType] = "email"
-                        it[tokens.token] = TokenHasher.hash("expired-token-$index")
-                        it[tokens.createdAt] = oldDate
-                        it[tokens.expiresAt] = now.minus(2.days).toLocalDateTime(timeZone)
-                        it[tokens.usedAt] = null
+                    insertInto(tokens) {
+                        set(tokens.realmId, "test-realm")
+                        set(tokens.userId, userId)
+                        set(tokens.contactType, "email")
+                        set(tokens.token, TokenHasher.hash("expired-token-$index"))
+                        set(tokens.createdAt, oldDate)
+                        set(tokens.expiresAt, now.minus(2.days).toLocalDateTime(timeZone))
+                        set(tokens.usedAt, null)
                     }
                 }
             }
 
             db.transaction {
-                tokens.selectAll().count() shouldBe 2500
+                select(tokens).count() shouldBe 2500
             }
 
             val deletedCount = cleanupService.purgeExpiredTokens(retentionPeriod = 30.days)
@@ -190,7 +190,7 @@ class TokenCleanupServiceTest : FunSpec({
             deletedCount shouldBe 2500
 
             db.transaction {
-                tokens.selectAll().count() shouldBe 0
+                select(tokens).count() shouldBe 0
             }
         }
     }

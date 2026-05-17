@@ -1,3 +1,5 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.jdbc
 
 import io.kotest.matchers.collections.shouldBeEmpty

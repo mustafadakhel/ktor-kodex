@@ -35,3 +35,9 @@ public class DefaultKodexPrincipal(
 ) : KodexPrincipal
 
 public val ApplicationCall.kodex: KodexPrincipal? get() = principal()
+
+/** Non-null accessor for use inside authenticated routes. Throws if principal is missing. */
+public val ApplicationCall.kodexPrincipal: KodexPrincipal
+    get() = principal() ?: throw IllegalStateException(
+        "KodexPrincipal not found. This accessor should only be used inside authenticated routes."
+    )

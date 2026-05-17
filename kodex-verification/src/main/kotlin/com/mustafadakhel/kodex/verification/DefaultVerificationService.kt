@@ -1,7 +1,12 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.VerificationEvent
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
 import com.mustafadakhel.kodex.ratelimit.RateLimitResult
 import com.mustafadakhel.kodex.ratelimit.RateLimiter
@@ -16,12 +21,6 @@ import com.mustafadakhel.kodex.verification.schema.VerificationSchema
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
 internal class DefaultVerificationService(
@@ -43,46 +42,51 @@ internal class DefaultVerificationService(
         db.transaction {
             val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-            val existing = contacts
-                .selectAll()
+            val existing = select(contacts)
                 .where {
                     (contacts.realmId eq realm) and
                     (contacts.userId eq userId) and
                     (contacts.contactType eq typeKey)
                 }
-                .singleOrNull()
+                .singleOrNull { row ->
+                    row[contacts.contactValue] to row[contacts.isVerified] to row[contacts.verifiedAt]
+                }
 
             if (existing != null) {
-                val existingValue = existing[contacts.contactValue]
+                val (pair, existingVerifiedAt) = existing
+                val (existingValue, existingIsVerified) = pair
                 val resetVerification = existingValue != value
 
-                contacts.update({
-                    (contacts.realmId eq realm) and
-                    (contacts.userId eq userId) and
-                    (contacts.contactType eq typeKey)
-                }) {
-                    it[contacts.contactValue] = value
-                    it[contacts.isVerified] = if (resetVerification) false else existing[contacts.isVerified]
-                    it[contacts.verifiedAt] = if (resetVerification) null else existing[contacts.verifiedAt]
-                    it[contacts.updatedAt] = now
+                update(contacts) {
+                    set(contacts.contactValue, value)
+                    set(contacts.isVerified, if (resetVerification) false else existingIsVerified)
+                    set(contacts.verifiedAt, if (resetVerification) null else existingVerifiedAt)
+                    set(contacts.updatedAt, now)
+                    where {
+                        (contacts.realmId eq realm) and
+                        (contacts.userId eq userId) and
+                        (contacts.contactType eq typeKey)
+                    }
                 }
 
                 if (resetVerification) {
-                    tokens.deleteWhere {
-                        (tokens.realmId eq realm) and
-                        (tokens.userId eq userId) and
-                        (tokens.contactType eq typeKey)
-                    }
+                    deleteFrom(tokens)
+                        .where {
+                            (tokens.realmId eq realm) and
+                            (tokens.userId eq userId) and
+                            (tokens.contactType eq typeKey)
+                        }
+                        .execute()
                 }
             } else {
-                contacts.insert {
-                    it[contacts.realmId] = realm
-                    it[contacts.userId] = userId
-                    it[contacts.contactType] = typeKey
-                    it[contacts.contactValue] = value
-                    it[contacts.isVerified] = false
-                    it[contacts.verifiedAt] = null
-                    it[contacts.updatedAt] = now
+                insertInto(contacts) {
+                    set(contacts.realmId, realm)
+                    set(contacts.userId, userId)
+                    set(contacts.contactType, typeKey)
+                    set(contacts.contactValue, value)
+                    set(contacts.isVerified, false)
+                    set(contacts.verifiedAt, null)
+                    set(contacts.updatedAt, now)
                 }
             }
         }
@@ -92,17 +96,21 @@ internal class DefaultVerificationService(
         val typeKey = contactType.key
 
         db.transaction {
-            contacts.deleteWhere {
-                (contacts.realmId eq realm) and
-                (contacts.userId eq userId) and
-                (contacts.contactType eq typeKey)
-            }
+            deleteFrom(contacts)
+                .where {
+                    (contacts.realmId eq realm) and
+                    (contacts.userId eq userId) and
+                    (contacts.contactType eq typeKey)
+                }
+                .execute()
 
-            tokens.deleteWhere {
-                (tokens.realmId eq realm) and
-                (tokens.userId eq userId) and
-                (tokens.contactType eq typeKey)
-            }
+            deleteFrom(tokens)
+                .where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.contactType eq typeKey)
+                }
+                .execute()
         }
     }
 
@@ -110,20 +118,18 @@ internal class DefaultVerificationService(
         val typeKey = contactType.key
 
         return db.transaction {
-            contacts
-                .selectAll()
+            select(contacts)
                 .where {
                     (contacts.realmId eq realm) and
                     (contacts.userId eq userId) and
                     (contacts.contactType eq typeKey)
                 }
-                .singleOrNull()
-                ?.let {
+                .singleOrNull { row ->
                     ContactVerification(
                         contactType = contactType,
-                        contactValue = it[contacts.contactValue],
-                        isVerified = it[contacts.isVerified],
-                        verifiedAt = it[contacts.verifiedAt]
+                        contactValue = row[contacts.contactValue],
+                        isVerified = row[contacts.isVerified],
+                        verifiedAt = row[contacts.verifiedAt]
                     )
                 }
         }
@@ -131,17 +137,16 @@ internal class DefaultVerificationService(
 
     override fun getUserContacts(userId: UUID): List<ContactVerification> {
         return db.transaction {
-            contacts
-                .selectAll()
+            select(contacts)
                 .where {
                     (contacts.realmId eq realm) and (contacts.userId eq userId)
                 }
-                .map {
+                .map { row ->
                     ContactVerification(
-                        contactType = ContactType.fromKey(it[contacts.contactType]),
-                        contactValue = it[contacts.contactValue],
-                        isVerified = it[contacts.isVerified],
-                        verifiedAt = it[contacts.verifiedAt]
+                        contactType = ContactType.fromKey(row[contacts.contactType]),
+                        contactValue = row[contacts.contactValue],
+                        isVerified = row[contacts.isVerified],
+                        verifiedAt = row[contacts.verifiedAt]
                     )
                 }
         }
@@ -254,9 +259,12 @@ internal class DefaultVerificationService(
 
         val token = generateToken(contactType)
 
+        storeToken(userId, contactType, token)
+
         try {
             sender.send(contact.contactValue, token)
         } catch (e: Exception) {
+            deleteStoredToken(userId, contactType, token)
             rateLimiter.releaseReservation(userReservation.reservationId)
             rateLimiter.releaseReservation(contactReservation.reservationId)
             rateLimiter.releaseReservation(ipReservation?.reservationId)
@@ -272,8 +280,6 @@ internal class DefaultVerificationService(
 
             return VerificationSendResult.SendFailed(e.message ?: "Failed to send verification")
         }
-
-        storeToken(userId, contactType, token)
 
         eventBus?.publish(VerificationEvent.EmailVerificationSent(
             eventId = UUID.randomUUID(),
@@ -311,23 +317,26 @@ internal class DefaultVerificationService(
         val hashedToken = TokenHasher.hash(token)
 
         val result = db.transaction {
-            val tokenRecord = tokens
-                .selectAll()
+            val tokenRecord = select(tokens)
                 .where {
                     (tokens.realmId eq realm) and
                     (tokens.userId eq userId) and
                     (tokens.token eq hashedToken) and
                     (tokens.contactType eq typeKey)
                 }
-                .singleOrNull()
+                .singleOrNull { row ->
+                    row[tokens.expiresAt] to row[tokens.usedAt]
+                }
 
             if (tokenRecord == null) {
                 return@transaction VerificationResult.Invalid("Token not found")
             }
 
+            val (expiresAt, usedAt) = tokenRecord
+
             val validation = TokenValidator.validate(
-                expiresAt = tokenRecord[tokens.expiresAt],
-                usedAt = tokenRecord[tokens.usedAt],
+                expiresAt = expiresAt,
+                usedAt = usedAt,
                 now = nowLocal
             )
 
@@ -335,13 +344,14 @@ internal class DefaultVerificationService(
                 return@transaction VerificationResult.Invalid(validation.reason!!)
             }
 
-            tokens.update({
-                (tokens.realmId eq realm) and
-                (tokens.userId eq userId) and
-                (tokens.token eq hashedToken) and
-                (tokens.contactType eq typeKey)
-            }) {
-                it[tokens.usedAt] = nowLocal
+            update(tokens) {
+                set(tokens.usedAt, nowLocal)
+                where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.token eq hashedToken) and
+                    (tokens.contactType eq typeKey)
+                }
             }
 
             setVerified(userId, contactType, true)
@@ -416,11 +426,13 @@ internal class DefaultVerificationService(
         val typeKey = contactType.key
 
         db.transaction {
-            tokens.deleteWhere {
-                (tokens.realmId eq realm) and
-                (tokens.userId eq userId) and
-                (tokens.contactType eq typeKey)
-            }
+            deleteFrom(tokens)
+                .where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.contactType eq typeKey)
+                }
+                .execute()
         }
 
         return sendVerification(userId, contactType, ipAddress)
@@ -432,14 +444,15 @@ internal class DefaultVerificationService(
         db.transaction {
             val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-            contacts.update({
-                (contacts.realmId eq realm) and
-                (contacts.userId eq userId) and
-                (contacts.contactType eq typeKey)
-            }) {
-                it[contacts.isVerified] = verified
-                it[contacts.verifiedAt] = if (verified) now else null
-                it[contacts.updatedAt] = now
+            update(contacts) {
+                set(contacts.isVerified, verified)
+                set(contacts.verifiedAt, if (verified) now else null)
+                set(contacts.updatedAt, now)
+                where {
+                    (contacts.realmId eq realm) and
+                    (contacts.userId eq userId) and
+                    (contacts.contactType eq typeKey)
+                }
             }
         }
     }
@@ -457,13 +470,26 @@ internal class DefaultVerificationService(
             val expiration = config.getTokenExpiration(contactType)
             val expiresAt = ExpirationCalculator.calculateExpiration(expiration, timeZone, now)
 
-            tokens.insert {
-                it[tokens.realmId] = realm
-                it[tokens.userId] = userId
-                it[tokens.contactType] = typeKey
-                it[tokens.token] = TokenHasher.hash(token)
-                it[tokens.expiresAt] = expiresAt
+            insertInto(tokens) {
+                set(tokens.realmId, realm)
+                set(tokens.userId, userId)
+                set(tokens.contactType, typeKey)
+                set(tokens.token, TokenHasher.hash(token))
+                set(tokens.expiresAt, expiresAt)
             }
+        }
+    }
+
+    private fun deleteStoredToken(userId: UUID, contactType: ContactType, token: String) {
+        db.transaction {
+            deleteFrom(tokens)
+                .where {
+                    (tokens.realmId eq realm) and
+                        (tokens.userId eq userId) and
+                        (tokens.contactType eq contactType.key) and
+                        (tokens.token eq TokenHasher.hash(token))
+                }
+                .execute()
         }
     }
 }

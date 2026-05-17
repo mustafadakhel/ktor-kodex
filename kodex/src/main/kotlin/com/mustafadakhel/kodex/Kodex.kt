@@ -2,7 +2,6 @@ package com.mustafadakhel.kodex
 
 import com.mustafadakhel.kodex.event.DefaultEventBus
 import com.mustafadakhel.kodex.extension.HookExecutor
-import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
 import com.mustafadakhel.kodex.model.Realm
@@ -12,7 +11,6 @@ import com.mustafadakhel.kodex.repository.database.databaseTokenRepository
 import com.mustafadakhel.kodex.repository.database.databaseUserRepository
 import com.mustafadakhel.kodex.routes.auth.RealmConfig
 import com.mustafadakhel.kodex.schema.CoreSchema
-import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
 import com.mustafadakhel.kodex.schema.ExtensionSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.service.HashingService
@@ -24,7 +22,13 @@ import com.mustafadakhel.kodex.service.saltedHashingService
 import com.mustafadakhel.kodex.service.tokenService
 import com.mustafadakhel.kodex.service.userService
 import com.mustafadakhel.kodex.token.DefaultTokenManager
+import com.mustafadakhel.kodex.token.JwtSignatureVerifier
 import com.mustafadakhel.kodex.token.JwtTokenIssuer
+import com.mustafadakhel.kodex.token.cleanup.TokenCleanupService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import com.mustafadakhel.kodex.update.ChangeTracker
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.util.KodexConfig
@@ -73,12 +77,12 @@ public class Kodex private constructor(
         override fun install(pipeline: Application, configure: KodexConfig.() -> Unit): Kodex {
             val kodexConfig = KodexConfig().apply(configure)
 
-            // Phase 1: Build realm configs (collect extension configs, build event buses)
+            // Phase 1: Build realm configs (collect extension CONFIGS, not instances)
             val realmConfigs = buildRealmConfigs(kodexConfig)
 
-            // Phase 2: Collect extension schemas and build KodexDatabase
+            // Phase 2: Collect extension schemas from configs
             val coreSchema = CoreSchema(kodexConfig.tablePrefix)
-            val extensionSchemaMap = collectExtensionSchemas(coreSchema, realmConfigs)
+            val extensionSchemaMap = collectExtensionSchemas(kodexConfig.tablePrefix, realmConfigs)
             val db = kodexConfig.getKodexDatabase(coreSchema, extensionSchemaMap)
 
             // Phase 3: Schema creation or validation
@@ -88,10 +92,13 @@ public class Kodex private constructor(
                 db.validateSchema()
             }
 
-            // Phase 4: Initialize DatabaseAwareExtensions
-            initializeDatabaseAwareExtensions(realmConfigs, db)
+            // Phase 4: Build extension INSTANCES from configs + db
+            realmConfigs.forEach { it.buildExtensions(db) }
 
-            // Phase 5: Create per-realm repositories (reused for seeding and services)
+            // Phase 5: Register event subscribers (extensions are fully initialized)
+            registerEventSubscribers(realmConfigs)
+
+            // Phase 6: Create per-realm repositories (reused for seeding and services)
             val tokenHasher = saltedHashingService()
             val realmRepos = realmConfigs.associate { realmConfig ->
                 val realmId = realmConfig.realm.name
@@ -101,20 +108,31 @@ public class Kodex private constructor(
                 )
             }
 
-            // Phase 6: Seed roles per realm
+            // Phase 7: Seed roles per realm
             for ((realmConfig, repos) in realmRepos) {
                 repos.userRepository.seedRoles(realmConfig.rolesConfig.roles)
             }
 
-            // Phase 7: Build per-realm services
+            // Phase 8: Build per-realm services
             val realmServicesMap = createRealmServices(realmConfigs, realmRepos, tokenHasher)
 
-            // Phase 8: Configure authentication
+            // Phase 9: Configure authentication
             configureAuthentication(pipeline, realmConfigs, realmServicesMap)
 
-            // Phase 9: Shutdown hooks
+            // Phase 10: Start token cleanup per realm
+            val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            val tokenCleanupServices = realmConfigs.map { realmConfig ->
+                TokenCleanupService(db, realmConfig.realm.name, timeZone = realmConfig.timeZone).also {
+                    it.start(cleanupScope)
+                }
+            }
+
+            // Phase 11: Shutdown hooks (order: token cleanup → extensions → event buses → database)
             val eventBuses = realmConfigs.map { it.eventBus }
             pipeline.monitor.subscribe(ApplicationStopping) {
+                tokenCleanupServices.forEach { it.stop() }
+                cleanupScope.cancel()
+                realmConfigs.forEach { it.extensions.shutdownAll() }
                 eventBuses.forEach { bus -> bus.shutdown() }
                 db.close()
             }
@@ -129,28 +147,22 @@ public class Kodex private constructor(
         private fun buildRealmConfigs(kodexConfig: KodexConfig): List<RealmConfig> {
             return kodexConfig.realmConfigScopes.map { realmConfigScope ->
                 val eventBus = DefaultEventBus()
-                val realmConfig = realmConfigScope.build(eventBus)
-                eventBus.registerExtensionSubscribers(realmConfig.extensions)
-                realmConfig
+                realmConfigScope.build(eventBus)
             }
         }
 
         private fun collectExtensionSchemas(
-            coreSchema: CoreSchema,
+            tablePrefix: String,
             realmConfigs: List<RealmConfig>,
         ): Map<KClass<out ExtensionSchema>, ExtensionSchema> =
             realmConfigs
-                .flatMap { it.extensions.collectSchemas(coreSchema).entries }
+                .flatMap { it.collectSchemas(tablePrefix).entries }
                 .associate { it.key to it.value }
 
-        private fun initializeDatabaseAwareExtensions(
-            realmConfigs: List<RealmConfig>,
-            db: KodexDatabase,
-        ) {
-            realmConfigs
-                .flatMap { it.extensions.getAllOfType(PersistentExtension::class) }
-                .filterIsInstance<DatabaseAwareExtension>()
-                .forEach { it.initialize(db) }
+        private fun registerEventSubscribers(realmConfigs: List<RealmConfig>) {
+            realmConfigs.forEach { realmConfig ->
+                (realmConfig.eventBus as DefaultEventBus).registerExtensionSubscribers(realmConfig.extensions)
+            }
         }
 
         private fun createRealmServices(
@@ -183,8 +195,9 @@ public class Kodex private constructor(
             )
 
             val updateCommandProcessor = createUpdateCommandProcessor(context)
-            val tokenManager = createTokenManager(realmConfig, userRepository, tokenRepository, tokenHasher)
-            val tokens = tokenService(tokenManager, context.eventBus, context.realm)
+            val signatureVerifier = JwtSignatureVerifier(realmConfig.secretsProvider)
+            val tokenManager = createTokenManager(realmConfig, signatureVerifier, userRepository, tokenRepository, tokenHasher)
+            val tokens = tokenService(tokenManager, signatureVerifier, context.eventBus, context.realm)
 
             return KodexRealmServices(
                 realm = context.realm,
@@ -207,6 +220,7 @@ public class Kodex private constructor(
 
         private fun createTokenManager(
             realmConfig: RealmConfig,
+            signatureVerifier: JwtSignatureVerifier,
             userRepository: UserRepository,
             tokenRepository: TokenRepository,
             tokenHasher: HashingService,
@@ -214,7 +228,6 @@ public class Kodex private constructor(
             val jwtTokenIssuer = createJwtTokenIssuer(realmConfig, userRepository)
             val jwtTokenVerifier = createJwtTokenVerifier(
                 realmConfig,
-                userRepository,
                 tokenRepository,
                 tokenHasher,
             )
@@ -222,6 +235,7 @@ public class Kodex private constructor(
             return DefaultTokenManager(
                 jwtTokenIssuer = jwtTokenIssuer,
                 jwtTokenVerifier = jwtTokenVerifier,
+                signatureVerifier = signatureVerifier,
                 tokenRepository = tokenRepository,
                 userRepository = userRepository,
                 tokenValidity = realmConfig.tokenConfig.validity(),
@@ -248,7 +262,6 @@ public class Kodex private constructor(
 
         private fun createJwtTokenVerifier(
             realmConfig: RealmConfig,
-            userRepository: UserRepository,
             tokenRepository: TokenRepository,
             tokenHasher: HashingService,
         ): JwtTokenVerifier {
@@ -263,7 +276,6 @@ public class Kodex private constructor(
                 tokenPersistence = realmConfig.tokenConfig.persistenceFlags,
                 tokenRepository = tokenRepository,
                 hashingService = tokenHasher,
-                userRepository = userRepository,
                 realm = realmConfig.realm
             )
         }
@@ -273,7 +285,7 @@ public class Kodex private constructor(
             realmConfigs: List<RealmConfig>,
             realmServicesMap: Map<Realm, KodexRealmServices>,
         ) {
-            pipeline.install(Authentication) {
+            val authConfig: AuthenticationConfig.() -> Unit = {
                 realmConfigs.forEach { realmConfig ->
                     val realm = realmConfig.realm
                     realmServicesMap[realm]?.let { realmServices ->
@@ -285,6 +297,12 @@ public class Kodex private constructor(
                         }
                     }
                 }
+            }
+
+            if (pipeline.pluginOrNull(Authentication) != null) {
+                pipeline.pluginRegistry[Authentication.key].configure(authConfig)
+            } else {
+                pipeline.install(Authentication, authConfig)
             }
         }
     }

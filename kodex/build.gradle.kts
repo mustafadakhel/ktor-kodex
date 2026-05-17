@@ -9,6 +9,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("com.vanniktech.maven.publish")
+    `java-test-fixtures`
     jacoco
 }
 
@@ -83,8 +84,11 @@ tasks {
 
     named<Task>("compileIntegrationTestKotlin") {
         (this as org.jetbrains.kotlin.gradle.tasks.KotlinCompile).compilerOptions {
+            val buildDir = project.layout.buildDirectory.get()
             jvmTarget.set(JvmTarget.JVM_17)
-            freeCompilerArgs.add("-Xfriend-paths=${project.layout.buildDirectory.get()}/classes/kotlin/main")
+            freeCompilerArgs.addAll(
+                "-Xfriend-paths=$buildDir/classes/kotlin/main,$buildDir/libs/${project.name}-${project.version}.jar"
+            )
         }
     }
 
@@ -106,6 +110,8 @@ dependencies {
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
     compileOnly(libs.micrometer.core)
+
+    testFixturesImplementation(libs.h2.database)
 
     testImplementation(libs.h2.database)
     testImplementation(libs.bundles.kotest)

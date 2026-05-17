@@ -1,7 +1,11 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.sessions
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.SessionEvent
+import com.mustafadakhel.kodex.jdbc.ConnectionScope
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.sessions.database.SessionRepository
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
@@ -25,15 +29,15 @@ internal class DefaultSessionService(
 ) : SessionService {
 
     override suspend fun listActiveSessions(userId: UUID): List<Session> = db.transaction {
-        repository.findActiveByUserId(userId)
+        with(repository) { findActiveByUserId(userId) }
     }
 
     override suspend fun getSession(sessionId: UUID): Session? = db.transaction {
-        repository.findById(sessionId)
+        with(repository) { findById(sessionId) }
     }
 
     override suspend fun getSessionByTokenFamily(tokenFamily: UUID): Session? = db.transaction {
-        repository.findByTokenFamily(tokenFamily)
+        with(repository) { findByTokenFamily(tokenFamily) }
     }
 
     override suspend fun createSession(
@@ -50,24 +54,23 @@ internal class DefaultSessionService(
 
         val now = CurrentKotlinInstant
         val (session, revokedEvent, anomalies) = db.suspendTransaction {
-            // Create session FIRST to avoid race condition
-            val session = repository.create(
-                userId = userId,
-                tokenFamily = tokenFamily,
-                deviceInfo = deviceInfo,
-                location = location?.displayName,
-                latitude = location?.latitude,
-                longitude = location?.longitude,
-                expiresAt = expiresAt,
-                now = now
-            )
+            val session = with(repository) {
+                create(
+                    userId = userId,
+                    tokenFamily = tokenFamily,
+                    deviceInfo = deviceInfo,
+                    location = location?.displayName,
+                    latitude = location?.latitude,
+                    longitude = location?.longitude,
+                    expiresAt = expiresAt,
+                    now = now
+                )
+            }
 
-            // Then enforce limit - if we exceeded, evict oldest (not the one we just created)
             val revokedEvent = enforceConcurrentSessionLimit(userId, excludeSessionId = session.id)
 
-            // Detect anomalies while still in transaction context
             val anomalies = if (anomalyDetector != null && config.anomalyDetection.enabled) {
-                anomalyDetector.detectAnomalies(userId, session, repository)
+                with(anomalyDetector) { detectAnomalies(userId, session, repository) }
             } else {
                 emptyList()
             }
@@ -104,7 +107,6 @@ internal class DefaultSessionService(
             )
         )
 
-        // Publish anomaly events after session creation
         anomalies.forEach { anomaly ->
             eventBus.publish(
                 SessionEvent.SessionAnomalyDetected(
@@ -122,20 +124,21 @@ internal class DefaultSessionService(
         return session
     }
 
-    private fun enforceConcurrentSessionLimit(userId: UUID, excludeSessionId: UUID? = null): SessionRevokedEvent? {
-        // Use row-level locking to prevent race conditions when checking session count
-        // This ensures that concurrent logins don't bypass the maxConcurrentSessions limit
-        val activeCount = repository.countActiveByUserIdForUpdate(userId)
+    private fun ConnectionScope.enforceConcurrentSessionLimit(
+        userId: UUID,
+        excludeSessionId: UUID? = null
+    ): SessionRevokedEvent? {
+        val activeCount = with(repository) { countActiveByUserIdForUpdate(userId) }
         if (activeCount > config.maxConcurrentSessions) {
-            val oldestSessionId = repository.findOldestActiveSessionId(userId, excludeSessionId = excludeSessionId)
+            val oldestSessionId = with(repository) { findOldestActiveSessionId(userId, excludeSessionId = excludeSessionId) }
             if (oldestSessionId != null) {
                 val now = CurrentKotlinInstant
-                repository.revoke(oldestSessionId, SessionEndReason.MAX_SESSIONS_EXCEEDED, now)
+                with(repository) { revoke(oldestSessionId, SessionEndReason.MAX_SESSIONS_EXCEEDED, now) }
 
-                val session = repository.findById(oldestSessionId)
+                val session = with(repository) { findById(oldestSessionId) }
                 if (session != null) {
-                    repository.archiveToHistory(session, SessionEndReason.MAX_SESSIONS_EXCEEDED, now)
-                    repository.deleteSession(oldestSessionId)
+                    with(repository) { archiveToHistory(session, SessionEndReason.MAX_SESSIONS_EXCEEDED, now) }
+                    with(repository) { deleteSession(oldestSessionId) }
                 }
 
                 return SessionRevokedEvent(
@@ -157,12 +160,14 @@ internal class DefaultSessionService(
     override suspend fun revokeSession(sessionId: UUID, reason: String) {
         val now = CurrentKotlinInstant
         val session = db.transaction {
-            val session = repository.findById(sessionId)
+            val session = with(repository) { findById(sessionId) }
 
             if (session != null) {
-                repository.revoke(sessionId, reason, now)
-                repository.archiveToHistory(session, reason, now)
-                repository.deleteSession(sessionId)
+                with(repository) {
+                    revoke(sessionId, reason, now)
+                    archiveToHistory(session, reason, now)
+                    deleteSession(sessionId)
+                }
             }
 
             session
@@ -186,18 +191,21 @@ internal class DefaultSessionService(
     override suspend fun revokeAllSessions(userId: UUID, exceptSessionId: UUID?) {
         val now = CurrentKotlinInstant
         val sessionsToRevoke = db.transaction {
-            val sessionsToRevoke = if (exceptSessionId != null) {
-                repository.findActiveByUserId(userId).filter { it.id != exceptSessionId }
-            } else {
-                repository.findActiveByUserId(userId)
+            val sessionsToRevoke = with(repository) {
+                if (exceptSessionId != null) {
+                    findActiveByUserId(userId).filter { it.id != exceptSessionId }
+                } else {
+                    findActiveByUserId(userId)
+                }
             }
 
-            repository.revokeAllForUser(userId, exceptSessionId, SessionEndReason.FORCE_LOGOUT_ALL, now)
+            with(repository) {
+                revokeAllForUser(userId, exceptSessionId, SessionEndReason.FORCE_LOGOUT_ALL, now)
 
-            // Batch archive and delete to avoid N+1 queries
-            if (sessionsToRevoke.isNotEmpty()) {
-                repository.archiveSessionsToHistory(sessionsToRevoke, SessionEndReason.FORCE_LOGOUT_ALL, now)
-                repository.deleteSessions(sessionsToRevoke.map { it.id })
+                if (sessionsToRevoke.isNotEmpty()) {
+                    archiveSessionsToHistory(sessionsToRevoke, SessionEndReason.FORCE_LOGOUT_ALL, now)
+                    deleteSessions(sessionsToRevoke.map { it.id })
+                }
             }
 
             sessionsToRevoke
@@ -222,10 +230,10 @@ internal class DefaultSessionService(
         val now = CurrentKotlinInstant
         val newExpiresAt = now + extendExpirationBy
         val session = db.transaction {
-            val updated = repository.updateActivity(tokenFamily, now, newExpiresAt)
+            val updated = with(repository) { updateActivity(tokenFamily, now, newExpiresAt) }
 
             if (updated > 0) {
-                repository.findByTokenFamily(tokenFamily)
+                with(repository) { findByTokenFamily(tokenFamily) }
             } else {
                 null
             }
@@ -246,29 +254,32 @@ internal class DefaultSessionService(
     }
 
     override suspend fun getSessionHistory(userId: UUID, limit: Int): List<SessionHistoryEntry> = db.transaction {
-        repository.findHistoryByUserId(userId, limit)
+        val clampedLimit = limit.coerceIn(1, 100)
+        with(repository) { findHistoryByUserId(userId, clampedLimit) }
     }
 
     override suspend fun getSessionHistoryPage(userId: UUID, limit: Int, offset: Int): SessionHistoryPage = db.transaction {
-        val totalCount = repository.countHistoryByUserId(userId)
-        val entries = repository.findHistoryByUserId(userId, limit, offset)
-        SessionHistoryPage.create(entries, totalCount, offset, limit)
+        val clampedLimit = limit.coerceIn(1, 100)
+        val totalCount = with(repository) { countHistoryByUserId(userId) }
+        val entries = with(repository) { findHistoryByUserId(userId, clampedLimit, offset) }
+        SessionHistoryPage.create(entries, totalCount, offset, clampedLimit)
     }
 
     override suspend fun archiveExpiredSessions(): Int {
         val now = CurrentKotlinInstant
         val expiredSessions = db.transaction {
-            repository.markExpired(now)
+            with(repository) {
+                markExpired(now)
 
-            val expiredSessions = repository.findExpiredSessions()
+                val expiredSessions = findExpiredSessions()
 
-            // Batch archive and delete to avoid N+1 queries
-            if (expiredSessions.isNotEmpty()) {
-                repository.archiveSessionsToHistory(expiredSessions, SessionEndReason.EXPIRED, null)
-                repository.deleteSessions(expiredSessions.map { it.id })
+                if (expiredSessions.isNotEmpty()) {
+                    archiveSessionsToHistory(expiredSessions, SessionEndReason.EXPIRED, null)
+                    deleteSessions(expiredSessions.map { it.id })
+                }
+
+                expiredSessions
             }
-
-            expiredSessions
         }
 
         expiredSessions.forEach { session ->
@@ -289,6 +300,6 @@ internal class DefaultSessionService(
 
     override suspend fun cleanupOldHistory(): Int = db.transaction {
         val cutoffTime = CurrentKotlinInstant - config.sessionHistoryRetention
-        repository.deleteOldHistory(cutoffTime)
+        with(repository) { deleteOldHistory(cutoffTime) }
     }
 }

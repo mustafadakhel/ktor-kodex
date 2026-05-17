@@ -1,5 +1,8 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.observability
 
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import java.sql.SQLException
 import kotlin.time.measureTimedValue
@@ -23,7 +26,7 @@ public class KodexHealth(private val db: KodexDatabase) {
         return try {
             val (_, duration) = measureTimedValue {
                 db.transaction {
-                    conn.prepareStatement("SELECT 1").executeQuery()
+                    conn.prepareStatement("SELECT 1").use { ps -> ps.executeQuery().use { } }
                 }
             }
 

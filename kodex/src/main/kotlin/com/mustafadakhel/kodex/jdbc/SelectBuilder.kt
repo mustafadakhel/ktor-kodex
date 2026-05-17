@@ -1,3 +1,5 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.jdbc
 
 import java.sql.Connection
@@ -8,6 +10,7 @@ public data class JoinClause(
     val on: WhereClause,
 )
 
+@InternalKodexApi
 public class SelectBuilder(
     private val table: TableDef,
     private val conn: Connection,

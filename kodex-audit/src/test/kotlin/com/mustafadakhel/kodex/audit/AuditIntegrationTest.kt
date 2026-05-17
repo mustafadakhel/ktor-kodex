@@ -1,23 +1,21 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.audit
 
 import com.mustafadakhel.kodex.audit.schema.AuditSchema
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import io.kotest.core.spec.style.FunSpec
-import io.kotest.matchers.booleans.shouldBeTrue
-import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.selectAll
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.hours
 
 class AuditIntegrationTest : FunSpec({
 
@@ -26,20 +24,18 @@ class AuditIntegrationTest : FunSpec({
     val timeZone = TimeZone.UTC
 
     beforeTest {
-        val database = Database.connect(
-            "jdbc:h2:mem:audit_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
-        val core = CoreSchema("test_")
-        auditSchema = AuditSchema(core)
-        db = KodexDatabase(database, core, mapOf(AuditSchema::class to auditSchema))
-        db.createSchema()
-    }
-
-    afterTest {
-        db.transaction {
-            SchemaUtils.drop(auditSchema.auditEvents)
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:audit_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
         }
+        val core = CoreSchema("test_")
+        auditSchema = AuditSchema(core.prefix)
+        db = KodexDatabase(
+            dataSource = ds,
+            dialect = DatabaseDialect.H2,
+            core = core,
+            extensionSchemas = mapOf(AuditSchema::class to auditSchema)
+        )
+        db.createSchema()
     }
 
     context("Event Persistence") {
@@ -63,7 +59,7 @@ class AuditIntegrationTest : FunSpec({
             provider.log(event)
 
             val count = db.transaction {
-                auditSchema.auditEvents.selectAll().count()
+                select(auditSchema.auditEvents).count()
             }
             count shouldBe 1
         }
@@ -84,7 +80,7 @@ class AuditIntegrationTest : FunSpec({
             }
 
             val count = db.transaction {
-                auditSchema.auditEvents.selectAll().count()
+                select(auditSchema.auditEvents).count()
             }
             count shouldBe 5
         }
@@ -109,9 +105,9 @@ class AuditIntegrationTest : FunSpec({
 
             provider.log(event)
 
-            // Verify by reading back the metadata JSON from the raw table
             val metadataJson = db.transaction {
-                auditSchema.auditEvents.selectAll().first()[auditSchema.auditEvents.metadata]
+                select(auditSchema.auditEvents)
+                    .firstOrNull { it[auditSchema.auditEvents.metadata] }!!
             }
 
             metadataJson shouldContain "&lt;script&gt;"
@@ -139,7 +135,8 @@ class AuditIntegrationTest : FunSpec({
             provider.log(event)
 
             val metadataJson = db.transaction {
-                auditSchema.auditEvents.selectAll().first()[auditSchema.auditEvents.metadata]
+                select(auditSchema.auditEvents)
+                    .firstOrNull { it[auditSchema.auditEvents.metadata] }!!
             }
 
             metadataJson shouldContain "[REDACTED]"
@@ -176,7 +173,7 @@ class AuditIntegrationTest : FunSpec({
             deletedCount shouldBe 1
 
             val remaining = db.transaction {
-                auditSchema.auditEvents.selectAll().count()
+                select(auditSchema.auditEvents).count()
             }
             remaining shouldBe 1
         }
@@ -186,7 +183,10 @@ class AuditIntegrationTest : FunSpec({
         test("should not throw exception on database errors") {
             val provider = DatabaseAuditProvider(db, auditSchema)
 
-            db.transaction { SchemaUtils.drop(auditSchema.auditEvents) }
+            // Drop the table via raw JDBC to simulate a database error
+            db.dataSource.connection.use { conn ->
+                conn.createStatement().use { it.execute("DROP TABLE ${auditSchema.auditEvents.tableName}") }
+            }
 
             val event = AuditEvent(
                 eventType = "TEST", timestamp = CurrentKotlinInstant,
@@ -196,7 +196,14 @@ class AuditIntegrationTest : FunSpec({
             // Should not throw
             provider.log(event)
 
-            db.transaction { SchemaUtils.create(auditSchema.auditEvents) }
+            // Recreate the table for subsequent tests
+            db.dataSource.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    for (sql in auditSchema.ddl(DatabaseDialect.H2)) {
+                        stmt.execute(sql)
+                    }
+                }
+            }
         }
     }
 

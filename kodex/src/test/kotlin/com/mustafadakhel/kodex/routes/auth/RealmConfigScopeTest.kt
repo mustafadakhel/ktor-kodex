@@ -4,19 +4,20 @@ import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.extension.RealmExtension
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 
 private class TestExtensionConfig : ExtensionConfig() {
     var value: String = "default"
 
-    override fun build(context: ExtensionContext): RealmExtension {
+    override fun build(context: ExtensionContext, db: KodexDatabase): RealmExtension {
         return object : RealmExtension {}
     }
 }
 
 private class AnotherExtensionConfig : ExtensionConfig() {
-    override fun build(context: ExtensionContext): RealmExtension {
+    override fun build(context: ExtensionContext, db: KodexDatabase): RealmExtension {
         return object : RealmExtension {}
     }
 }

@@ -77,8 +77,8 @@ class UserManagementTest : FunSpec({
                 fullUser.profile!!.profilePicture shouldBe "https://example.com/pic.jpg"
 
                 // Verify custom attributes
-                fullUser.customAttributes.shouldNotBeNull()
-                fullUser.customAttributes shouldContainExactly mapOf("dept" to "engineering", "level" to "senior")
+                val attrs = fullUser.customAttributes.shouldNotBeNull()
+                attrs shouldContainExactly mapOf("dept" to "engineering", "level" to "senior")
 
                 // Verify auto-added realm owner role
                 fullUser.roles.any { it.name == "test-realm" } shouldBe true

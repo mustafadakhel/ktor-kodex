@@ -41,10 +41,6 @@ dependencies {
     // Depend on core kodex module
     api(project(":kodex"))
 
-    // Database dependencies (Exposed)
-    implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.datetime)
-
     // Ktor dependencies (for KtorDsl annotation)
     implementation(libs.bundles.ktor.server)
 
@@ -52,6 +48,7 @@ dependencies {
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.h2.database)
+    testImplementation(testFixtures(project(":kodex")))
 }
 
 mavenPublishing {

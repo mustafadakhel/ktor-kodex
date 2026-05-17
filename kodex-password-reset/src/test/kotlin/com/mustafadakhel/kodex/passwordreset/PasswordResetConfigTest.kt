@@ -4,7 +4,11 @@ import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
@@ -12,6 +16,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.mockk.mockk
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -33,6 +38,14 @@ class PasswordResetConfigTest : FunSpec({
         override val eventBus = mockEventBus
         override val rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
     }
+
+    val stubSchema = PasswordResetSchema("test_")
+    val stubDb = KodexDatabase(
+        dataSource = mockk(relaxed = true),
+        dialect = DatabaseDialect.H2,
+        core = CoreSchema("test_"),
+        extensionSchemas = mapOf(PasswordResetSchema::class to stubSchema)
+    )
 
     val mockSender = object : PasswordResetSender {
         override suspend fun send(recipient: String, token: String, expiresAt: String) {
@@ -66,7 +79,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             // Should not throw
-            val extension = config.build(testContext)
+            val extension = config.build(testContext, stubDb)
             extension.shouldNotBeNull()
         }
     }
@@ -276,7 +289,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "PasswordResetConfig validation failed"
@@ -295,7 +308,7 @@ class PasswordResetConfigTest : FunSpec({
 
             // Build should still throw even if we already know validation failed
             shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
         }
 
@@ -306,7 +319,7 @@ class PasswordResetConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "cooldownPeriod should not exceed 1 hour"

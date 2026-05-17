@@ -7,6 +7,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.ktor.server.application.*
 import io.ktor.server.testing.*
 import kotlin.math.abs
@@ -370,10 +371,9 @@ class AuthFlowSecurityTest : FunSpec({
                 tokens3.access.shouldNotBeNull()
 
                 // Each device should have a unique token
-                tokens1.access shouldBe tokens1.access // self-equality check
-                (tokens1.access != tokens2.access) shouldBe true
-                (tokens2.access != tokens3.access) shouldBe true
-                (tokens1.access != tokens3.access) shouldBe true
+                tokens1.access shouldNotBe tokens2.access
+                tokens2.access shouldNotBe tokens3.access
+                tokens1.access shouldNotBe tokens3.access
             }
         }
     }

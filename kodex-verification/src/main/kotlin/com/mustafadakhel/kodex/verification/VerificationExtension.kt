@@ -1,66 +1,26 @@
 package com.mustafadakhel.kodex.verification
 
-import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.LoginMetadata
-import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.ratelimit.RateLimiter
-import com.mustafadakhel.kodex.schema.CoreSchema
-import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
-import com.mustafadakhel.kodex.schema.ExtensionSchema
-import com.mustafadakhel.kodex.schema.KodexDatabase
-import com.mustafadakhel.kodex.verification.schema.VerificationSchema
-import kotlinx.datetime.TimeZone
 import java.util.UUID
 import kotlin.reflect.KClass
 
 public class VerificationExtension internal constructor(
     private val config: VerificationConfig,
-    private val timeZone: TimeZone,
-    private val eventBus: EventBus?,
-    private val realm: String,
-    private val rateLimiter: RateLimiter
-) : UserLifecycleHooks, PersistentExtension, EventSubscriberProvider, ServiceProvider, DatabaseAwareExtension {
+    private val verificationService: VerificationService,
+    private val tokenCleanupService: TokenCleanupService
+) : UserLifecycleHooks, EventSubscriberProvider, ServiceProvider {
 
     override val priority: Int = 50
-
-    public lateinit var verificationService: VerificationService
-        private set
-    public lateinit var tokenCleanupService: TokenCleanupService
-        private set
-
-    override fun createSchema(core: CoreSchema): ExtensionSchema = VerificationSchema(core)
-
-    override fun initialize(db: KodexDatabase) {
-        val schema = db.schema<VerificationSchema>()
-
-        verificationService = DefaultVerificationService(
-            db = db,
-            schema = schema,
-            config = config,
-            timeZone = timeZone,
-            eventBus = eventBus,
-            realm = realm,
-            rateLimiter = rateLimiter
-        )
-
-        tokenCleanupService = DefaultTokenCleanupService(
-            db = db,
-            schema = schema,
-            timeZone = timeZone,
-            eventBus = eventBus,
-            realm = realm
-        )
-    }
 
     override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
         return identifier
@@ -99,8 +59,7 @@ public class VerificationExtension internal constructor(
         }
     }
 
-    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
-        return listOf(
+    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> = listOf(
             object : EventSubscriber<UserEvent.Created> {
                 override val eventType = UserEvent.Created::class
 
@@ -152,15 +111,12 @@ public class VerificationExtension internal constructor(
                     }
                 }
             }
-        )
-    }
+    )
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : Any> getService(type: KClass<T>): T? {
-        return when (type) {
-            VerificationService::class -> verificationService as T
-            TokenCleanupService::class -> tokenCleanupService as T
-            else -> null
-        }
+    override fun <T : Any> getService(type: KClass<T>): T? = when (type) {
+        VerificationService::class -> verificationService as T
+        TokenCleanupService::class -> tokenCleanupService as T
+        else -> null
     }
 }

@@ -4,8 +4,12 @@ import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.mfa.encryption.AesGcmSecretEncryption
 import com.mustafadakhel.kodex.mfa.encryption.SecretEncryption
+import com.mustafadakhel.kodex.mfa.schema.MfaSchema
 import com.mustafadakhel.kodex.mfa.sender.MfaCodeSender
+import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 import com.mustafadakhel.kodex.mfa.totp.TotpAlgorithm
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
@@ -56,15 +60,8 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
 
     public var emailSender: MfaCodeSender? = null
 
-    public var totpEnabled: Boolean = true
-    public var totpIssuer: String = "KodexAuth"
-    public var totpAlgorithm: TotpAlgorithm = TotpAlgorithm.SHA1
-    public var totpDigits: Int = 6
-    public var totpPeriod: Duration = 30.seconds
-    public var totpTimeStepWindow: Int = 1
-
-    public var backupCodesCount: Int = 10
-    public var backupCodeLength: Int = 8
+    internal val totp: TotpMfaConfig = TotpMfaConfig()
+    internal val backup: BackupCodesConfig = BackupCodesConfig()
 
     public var secretEncryption: SecretEncryption? = null
     public var hashingService: HashingService? = null
@@ -77,23 +74,20 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
 
     public fun emailMfa(block: EmailMfaConfig.() -> Unit) {
         val config = EmailMfaConfig().apply(block)
+        if (config.enabled) {
+            requireNotNull(config.sender) {
+                "emailMfa: 'sender' must be configured when email MFA is enabled"
+            }
+        }
         emailSender = config.sender
     }
 
     public fun totpMfa(block: TotpMfaConfig.() -> Unit) {
-        val config = TotpMfaConfig().apply(block)
-        totpEnabled = config.enabled
-        totpIssuer = config.issuer
-        totpAlgorithm = config.algorithm
-        totpDigits = config.digits
-        totpPeriod = config.period
-        totpTimeStepWindow = config.timeStepWindow
+        totp.apply(block)
     }
 
     public fun backupCodes(block: BackupCodesConfig.() -> Unit) {
-        val config = BackupCodesConfig().apply(block)
-        backupCodesCount = config.codeCount
-        backupCodeLength = config.codeLength
+        backup.apply(block)
     }
 
     public fun encryption(block: EncryptionConfig.() -> Unit) {
@@ -110,11 +104,11 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
         require(codeExpiration.inWholeMinutes in 1..30) { "codeExpiration must be 1-30 minutes" }
         require(maxEnrollAttemptsPerUser > 0) { "maxEnrollAttemptsPerUser must be positive" }
         require(maxVerifyAttempts > 0) { "maxVerifyAttempts must be positive" }
-        require(totpDigits in 6..8) { "totpDigits must be 6, 7, or 8" }
-        require(totpPeriod.inWholeSeconds in 15..120) { "totpPeriod must be 15-120 seconds" }
-        require(totpTimeStepWindow in 0..2) { "totpTimeStepWindow must be 0-2" }
-        require(backupCodesCount in 5..20) { "backupCodesCount must be 5-20" }
-        require(backupCodeLength in 6..12) { "backupCodeLength must be 6-12" }
+        require(totp.digits in 6..8) { "totpDigits must be 6, 7, or 8" }
+        require(totp.period.inWholeSeconds in 15..120) { "totpPeriod must be 15-120 seconds" }
+        require(totp.timeStepWindow in 0..2) { "totpTimeStepWindow must be 0-2" }
+        require(backup.codeCount in 5..20) { "backupCodesCount must be 5-20" }
+        require(backup.codeLength in 6..12) { "backupCodeLength must be 6-12" }
         require(secretEncryption != null) { "secretEncryption must be configured" }
         require(hashingService != null) { "hashingService must be configured" }
         require(cleanupInterval.inWholeMinutes >= 1) { "cleanupInterval must be at least 1 minute" }
@@ -124,7 +118,9 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
         }
     }
 
-    override fun build(context: ExtensionContext): MfaExtension {
+    override fun schema(tablePrefix: String): ExtensionSchema = MfaSchema(tablePrefix)
+
+    override fun build(context: ExtensionContext, db: KodexDatabase): MfaExtension {
         val validationResult = validate()
         if (!validationResult.isValid()) {
             throw IllegalStateException(
@@ -133,14 +129,42 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
             )
         }
 
-        return MfaExtension(
+        val realmId = context.realm.name
+        val schema = db.schema<MfaSchema>()
+
+        val sessionStore = MfaSessionStore(
+            sessionExpiration = sessionExpiration,
+            maxActiveSessions = maxActiveSessions
+        )
+
+        val mfaService = DefaultMfaService(
+            db = db,
+            schema = schema,
             config = this,
             timeZone = context.timeZone,
             hashingService = hashingService!!,
             secretEncryption = secretEncryption!!,
             eventBus = context.eventBus,
-            realmId = context.realm.name,
-            rateLimiter = context.rateLimiter
+            realmId = realmId,
+            rateLimiter = context.rateLimiter,
+            sessionStore = sessionStore
+        )
+
+        val cleanupService = DefaultMfaCleanupService(
+            db = db,
+            schema = schema,
+            realmId = realmId,
+            timeZone = context.timeZone,
+            sessionStore = sessionStore,
+            inactiveEnrollmentExpiration = inactiveEnrollmentExpiration
+        )
+
+        return MfaExtension(
+            config = this,
+            mfaService = mfaService,
+            cleanupService = cleanupService,
+            sessionStore = sessionStore,
+            realmId = realmId
         )
     }
 }
@@ -148,7 +172,7 @@ public class MfaConfig : ExtensionConfig(), ValidatableConfig {
 @KtorDsl
 public class EmailMfaConfig {
     public var enabled: Boolean = true
-    public lateinit var sender: MfaCodeSender
+    public var sender: MfaCodeSender? = null
 }
 
 @KtorDsl

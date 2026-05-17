@@ -1,5 +1,8 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.token.cleanup
 
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.and
 import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.jdbc.isNotNull

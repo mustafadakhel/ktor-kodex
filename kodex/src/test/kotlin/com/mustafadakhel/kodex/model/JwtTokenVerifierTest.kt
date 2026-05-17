@@ -3,7 +3,6 @@ package com.mustafadakhel.kodex.model
 import com.mustafadakhel.kodex.model.database.PersistedToken
 import com.mustafadakhel.kodex.model.database.RoleEntity
 import com.mustafadakhel.kodex.repository.TokenRepository
-import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.SaltedHashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.DecodedToken
@@ -47,19 +46,11 @@ class JwtTokenVerifierTest : FunSpec({
         )
     }
     val realm = Realm("test-realm")
-    val userRepository = mockk<UserRepository> {
-        every { findRoles(any()) } returns listOf(
-            RoleEntity("user", null),
-            RoleEntity("admin", null)
-        )
-        every { findById(any()) } returns null
-        every { findFullById(any()) } returns null
-    }
     val tokenPersistence = mapOf(
         TokenType.AccessToken to true,
         TokenType.RefreshToken to true
     )
-    every { claimsValidator.validate(any(), any(), any()) } returns true
+    every { claimsValidator.validate(any(), any()) } returns true
 
     test("valid persisted token passes verification") {
         val decoded = DecodedToken(
@@ -77,7 +68,7 @@ class JwtTokenVerifierTest : FunSpec({
             hashingService = hashingService,
             tokenRepository = tokenRepository,
             tokenPersistence = tokenPersistence,
-            userRepository = userRepository,
+
             realm = realm
         )
         shouldNotThrowAny {
@@ -98,7 +89,7 @@ class JwtTokenVerifierTest : FunSpec({
             hashingService = hashingService,
             tokenRepository = tokenRepository,
             tokenPersistence = tokenPersistence,
-            userRepository = userRepository,
+
             realm = realm
         )
         shouldThrow<KodexThrowable.Authorization.SuspiciousToken> {

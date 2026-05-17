@@ -1,7 +1,14 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.PasswordResetEvent
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.isNull
+import com.mustafadakhel.kodex.jdbc.neq
 import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
 import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
 import com.mustafadakhel.kodex.ratelimit.RateLimitResult
@@ -15,10 +22,6 @@ import com.mustafadakhel.kodex.tokens.token.TokenValidator
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
 internal class DefaultPasswordResetService(
@@ -81,16 +84,13 @@ internal class DefaultPasswordResetService(
         val expiresAt = ExpirationCalculator.calculateExpiration(config.tokenValidity, timeZone, clockNow)
 
         val userId = db.transaction {
-            val contact = contacts
-                .selectAll()
+            select(contacts)
                 .where {
                     (contacts.realmId eq realm) and
                     (contacts.contactType eq contactType.name) and
                     (contacts.contactValue eq identifier)
                 }
-                .singleOrNull()
-
-            contact?.get(contacts.userId)
+                .singleOrNull { row -> row[contacts.userId] }
         }
 
         if (userId == null) {
@@ -111,6 +111,21 @@ internal class DefaultPasswordResetService(
 
         val userReservationId = userReservation.reservationId
 
+        val hashedToken = TokenHasher.hash(token)
+
+        db.transaction {
+            insertInto(tokens) {
+                set(tokens.realmId, realm)
+                set(tokens.userId, userId)
+                set(tokens.token, hashedToken)
+                set(tokens.contactValue, identifier)
+                set(tokens.createdAt, now)
+                set(tokens.expiresAt, expiresAt)
+                set(tokens.usedAt, null)
+                set(tokens.ipAddress, ipAddress)
+            }
+        }
+
         try {
             passwordResetSender.send(
                 recipient = identifier,
@@ -118,6 +133,15 @@ internal class DefaultPasswordResetService(
                 expiresAt = expiresAt.toString()
             )
         } catch (e: Exception) {
+            db.transaction {
+                deleteFrom(tokens)
+                    .where {
+                        (tokens.realmId eq realm) and
+                            (tokens.userId eq userId) and
+                            (tokens.token eq hashedToken)
+                    }
+                    .execute()
+            }
             rateLimiter.releaseReservation(identifierReservation.reservationId)
             rateLimiter.releaseReservation(ipReservation?.reservationId)
             rateLimiter.releaseReservation(userReservationId)
@@ -131,20 +155,7 @@ internal class DefaultPasswordResetService(
                 reason = e.message ?: "Send failed"
             ))
 
-            return PasswordResetResult.Success
-        }
-
-        db.transaction {
-            tokens.insert {
-                it[tokens.realmId] = realm
-                it[tokens.userId] = userId
-                it[tokens.token] = TokenHasher.hash(token)
-                it[tokens.contactValue] = identifier
-                it[tokens.createdAt] = now
-                it[tokens.expiresAt] = expiresAt
-                it[tokens.usedAt] = null
-                it[tokens.ipAddress] = ipAddress
-            }
+            return PasswordResetResult.SendFailed(e.message ?: "Send failed")
         }
 
         eventBus?.publish(PasswordResetEvent.PasswordResetInitiated(
@@ -164,16 +175,19 @@ internal class DefaultPasswordResetService(
         val nowLocal = now.toLocalDateTime(timeZone)
 
         val result = db.transaction {
-            val resetToken = tokens
-                .selectAll()
+            val resetToken = select(tokens)
                 .where {
                     (tokens.realmId eq realm) and (tokens.token eq TokenHasher.hash(token))
                 }
-                .singleOrNull() ?: return@transaction TokenVerificationResult.Invalid("Token not found")
+                .singleOrNull { row ->
+                    Triple(row[tokens.expiresAt], row[tokens.usedAt], row[tokens.userId])
+                } ?: return@transaction TokenVerificationResult.Invalid("Token not found")
+
+            val (expiresAt, usedAt, userId) = resetToken
 
             val validation = TokenValidator.validate(
-                expiresAt = resetToken[tokens.expiresAt],
-                usedAt = resetToken[tokens.usedAt],
+                expiresAt = expiresAt,
+                usedAt = usedAt,
                 now = nowLocal
             )
 
@@ -181,7 +195,7 @@ internal class DefaultPasswordResetService(
                 return@transaction TokenVerificationResult.Invalid(validation.reason!!)
             }
 
-            TokenVerificationResult.Valid(resetToken[tokens.userId])
+            TokenVerificationResult.Valid(userId)
         }
 
         when (result) {
@@ -212,16 +226,20 @@ internal class DefaultPasswordResetService(
 
         val result = db.transaction {
             val hashedToken = TokenHasher.hash(token)
-            val resetToken = tokens
-                .selectAll()
+            val resetToken = select(tokens)
                 .where {
                     (tokens.realmId eq realm) and (tokens.token eq hashedToken)
                 }
-                .singleOrNull() ?: return@transaction TokenConsumptionResult.Invalid("Token not found")
+                .forUpdate()
+                .singleOrNull { row ->
+                    Triple(row[tokens.expiresAt], row[tokens.usedAt], row[tokens.userId])
+                } ?: return@transaction TokenConsumptionResult.Invalid("Token not found")
+
+            val (expiresAt, usedAt, userId) = resetToken
 
             val validation = TokenValidator.validate(
-                expiresAt = resetToken[tokens.expiresAt],
-                usedAt = resetToken[tokens.usedAt],
+                expiresAt = expiresAt,
+                usedAt = usedAt,
                 now = nowLocal
             )
 
@@ -229,21 +247,21 @@ internal class DefaultPasswordResetService(
                 return@transaction TokenConsumptionResult.Invalid(validation.reason!!)
             }
 
-            val userId = resetToken[tokens.userId]
-
-            tokens.update({
-                (tokens.realmId eq realm) and (tokens.token eq hashedToken)
-            }) {
-                it[tokens.usedAt] = nowLocal
+            update(tokens) {
+                set(tokens.usedAt, nowLocal)
+                where {
+                    (tokens.realmId eq realm) and (tokens.token eq hashedToken)
+                }
             }
 
-            tokens.update({
-                (tokens.realmId eq realm) and
-                (tokens.userId eq userId) and
-                (tokens.token neq hashedToken) and
-                (tokens.usedAt.isNull())
-            }) {
-                it[tokens.usedAt] = nowLocal
+            update(tokens) {
+                set(tokens.usedAt, nowLocal)
+                where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.token neq hashedToken) and
+                    (tokens.usedAt.isNull())
+                }
             }
 
             TokenConsumptionResult.Success(userId)
@@ -277,12 +295,13 @@ internal class DefaultPasswordResetService(
         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         db.transaction {
-            tokens.update({
-                (tokens.realmId eq realm) and
-                (tokens.userId eq userId) and
-                (tokens.usedAt.isNull())
-            }) {
-                it[tokens.usedAt] = now
+            update(tokens) {
+                set(tokens.usedAt, now)
+                where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.usedAt.isNull())
+                }
             }
         }
     }

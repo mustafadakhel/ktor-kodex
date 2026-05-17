@@ -12,7 +12,8 @@ import java.util.*
  * Validates and sanitizes user input before persistence.
  */
 public class ValidationExtension internal constructor(
-    private val service: ValidationService
+    private val service: ValidationService,
+    private val profileConfig: ProfileValidationConfig = ProfileValidationConfig()
 ) : UserLifecycleHooks {
 
     override suspend fun beforeUserCreate(
@@ -54,6 +55,16 @@ public class ValidationExtension internal constructor(
             )
         }
 
+        // Validate profile picture length if provided
+        profile?.profilePicture?.let { pic ->
+            if (pic.length > profileConfig.maxProfilePictureLength) {
+                throw ValidationThrowable.InvalidInput(
+                    field = "profilePicture",
+                    errors = listOf("profilePicture exceeds maximum length of ${profileConfig.maxProfilePictureLength}")
+                )
+            }
+        }
+
         // Validate and sanitize custom attributes if provided
         val sanitizedAttributes = customAttributes?.let { attrs ->
             val attrsResult = service.validateCustomAttributes(attrs)
@@ -64,10 +75,7 @@ public class ValidationExtension internal constructor(
                 )
             }
 
-            // Sanitize values to prevent XSS
-            attrs.mapValues { (_, value) ->
-                service.sanitizeHtml(value, InputContext.PLAIN_TEXT)
-            }
+            attrsResult.sanitizedAttributes ?: attrs
         }
 
         return UserCreateData(
@@ -121,10 +129,7 @@ public class ValidationExtension internal constructor(
             )
         }
 
-        // Sanitize values to prevent XSS
-        return customAttributes.mapValues { (_, value) ->
-            service.sanitizeHtml(value, InputContext.PLAIN_TEXT)
-        }
+        return attrsResult.sanitizedAttributes ?: customAttributes
     }
 
     override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String = identifier

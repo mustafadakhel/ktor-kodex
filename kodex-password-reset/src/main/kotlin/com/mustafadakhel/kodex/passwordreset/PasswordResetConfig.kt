@@ -2,10 +2,12 @@ package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
 import com.mustafadakhel.kodex.validation.validate
-import kotlinx.datetime.TimeZone
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -65,7 +67,9 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
         requireNotNull(passwordResetSender, "passwordResetSender")
     }
 
-    override fun build(context: ExtensionContext): PasswordResetExtension {
+    override fun schema(tablePrefix: String): ExtensionSchema = PasswordResetSchema(tablePrefix)
+
+    override fun build(context: ExtensionContext, db: KodexDatabase): PasswordResetExtension {
         // Validate configuration before building
         val validationResult = validate()
         if (!validationResult.isValid()) {
@@ -89,13 +93,34 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
             )
         )
 
-        return PasswordResetExtension(
+        val realm = context.realm.name
+        val schema = db.schema<PasswordResetSchema>()
+
+        val passwordResetService = DefaultPasswordResetService(
+            db = db,
+            schema = schema,
             config = config,
             passwordResetSender = sender,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.name,
+            realm = realm,
             rateLimiter = context.rateLimiter
+        )
+
+        val tokenCleanupService = DefaultTokenCleanupService(
+            db = db,
+            schema = schema,
+            timeZone = context.timeZone,
+            eventBus = context.eventBus,
+            realm = realm
+        )
+
+        return PasswordResetExtension(
+            passwordResetService = passwordResetService,
+            tokenCleanupService = tokenCleanupService,
+            db = db,
+            schema = schema,
+            timeZone = context.timeZone
         )
     }
 }

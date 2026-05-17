@@ -240,4 +240,51 @@ class SqlTypeTest {
         type.get(rs, "nullable_str") shouldBe "not null"
         rs.close()
     }
+
+    @Test
+    fun `NullableSqlType LocalDateTimeType returns null for SQL NULL`() {
+        conn.createStatement().execute("DELETE FROM type_test")
+        val type = NullableSqlType(LocalDateTimeType)
+        val id = UUID.randomUUID()
+        val rs = insertAndRead { c ->
+            c.prepareStatement("INSERT INTO type_test (id) VALUES (?)").use { ps ->
+                UuidType.set(ps, 1, id)
+                ps.executeUpdate()
+            }
+        }
+        type.get(rs, "datetime_val").shouldBeNull()
+        rs.close()
+    }
+
+    @Test
+    fun `NullableSqlType InstantType returns null for SQL NULL`() {
+        conn.createStatement().execute("DELETE FROM type_test")
+        val type = NullableSqlType(InstantType)
+        val id = UUID.randomUUID()
+        val rs = insertAndRead { c ->
+            c.prepareStatement("INSERT INTO type_test (id) VALUES (?)").use { ps ->
+                UuidType.set(ps, 1, id)
+                ps.executeUpdate()
+            }
+        }
+        type.get(rs, "instant_val").shouldBeNull()
+        rs.close()
+    }
+
+    @Test
+    fun `NullableSqlType LocalDateTimeType returns value for non-NULL`() {
+        conn.createStatement().execute("DELETE FROM type_test")
+        val type = NullableSqlType(LocalDateTimeType)
+        val id = UUID.randomUUID()
+        val dt = LocalDateTime(2026, 5, 17, 10, 0, 0, 0)
+        val rs = insertAndRead { c ->
+            c.prepareStatement("INSERT INTO type_test (id, datetime_val) VALUES (?, ?)").use { ps ->
+                UuidType.set(ps, 1, id)
+                LocalDateTimeType.set(ps, 2, dt)
+                ps.executeUpdate()
+            }
+        }
+        type.get(rs, "datetime_val") shouldBe dt
+        rs.close()
+    }
 }

@@ -1,5 +1,8 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.repository.database
 
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.Row
 import com.mustafadakhel.kodex.jdbc.and
 import com.mustafadakhel.kodex.jdbc.eq
@@ -65,10 +68,9 @@ internal class JdbcTokenRepository(
     }
 
     override fun deleteToken(tokenId: UUID): Unit = db.transaction {
-        val deleted = deleteFrom(tokens)
+        deleteFrom(tokens)
             .where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
             .execute()
-        if (deleted == 0) throw NoSuchElementException("Token with id $tokenId not found")
     }
 
     override fun deleteToken(tokenHash: String): Unit = db.transaction {
@@ -119,6 +121,48 @@ internal class JdbcTokenRepository(
             .where { (tokens.tokenFamily eq tokenFamily) and (tokens.realmId eq realmId) }
             .map { it.toPersistedToken() }
     }
+
+    override fun consumeAndDeleteToken(tokenId: UUID, userId: UUID): PersistedToken? = db.transaction {
+        val token = select(tokens)
+            .where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
+            .forUpdate()
+            .singleOrNull { it.toPersistedToken() }
+            ?: return@transaction null
+
+        if (token.userId != userId || token.revoked) return@transaction null
+
+        deleteFrom(tokens)
+            .where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
+            .execute()
+
+        token
+    }
+
+    override fun consumeAndRevokeToken(tokenId: UUID, userId: UUID, now: LocalDateTime): PersistedToken? =
+        db.transaction {
+            val token = select(tokens)
+                .where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
+                .forUpdate()
+                .singleOrNull { it.toPersistedToken() }
+                ?: return@transaction null
+
+            if (token.userId != userId || token.revoked) return@transaction null
+
+            update(tokens) {
+                this[tokens.revoked] = true
+                if (token.firstUsedAt == null) {
+                    this[tokens.firstUsedAt] = now
+                    this[tokens.lastUsedAt] = now
+                }
+                where { (tokens.id eq tokenId) and (tokens.realmId eq realmId) }
+            }
+
+            token.copy(
+                revoked = true,
+                firstUsedAt = token.firstUsedAt ?: now,
+                lastUsedAt = token.lastUsedAt ?: now,
+            )
+        }
 
     private fun Row.toPersistedToken() = PersistedToken(
         id = this[tokens.id],

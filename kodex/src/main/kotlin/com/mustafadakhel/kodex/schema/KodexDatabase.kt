@@ -1,7 +1,10 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.schema
 
 import com.mustafadakhel.kodex.jdbc.ConnectionScope
 import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,6 +18,7 @@ public class KodexDatabase(
     @PublishedApi internal val extensionSchemas: Map<KClass<out ExtensionSchema>, ExtensionSchema> = emptyMap(),
     internal val ownsDataSource: Boolean = false,
 ) {
+    @InternalKodexApi
     public fun <R> transaction(block: ConnectionScope.() -> R): R {
         dataSource.connection.use { conn ->
             conn.autoCommit = false
@@ -29,6 +33,7 @@ public class KodexDatabase(
         }
     }
 
+    @InternalKodexApi
     public suspend fun <R> suspendTransaction(block: suspend ConnectionScope.() -> R): R =
         withContext(Dispatchers.IO) {
             dataSource.connection.use { conn ->
@@ -44,6 +49,7 @@ public class KodexDatabase(
             }
         }
 
+    @OptIn(InternalKodexApi::class)
     public fun createSchema() {
         transaction {
             val statements = coreDDL() + extensionSchemas.values.flatMap { it.ddl(dialect) }
@@ -55,12 +61,14 @@ public class KodexDatabase(
         }
     }
 
+    @OptIn(InternalKodexApi::class)
     public fun validateSchema() {
         transaction {
-            val rs = conn.metaData.getTables(null, null, null, arrayOf("TABLE"))
             val existing = mutableSetOf<String>()
-            while (rs.next()) {
-                existing.add(rs.getString("TABLE_NAME").uppercase())
+            conn.metaData.getTables(null, null, null, arrayOf("TABLE")).use { rs ->
+                while (rs.next()) {
+                    existing.add(rs.getString("TABLE_NAME").uppercase())
+                }
             }
 
             val expected = coreTableNames() + extensionSchemas.values.flatMap { it.tableNames() }

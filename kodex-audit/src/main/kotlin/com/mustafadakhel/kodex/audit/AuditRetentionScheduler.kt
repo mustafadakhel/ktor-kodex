@@ -18,7 +18,7 @@ internal class AuditRetentionScheduler(
     private val retentionService: AuditRetentionService,
     private val checkInterval: Duration
 ) {
-    private var schedulerJob: Job? = null
+    @Volatile private var schedulerJob: Job? = null
     private val logger = KodexLogger.logger<AuditRetentionScheduler>()
 
     fun start(scope: CoroutineScope) {

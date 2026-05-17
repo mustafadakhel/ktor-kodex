@@ -1,7 +1,10 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.jdbc
 
 import java.sql.Connection
 
+@InternalKodexApi
 public class DeleteBuilder(
     private val table: TableDef,
     private val conn: Connection,
@@ -22,24 +25,19 @@ public class DeleteBuilder(
     }
 
     public fun execute(): Int {
-        val where = whereClause
+        val where = requireNotNull(whereClause) {
+            "DeleteBuilder.execute() requires a WHERE clause. Use executeAll() to delete all rows."
+        }
         val limit = limitValue
 
-        require(limit == null || where != null) {
-            "DeleteBuilder.limit() requires a where clause. Use executeAll() to delete all rows."
-        }
-
         val sql = when {
-            where == null -> "DELETE FROM ${table.tableName}"
             limit == null -> "DELETE FROM ${table.tableName} WHERE ${where.sql}"
             else -> buildLimitedDeleteSql(where, limit)
         }
 
         return conn.prepareStatement(sql).use { ps ->
             var idx = 1
-            if (where != null) {
-                idx = where.params.bindTo(ps, idx)
-            }
+            idx = where.params.bindTo(ps, idx)
             if (limit != null) {
                 ps.setInt(idx, limit)
             }

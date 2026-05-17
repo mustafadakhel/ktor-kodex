@@ -33,6 +33,9 @@ public class InMemoryRateLimiter(
         limit: Int,
         window: Duration
     ): RateLimitResult {
+        if (keyLocks.size >= maxEntries && !keyLocks.containsKey(key)) {
+            performLazyCleanup(window)
+        }
         val lock = keyLocks.computeIfAbsent(key) { Any() }
 
         synchronized(lock) {
@@ -70,6 +73,9 @@ public class InMemoryRateLimiter(
         window: Duration,
         cooldown: Duration?
     ): RateLimitReservation {
+        if (keyLocks.size >= maxEntries && !keyLocks.containsKey(key)) {
+            performLazyCleanup(window)
+        }
         val lock = keyLocks.computeIfAbsent(key) { Any() }
 
         synchronized(lock) {

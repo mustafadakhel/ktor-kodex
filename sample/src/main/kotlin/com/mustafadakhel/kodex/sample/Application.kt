@@ -76,7 +76,7 @@ private fun Application.setupAuthentication() {
                     audience("claims-audience")
                 }
                 secrets {
-                    raw("secret", "secret2", "secret3")
+                    raw("this-is-a-sample-secret-at-least-32-chars-long")
                 }
 
                 // Rate limiter examples:
@@ -84,15 +84,15 @@ private fun Application.setupAuthentication() {
                 // - InMemoryRateLimiter (single instance)
                 // - RedisRateLimiter (distributed, single Redis)
                 // - RedisClusterRateLimiter (distributed, Redis Cluster HA)
+                rateLimiter(InMemoryRateLimiter(
+                    maxEntries = 100_000,
+                    cleanupAge = 5.minutes
+                ))
+
                 when (realm) {
                     DefaultRealms.AdminRealm -> {
-                        // No rate limiting
                     }
                     DefaultRealms.UserRealm -> {
-                        rateLimiter(InMemoryRateLimiter(
-                            maxEntries = 100_000,
-                            cleanupAge = 5.minutes
-                        ))
                     }
                 }
 
@@ -177,13 +177,12 @@ private fun Application.setupAuthentication() {
                     }
                 }
 
-                passwordReset(
-                    sender = object : PasswordResetSender {
+                passwordReset {
+                    passwordResetSender = object : PasswordResetSender {
                         override suspend fun send(recipient: String, token: String, expiresAt: String) {
                             println("Password reset token for $recipient: $token (expires: $expiresAt)")
                         }
                     }
-                ) {
                     tokenValidity = 15.minutes
                     maxAttemptsPerUser = 5
                     maxAttemptsPerIdentifier = 5
@@ -209,9 +208,10 @@ private fun Application.setupAuthentication() {
                     }
 
                     encryption {
+                        // Generate with: openssl rand -hex 32
                         aesGcm(
                             System.getenv("MFA_ENCRYPTION_KEY")
-                                ?: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                                ?: error("MFA_ENCRYPTION_KEY environment variable is required")
                         )
                     }
                 }
@@ -244,9 +244,8 @@ private fun Application.setupAuthentication() {
     install(StatusPages) {
         exception<Throwable> { call, cause ->
             call.application.environment.log.error("Unhandled exception", cause)
-            cause.printStackTrace()
             call.respondText(
-                text = "500: ${cause.message}\n\nStack trace:\n${cause.stackTraceToString()}",
+                text = "500: Internal Server Error",
                 status = HttpStatusCode.InternalServerError
             )
         }

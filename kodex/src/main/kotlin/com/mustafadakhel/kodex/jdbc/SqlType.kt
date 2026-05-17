@@ -70,12 +70,17 @@ public object InstantType : SqlType<Instant> {
 public object LocalDateTimeType : SqlType<LocalDateTime> {
     override val sqlName: String = "TIMESTAMP"
 
+    private val utcCalendar: java.util.Calendar
+        get() = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+
     override fun set(ps: PreparedStatement, index: Int, value: LocalDateTime) {
-        ps.setTimestamp(index, Timestamp.valueOf(value.toJavaLocalDateTime()))
+        ps.setTimestamp(index, Timestamp.valueOf(value.toJavaLocalDateTime()), utcCalendar)
     }
 
-    override fun get(rs: ResultSet, name: String): LocalDateTime =
-        rs.getTimestamp(name).toLocalDateTime().toKotlinLocalDateTime()
+    override fun get(rs: ResultSet, name: String): LocalDateTime {
+        val ts = rs.getTimestamp(name, utcCalendar)
+        return ts.toLocalDateTime().toKotlinLocalDateTime()
+    }
 }
 
 public class EnumByNameType<E : Enum<E>>(
@@ -116,7 +121,7 @@ public class NullableSqlType<T : Any>(public val inner: SqlType<T>) : SqlType<T?
     }
 
     override fun get(rs: ResultSet, name: String): T? {
-        rs.getObject(name) ?: return null
+        if (rs.getObject(name) == null) return null
         return inner.get(rs, name)
     }
 

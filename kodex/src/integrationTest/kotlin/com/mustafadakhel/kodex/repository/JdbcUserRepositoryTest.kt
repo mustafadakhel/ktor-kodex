@@ -1,6 +1,9 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.repository
 
 import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.model.Role
 import com.mustafadakhel.kodex.model.UserProfile
@@ -23,7 +26,7 @@ import kotlinx.datetime.LocalDateTime
 import org.h2.jdbcx.JdbcDataSource
 import java.util.*
 
-class ExposedUserRepositoryTest : FunSpec({
+class JdbcUserRepositoryTest : FunSpec({
 
     lateinit var userRepository: UserRepository
     lateinit var db: KodexDatabase

@@ -87,40 +87,36 @@ internal class DefaultUserService(
         roleNames: List<String>,
         customAttributes: Map<String, String>?,
         profile: UserProfile?
-    ): User? {
+    ): User {
         val timestamp = CurrentKotlinInstant
 
-        return try {
-            val transformed = hookExecutor.executeBeforeUserCreate(
-                email, phone, password, customAttributes, profile
-            )
+        val transformed = hookExecutor.executeBeforeUserCreate(
+            email, phone, password, customAttributes, profile
+        )
 
-            val result = userRepository.create(
-                email = transformed.email,
-                phone = transformed.phone,
-                hashedPassword = hashingService.hash(password),
-                roleNames = (listOf(realm.name) + roleNames).distinct(),
-                currentTime = nowLocal(timeZone),
-                customAttributes = transformed.customAttributes,
-                profile = transformed.profile,
-            )
-            val user = result.userOrThrow().toUser()
+        val result = userRepository.create(
+            email = transformed.email,
+            phone = transformed.phone,
+            hashedPassword = hashingService.hash(password),
+            roleNames = (listOf(realm.name) + roleNames).distinct(),
+            currentTime = nowLocal(timeZone),
+            customAttributes = transformed.customAttributes,
+            profile = transformed.profile,
+        )
+        val user = result.userOrThrow().toUser()
 
-            eventBus.publish(
-                UserEvent.Created(
-                    eventId = UUID.randomUUID(),
-                    timestamp = timestamp,
-                    realmId = realm.name,
-                    userId = user.id,
-                    email = email,
-                    phone = phone
-                )
+        eventBus.publish(
+            UserEvent.Created(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.name,
+                userId = user.id,
+                email = email,
+                phone = phone
             )
+        )
 
-            user
-        } catch (e: Exception) {
-            throw e
-        }
+        return user
     }
 
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {
@@ -203,6 +199,9 @@ internal class DefaultUserService(
                         newRoles = roleNames.toSet()
                     )
                 )
+            }
+            is UserRepository.UpdateRolesResult.UserNotFound -> {
+                throw KodexThrowable.UserNotFound(userId.toString())
             }
             is UserRepository.UpdateRolesResult.InvalidRole -> {
                 throw KodexThrowable.RoleNotFound(result.roleName)

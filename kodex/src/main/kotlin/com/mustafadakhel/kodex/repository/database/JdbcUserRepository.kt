@@ -1,6 +1,9 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.repository.database
 
 import com.mustafadakhel.kodex.jdbc.ConnectionScope
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.ConstraintViolationMapper
 import com.mustafadakhel.kodex.jdbc.InsertBuilder
 import com.mustafadakhel.kodex.jdbc.Row
@@ -510,7 +513,7 @@ internal class JdbcUserRepository(
         userId: UUID,
         roleNames: List<String>,
     ): UserRepository.UpdateRolesResult {
-        if (!userExistsInRealm(userId)) return UserRepository.UpdateRolesResult.InvalidRole("")
+        if (!userExistsInRealm(userId)) return UserRepository.UpdateRolesResult.UserNotFound
 
         val invalidRole = findFirstInvalidRole(roleNames)
         if (invalidRole != null) return UserRepository.UpdateRolesResult.InvalidRole(invalidRole)

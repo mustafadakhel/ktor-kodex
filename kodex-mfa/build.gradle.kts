@@ -81,9 +81,6 @@ dependencies {
     api(project(":kodex"))
     implementation(project(":kodex-tokens"))
 
-    implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.datetime)
-
     implementation(libs.bundles.ktor.server)
 
     implementation(libs.kotlinx.datetime)
@@ -103,6 +100,7 @@ dependencies {
     integrationTestImplementation(libs.logback.classic)
     integrationTestImplementation(project(":kodex-ratelimit-inmemory"))
     integrationTestImplementation(project(":kodex"))
+    integrationTestImplementation(testFixtures(project(":kodex")))
     integrationTestImplementation(libs.bundles.kotest)
     integrationTestImplementation(libs.kotlinx.serialization.json)
     integrationTestImplementation(libs.kotlin.otp)

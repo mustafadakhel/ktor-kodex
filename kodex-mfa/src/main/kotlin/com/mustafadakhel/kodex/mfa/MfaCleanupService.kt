@@ -1,16 +1,18 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.mfa
 
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.isNotNull
+import com.mustafadakhel.kodex.jdbc.less
 import com.mustafadakhel.kodex.mfa.schema.MfaSchema
 import com.mustafadakhel.kodex.mfa.session.MfaSessionStore
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
 import kotlin.time.Duration
 
 public interface MfaCleanupService {
@@ -67,9 +69,9 @@ internal class DefaultMfaCleanupService(
         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         return db.transaction {
-            challenges.deleteWhere {
-                (challenges.realmId eq realmId) and (challenges.expiresAt less now)
-            }
+            deleteFrom(challenges)
+                .where { (challenges.realmId eq realmId) and (challenges.expiresAt less now) }
+                .execute()
         }
     }
 
@@ -81,11 +83,13 @@ internal class DefaultMfaCleanupService(
         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
         return db.transaction {
-            trustedDevices.deleteWhere {
-                (trustedDevices.realmId eq realmId) and
-                (trustedDevices.expiresAt.isNotNull()) and
-                (trustedDevices.expiresAt less now)
-            }
+            deleteFrom(trustedDevices)
+                .where {
+                    (trustedDevices.realmId eq realmId) and
+                    (trustedDevices.expiresAt.isNotNull()) and
+                    (trustedDevices.expiresAt less now)
+                }
+                .execute()
         }
     }
 
@@ -93,12 +97,14 @@ internal class DefaultMfaCleanupService(
         val cutoffTime = CurrentKotlinInstant.minus(inactiveEnrollmentExpiration).toLocalDateTime(timeZone)
 
         return db.transaction {
-            methods.deleteWhere {
-                (methods.realmId eq realmId) and
-                (methods.methodType eq MfaMethodType.TOTP) and
-                (methods.isActive eq false) and
-                (methods.enrolledAt less cutoffTime)
-            }
+            deleteFrom(methods)
+                .where {
+                    (methods.realmId eq realmId) and
+                    (methods.methodType eq MfaMethodType.TOTP) and
+                    (methods.isActive eq false) and
+                    (methods.enrolledAt less cutoffTime)
+                }
+                .execute()
         }
     }
 

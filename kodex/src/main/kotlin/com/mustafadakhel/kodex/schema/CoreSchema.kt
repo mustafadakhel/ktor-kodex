@@ -17,7 +17,7 @@ public class CoreSchema(public val prefix: String = "kodex_") {
     public val userProfiles: UserProfilesTable = UserProfilesTable(prefix, users)
     public val userCustomAttributes: UserCustomAttributesTable = UserCustomAttributesTable(prefix, users)
 
-    public class UsersTable(prefix: String) : TableDef("${prefix}users") {
+    public class UsersTable(prefix: String) : TableDef("${prefix}users", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val passwordHash: Column<String> = varchar("password_hash", 255)
         public val email: Column<String?> = varchar("email", 255).nullable()
@@ -45,7 +45,7 @@ public class CoreSchema(public val prefix: String = "kodex_") {
         }
     }
 
-    public class RolesTable(prefix: String) : TableDef("${prefix}roles") {
+    public class RolesTable(prefix: String) : TableDef("${prefix}roles", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val name: Column<String> = varchar("name", 50)
         public val realmId: Column<String> = varchar("realm_id", 50)
@@ -62,14 +62,14 @@ public class CoreSchema(public val prefix: String = "kodex_") {
         prefix: String,
         users: UsersTable,
         roles: RolesTable,
-    ) : TableDef("${prefix}user_roles") {
+    ) : TableDef("${prefix}user_roles", prefix) {
         public val userId: Column<UUID> = uuid("user_id").references(users.id, ReferenceAction.CASCADE)
         public val roleId: Column<UUID> = uuid("role_id").references(roles.id, ReferenceAction.CASCADE)
 
         override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(userId, roleId)
     }
 
-    public class TokensTable(prefix: String, users: UsersTable) : TableDef("${prefix}tokens") {
+    public class TokensTable(prefix: String, users: UsersTable) : TableDef("${prefix}tokens", prefix) {
         public val id: Column<UUID> = uuid("id").autoGenerate()
         public val userId: Column<UUID> = uuid("user_id").references(users.id, ReferenceAction.CASCADE).index()
         public val tokenHash: Column<String> = text("token_hash").index()
@@ -86,7 +86,7 @@ public class CoreSchema(public val prefix: String = "kodex_") {
         override val primaryKey: PrimaryKeyDef = PrimaryKeyDef(id)
     }
 
-    public class UserProfilesTable(prefix: String, users: UsersTable) : TableDef("${prefix}user_profiles") {
+    public class UserProfilesTable(prefix: String, users: UsersTable) : TableDef("${prefix}user_profiles", prefix) {
         public val userId: Column<UUID> = uuid("user_id").references(users.id, ReferenceAction.CASCADE)
         public val firstName: Column<String?> = varchar("first_name", 255).nullable()
         public val lastName: Column<String?> = varchar("last_name", 255).nullable()
@@ -99,7 +99,7 @@ public class CoreSchema(public val prefix: String = "kodex_") {
     public class UserCustomAttributesTable(
         prefix: String,
         users: UsersTable,
-    ) : TableDef("${prefix}user_custom_attributes") {
+    ) : TableDef("${prefix}user_custom_attributes", prefix) {
         public val id: Column<Int> = integer("id").autoGenerate()
         public val userId: Column<UUID> = uuid("user_id").references(users.id, ReferenceAction.CASCADE)
         public val key: Column<String> = varchar("attr_key", 100)

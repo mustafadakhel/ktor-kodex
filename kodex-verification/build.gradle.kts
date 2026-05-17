@@ -81,10 +81,6 @@ dependencies {
     api(project(":kodex"))
     implementation(project(":kodex-tokens"))
 
-    // Database dependencies (Exposed)
-    implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.datetime)
-
     // Ktor dependencies (for KtorDsl annotation)
     implementation(libs.bundles.ktor.server)
 
@@ -101,6 +97,7 @@ dependencies {
     integrationTestImplementation(libs.bundles.kotest)
     integrationTestImplementation(project(":kodex-ratelimit-inmemory"))
     integrationTestImplementation(project(":kodex"))
+    integrationTestImplementation(testFixtures(project(":kodex")))
     integrationTestImplementation(project(":kodex-tokens"))
 }
 

@@ -9,7 +9,8 @@ internal interface TokenIssuer {
         validityMs: Long,
         tokenType: Claim.TokenType,
         roles: List<String>? = null,
-        tokenFamily: UUID? = null
+        tokenFamily: UUID? = null,
+        additionalClaims: Map<String, Any> = emptyMap()
     ): GeneratedToken
 }
 

@@ -5,13 +5,13 @@
 ## Features
 
 - **Multi realm support** – create independent authentication realms with their own secrets and claims
-- **JWT token generation and verification** – access and refresh tokens signed using HS256
+- **JWT token generation and verification** – access and refresh tokens signed using HMAC-SHA512
 - **Secure password hashing** – Argon2id with configurable parameters and industry presets
 - **Account lockout protection** – automatic brute force protection with configurable policies
 - **Token rotation** – automatic refresh token rotation with replay attack detection
 - **Input validation & sanitization** – optional RFC 5322 email, E.164 phone, password strength scoring, XSS protection
 - **Audit logging** – comprehensive event tracking with query and export capabilities for compliance
-- **Pluggable persistence** – tokens and user information are stored via Exposed and HikariCP
+- **Database persistence** – tokens and user information stored via plain JDBC with HikariCP connection pooling (H2 for testing, PostgreSQL for production)
 - **Role management** – roles are stored per realm and attached to issued tokens
 - **Ktor routing helpers** – easily protect routes and access realm services
 - **Extension system** – modular architecture for adding custom functionality via lifecycle hooks
@@ -112,7 +112,7 @@ realm("admin") {
 
 - **Lifecycle hooks:** Validate, transform, or reject operations before they execute
 - **Event subscribers:** Automatically registered and notified of domain events
-- **Database access:** Extensions can manage their own tables via `PersistentExtension`
+- **Database access:** Extensions can manage their own tables via `ExtensionSchema`
 - **Hook chaining:** Multiple lifecycle hooks execute in registration order
 - **Type safety:** Strongly-typed interfaces prevent runtime errors
 - **Async support:** Both hooks and event handlers are suspendable
@@ -155,33 +155,22 @@ dependencies {
 
 ### Database driver
 
-Kodex supports any JDBC-compatible database. You must add the appropriate driver to your project dependencies:
-
-**PostgreSQL:**
+Kodex supports **H2** (for testing) and **PostgreSQL** (for production). Add the appropriate driver to your project dependencies:
 
 ```kotlin
+// PostgreSQL (production)
 runtimeOnly("org.postgresql:postgresql:42.7.2")
-```
 
-**MySQL:**
-
-```kotlin
-runtimeOnly("com.mysql:mysql-connector-j:8.3.0")
-```
-
-**H2 (for testing):**
-
-```kotlin
+// H2 (testing / development)
 runtimeOnly("com.h2database:h2:2.3.232")
 ```
 
-Kodex uses the driver you provide through the `database` configuration block. Install and configure the plugin inside your `Application` module. The example below mirrors the setup found in the `sample` project:
+Install and configure the plugin inside your `Application` module. The `database` block configures a Kodex-managed HikariCP pool. The driver is inferred from the JDBC URL:
 
 ```kotlin
 fun Application.configureKodex() {
     install(Kodex) {
-        database { // HikariCP configuration scope
-            driverClassName = "org.postgresql.Driver"
+        database { // DatabaseConfigScope
             jdbcUrl = "jdbc:postgresql://localhost/db"
             username = "dbuser"
             password = "dbpass"
@@ -191,6 +180,21 @@ fun Application.configureKodex() {
         }
     }
 }
+```
+
+If you already manage your own `DataSource`, pass it directly:
+
+```kotlin
+install(Kodex) {
+    database(myDataSource, tablePrefix = "kodex_", autoCreateTables = true)
+    realm("admin") { /* ... */ }
+}
+```
+
+By default Kodex creates its tables automatically (`autoCreateTables = true`). If you prefer to manage the schema yourself, set `autoCreateTables = false` and use `generateDDL()` to obtain the required SQL statements:
+
+```kotlin
+val ddl: List<String> = application.kodex.database.generateDDL()
 ```
 
 Once installed you can obtain `KodexRealmServices` for a realm and use it to create users or issue tokens. Routes can be
@@ -242,7 +246,6 @@ realm("admin") {
     tokenValidity {
         access(1.hours)
         refresh(30.days)
-        persist(TokenType.AccessToken, true)
     }
     passwordHashing {
         algorithm = Argon2id.balanced()
@@ -256,20 +259,20 @@ realm("admin") {
 }
 ```
 
-Database connectivity is configured in the `database` block where a `HikariConfig` is available. After installation you
-can obtain services using `application.kodex.servicesOf(realm)`:
+After installation you can obtain services using `application.kodex.servicesOf(realm)`:
 
 ```kotlin
 val services = application.kodex.servicesOf(Realm("admin"))
 
 // User management operations
 val user = services.users.createUser(email, phone, password)
-services.users.setVerified(userId, true)
+services.users.updateUser(UpdateUserFields(userId, UserFieldUpdates(status = FieldUpdate.Set(UserStatus.ACTIVE))))
 services.users.updateUserRoles(userId, listOf("admin", "moderator"))
 
 // Authentication operations
-val tokens = services.auth.login(email, password)
+val tokens = services.auth.login(email, password, ipAddress, userAgent)
 services.auth.changePassword(userId, oldPassword, newPassword)
+services.auth.logout(userId)
 
 // Token operations
 val newTokens = services.tokens.refresh(userId, refreshToken)

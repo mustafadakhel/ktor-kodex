@@ -32,7 +32,7 @@ public class TokenCleanupService(
 ) {
     private val repository = TokenCleanupRepository(db, realmId)
     private val logger = KodexLogger.logger<TokenCleanupService>()
-    private var cleanupJob: Job? = null
+    @Volatile private var cleanupJob: Job? = null
 
     public fun start(scope: CoroutineScope) {
         cleanupJob?.cancel()

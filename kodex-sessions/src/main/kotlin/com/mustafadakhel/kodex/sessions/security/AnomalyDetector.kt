@@ -1,16 +1,24 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.sessions.security
 
+import com.mustafadakhel.kodex.jdbc.ConnectionScope
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.sessions.AnomalyDetectionConfig
 import com.mustafadakhel.kodex.sessions.database.SessionRepository
 import com.mustafadakhel.kodex.sessions.model.Session
 import java.util.UUID
 import kotlin.math.*
 
-public interface AnomalyDetector {
-    public suspend fun detectAnomalies(userId: UUID, newSession: Session, repository: SessionRepository): List<Anomaly>
+internal interface AnomalyDetector {
+    fun ConnectionScope.detectAnomalies(
+        userId: UUID,
+        newSession: Session,
+        repository: SessionRepository
+    ): List<Anomaly>
 }
 
-public data class Anomaly(
+internal data class Anomaly(
     val type: String,
     val details: Map<String, String>
 )
@@ -19,7 +27,7 @@ internal class DefaultAnomalyDetector(
     private val config: AnomalyDetectionConfig
 ) : AnomalyDetector {
 
-    override suspend fun detectAnomalies(
+    override fun ConnectionScope.detectAnomalies(
         userId: UUID,
         newSession: Session,
         repository: SessionRepository
@@ -43,13 +51,12 @@ internal class DefaultAnomalyDetector(
         return anomalies
     }
 
-    private fun detectNewDevice(
+    private fun ConnectionScope.detectNewDevice(
         userId: UUID,
         newSession: Session,
         repository: SessionRepository
     ): Anomaly? {
-        // Exclude current session to avoid false negatives
-        val previousDevices = repository.findPreviousDevices(userId, excludeSessionId = newSession.id)
+        val previousDevices = with(repository) { findPreviousDevices(userId, excludeSessionId = newSession.id) }
 
         return if (newSession.deviceFingerprint !in previousDevices) {
             Anomaly(
@@ -65,7 +72,7 @@ internal class DefaultAnomalyDetector(
         }
     }
 
-    private fun detectNewLocation(
+    private fun ConnectionScope.detectNewLocation(
         userId: UUID,
         newSession: Session,
         repository: SessionRepository
@@ -73,8 +80,9 @@ internal class DefaultAnomalyDetector(
         val newLat = newSession.latitude ?: return null
         val newLon = newSession.longitude ?: return null
 
-        // Exclude current session to get accurate previous locations
-        val previousLocations = repository.findPreviousLocations(userId, limit = 10, excludeSessionId = newSession.id)
+        val previousLocations = with(repository) {
+            findPreviousLocations(userId, limit = 10, excludeSessionId = newSession.id)
+        }
 
         if (previousLocations.isEmpty()) {
             return null

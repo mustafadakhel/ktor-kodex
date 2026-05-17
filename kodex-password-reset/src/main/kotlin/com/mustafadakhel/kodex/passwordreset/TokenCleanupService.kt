@@ -1,7 +1,15 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.TokenCleanupEvent
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.isNotNull
+import com.mustafadakhel.kodex.jdbc.less
+import com.mustafadakhel.kodex.jdbc.or
 import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
@@ -9,12 +17,6 @@ import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.or
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
@@ -42,12 +44,15 @@ internal class DefaultTokenCleanupService(
 
         do {
             val deletedInBatch = db.transaction {
-                tokens.deleteWhere(limit = batchSize) {
-                    (tokens.realmId eq realm) and (
-                        (tokens.usedAt.isNotNull() and (tokens.usedAt less cutoff)) or
-                        ((tokens.expiresAt less now) and (tokens.createdAt less cutoff))
-                    )
-                }
+                deleteFrom(tokens)
+                    .where {
+                        (tokens.realmId eq realm) and (
+                            (tokens.usedAt.isNotNull() and (tokens.usedAt less cutoff)) or
+                            ((tokens.expiresAt less now) and (tokens.createdAt less cutoff))
+                        )
+                    }
+                    .limit(batchSize)
+                    .execute()
             }
 
             totalDeleted += deletedInBatch

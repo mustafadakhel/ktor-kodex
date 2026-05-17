@@ -1,3 +1,5 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.jdbc
 
 import io.kotest.assertions.throwables.shouldThrow
@@ -356,6 +358,137 @@ class BuilderIntegrationTest {
             result.shouldNotBeNull()
             result.first.shouldBeNull()
             result.second.shouldBeNull()
+        }
+    }
+
+    @Nested
+    inner class SetExpressionTests {
+
+        @Test
+        fun `setExpression increments column atomically`() {
+            val id = insertUser("ExprUser", "expr@test.com", age = 10)
+            val scope = ConnectionScope(conn, DatabaseDialect.H2)
+
+            val updated = scope.update(users) {
+                setExpression(users.age, "${users.age.name} + 1")
+                where { users.id eq id }
+            }
+
+            updated shouldBe 1
+            val newAge = SelectBuilder(users, conn, DatabaseDialect.H2)
+                .where { users.id eq id }
+                .firstOrNull { row -> row[users.age] }
+            newAge shouldBe 11
+        }
+
+        @Test
+        fun `setExpression with conditional WHERE limits update`() {
+            val id = insertUser("ExprUser2", "expr2@test.com", age = 5)
+            val scope = ConnectionScope(conn, DatabaseDialect.H2)
+
+            val updated = scope.update(users) {
+                setExpression(users.age, "${users.age.name} + 1")
+                where { (users.id eq id) and (users.age less 3) }
+            }
+
+            updated shouldBe 0
+        }
+    }
+
+    @Nested
+    inner class InsertOrIgnoreTests {
+
+        @Test
+        fun `insertOrIgnore returns 1 for new row`() {
+            val scope = ConnectionScope(conn, DatabaseDialect.H2)
+            val result = scope.insertOrIgnore(users, listOf(users.email)) {
+                this[users.id] = UUID.randomUUID()
+                this[users.name] = "NewUser"
+                this[users.email] = "new@test.com"
+            }
+            result shouldBe 1
+        }
+
+        @Test
+        fun `insertOrIgnore on conflict returns 0 and preserves existing row`() {
+            insertUser("Existing", "existing@test.com")
+            val scope = ConnectionScope(conn, DatabaseDialect.H2)
+            val result = scope.insertOrIgnore(users, listOf(users.email)) {
+                this[users.id] = UUID.randomUUID()
+                this[users.name] = "Duplicate"
+                this[users.email] = "existing@test.com"
+            }
+            result shouldBe 0
+            val name = SelectBuilder(users, conn, DatabaseDialect.H2)
+                .where { users.email eq "existing@test.com" }
+                .firstOrNull { row -> row[users.name] }
+            name shouldBe "Existing"
+        }
+    }
+
+    @Nested
+    inner class UpdateBuilderEdgeCases {
+
+        @Test
+        fun `execute without WHERE throws`() {
+            insertUser("Alice", "alice@test.com")
+            shouldThrow<IllegalArgumentException> {
+                UpdateBuilder(users, conn).apply {
+                    this[users.name] = "Updated"
+                }.execute()
+            }
+        }
+
+        @Test
+        fun `executeAll updates all rows`() {
+            insertUser("Alice", "alice@test.com")
+            insertUser("Bob", "bob@test.com")
+            val count = UpdateBuilder(users, conn).apply {
+                this[users.active] = false
+            }.executeAll()
+            count shouldBe 2
+        }
+    }
+
+    @Nested
+    inner class DeleteBuilderEdgeCases {
+
+        @Test
+        fun `execute without WHERE throws`() {
+            insertUser("Alice", "alice@test.com")
+            shouldThrow<IllegalArgumentException> {
+                DeleteBuilder(users, conn, DatabaseDialect.H2).execute()
+            }
+        }
+    }
+
+    @Nested
+    inner class SelectBuilderEdgeCases {
+
+        @Test
+        fun `count on empty table returns 0`() {
+            SelectBuilder(users, conn, DatabaseDialect.H2).count() shouldBe 0
+        }
+
+        @Test
+        fun `limit with offset`() {
+            insertUser("A", "a@test.com")
+            insertUser("B", "b@test.com")
+            insertUser("C", "c@test.com")
+            val names = SelectBuilder(users, conn, DatabaseDialect.H2)
+                .orderBy(users.name, SortOrder.ASC)
+                .limit(1)
+                .offset(1)
+                .map { row -> row[users.name] }
+            names shouldHaveSize 1
+            names[0] shouldBe "B"
+        }
+
+        @Test
+        fun `map on empty table returns empty list`() {
+            val results = SelectBuilder(users, conn, DatabaseDialect.H2)
+                .map { row -> row[users.name] }
+            results shouldHaveSize 0
         }
     }
 }

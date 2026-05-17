@@ -1,7 +1,5 @@
 package com.mustafadakhel.kodex.extension
 
-import com.mustafadakhel.kodex.schema.CoreSchema
-import com.mustafadakhel.kodex.schema.ExtensionSchema
 import kotlin.reflect.KClass
 
 public interface RealmExtension {
@@ -9,8 +7,13 @@ public interface RealmExtension {
     public val priority: Int get() = 100
 }
 
-public interface PersistentExtension : RealmExtension {
-    public fun createSchema(core: CoreSchema): ExtensionSchema
+/**
+ * Interface for extensions that own resources requiring cleanup on application shutdown.
+ * Extensions implementing this will have [shutdown] called during [ApplicationStopping],
+ * before the database connection is closed.
+ */
+public interface Shutdownable {
+    public fun shutdown()
 }
 
 public class ExtensionRegistry internal constructor(
@@ -29,12 +32,11 @@ public class ExtensionRegistry internal constructor(
         return extensions.containsKey(extensionClass) && extensions[extensionClass]?.isNotEmpty() == true
     }
 
-    public fun collectSchemas(core: CoreSchema): Map<KClass<out ExtensionSchema>, ExtensionSchema> {
-        return extensions.values
-            .flatten()
-            .filterIsInstance<PersistentExtension>()
-            .map { it.createSchema(core) }
-            .associateBy { it::class }
+    internal fun shutdownAll() {
+        extensions.values.flatten()
+            .distinct()
+            .filterIsInstance<Shutdownable>()
+            .forEach { it.shutdown() }
     }
 
     public companion object {

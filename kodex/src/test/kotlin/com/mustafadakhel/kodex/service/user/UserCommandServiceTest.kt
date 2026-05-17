@@ -16,6 +16,7 @@ import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.update.ChangeSet
 import com.mustafadakhel.kodex.update.FieldChange
+import com.mustafadakhel.kodex.update.UserField
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
@@ -236,7 +237,7 @@ class UserCommandServiceTest : FunSpec({
         val changeSet = ChangeSet(
             timestamp = CurrentKotlinInstant,
             changedFields = mapOf(
-                "email" to FieldChange("email", "old@example.com", testEmail)
+                UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "old@example.com", testEmail)
             )
         )
         val successResult = UpdateResult.Success(fullUser, changeSet)
@@ -318,7 +319,7 @@ class UserCommandServiceTest : FunSpec({
         val changeSet = ChangeSet(
             timestamp = CurrentKotlinInstant,
             changedFields = mapOf(
-                "email" to FieldChange("email", testEmail, null)
+                UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, testEmail, null)
             )
         )
         val successResult = UpdateResult.Success(fullUser, changeSet)

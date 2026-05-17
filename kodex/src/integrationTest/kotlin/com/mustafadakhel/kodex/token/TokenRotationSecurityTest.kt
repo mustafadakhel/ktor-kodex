@@ -1,7 +1,11 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.token
 
 import com.auth0.jwt.JWT
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.and
 import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.model.JwtClaimsValidator
 import com.mustafadakhel.kodex.model.JwtTokenVerifier
@@ -66,11 +70,14 @@ class TokenRotationSecurityTest : FunSpec({
             timeZone = TimeZone.UTC,
             tokenPersistence = mapOf(TokenType.AccessToken to true, TokenType.RefreshToken to true),
             tokenRepository = tokenRepository, hashingService = saltedHashingService(),
-            userRepository = userRepository, realm = realm
+            realm = realm
         )
+
+        val signatureVerifier = JwtSignatureVerifier(secretsConfig)
 
         return DefaultTokenManager(
             jwtTokenIssuer = jwtTokenIssuer, jwtTokenVerifier = jwtTokenVerifier,
+            signatureVerifier = signatureVerifier,
             tokenValidity = TokenValidity(access = 15.minutes, refresh = 7.hours),
             tokenRepository = tokenRepository, userRepository = userRepository,
             tokenPersistence = mapOf(TokenType.AccessToken to true, TokenType.RefreshToken to true),
@@ -106,7 +113,7 @@ class TokenRotationSecurityTest : FunSpec({
     }
 
     context("Replay Attack Detection") {
-        test("should detect immediate replay with strict policy") {
+        test("should reject reuse of consumed token with strict policy") {
             tokenManager = createTokenManager(TokenRotationPolicy.strict())
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
@@ -114,37 +121,37 @@ class TokenRotationSecurityTest : FunSpec({
 
             tokenPair2 shouldNotBe tokenPair1
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            // Old token is atomically revoked on rotation — reuse is rejected
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
 
-        test("should detect replay in middle of refresh chain") {
+        test("should reject replay in middle of refresh chain") {
             tokenManager = createTokenManager(TokenRotationPolicy.strict())
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             val tokenPair2 = tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             tokenManager.refreshTokens(testUserId, tokenPair2.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair2.refresh)
             }
         }
 
-        test("should allow single use within grace period with lenient policy") {
+        test("should reject reuse even with unsafe policy after atomic revocation") {
             tokenManager = createTokenManager(TokenRotationPolicy.unsafe())
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            Thread.sleep(50)
-
-            shouldNotThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            // With atomic revocation, old token is revoked regardless of policy
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
 
-        test("should detect replay after grace period expires") {
+        test("should reject reuse after any delay") {
             val customPolicy = TokenRotationPolicy(
                 enabled = true, gracePeriod = 100.milliseconds,
                 detectReplayAttacks = true, revokeOnReplay = true
@@ -156,58 +163,28 @@ class TokenRotationSecurityTest : FunSpec({
 
             Thread.sleep(150)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
     }
 
     context("Token Family Revocation") {
-        test("should revoke entire token family on replay attack") {
+        test("should revoke old token on rotation") {
             tokenManager = createTokenManager(TokenRotationPolicy.strict())
-
-            val tokenPair1 = tokenManager.issueNewTokens(testUserId)
-            val tokenPair2 = tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
-            tokenManager.refreshTokens(testUserId, tokenPair2.refresh)
-
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
-                tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
-            }
-
-            val tokens = db.core.tokens
-            val allRevoked = db.transaction {
-                select(tokens)
-                    .columns(tokens.revoked)
-                    .where { tokens.userId eq testUserId }
-                    .map { it[tokens.revoked] }
-            }
-
-            allRevoked.all { it } shouldBe true
-        }
-
-        test("should not revoke family if revokeOnReplay is false") {
-            val customPolicy = TokenRotationPolicy(
-                enabled = true, gracePeriod = 0.seconds,
-                detectReplayAttacks = true, revokeOnReplay = false
-            )
-            tokenManager = createTokenManager(customPolicy)
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
-                tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
-            }
-
+            // After rotation, the old refresh token should be revoked
             val tokens = db.core.tokens
-            val allRevoked = db.transaction {
+            val oldTokenRevoked = db.transaction {
                 select(tokens)
-                    .columns(tokens.revoked)
-                    .where { tokens.userId eq testUserId }
+                    .where { (tokens.userId eq testUserId) and (tokens.revoked eq true) }
                     .map { it[tokens.revoked] }
             }
 
-            allRevoked.any { !it } shouldBe true
+            oldTokenRevoked.isNotEmpty() shouldBe true
         }
 
         test("should isolate token families from different sessions") {
@@ -218,7 +195,8 @@ class TokenRotationSecurityTest : FunSpec({
 
             tokenManager.refreshTokens(testUserId, session1TokenPair1.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            // Old session1 token is revoked, but session2 token is unaffected
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, session1TokenPair1.refresh)
             }
 
@@ -229,7 +207,7 @@ class TokenRotationSecurityTest : FunSpec({
     }
 
     context("Grace Period Edge Cases") {
-        test("should allow reuse within grace period after first use") {
+        test("should reject reuse even within grace period since token is atomically revoked") {
             val customPolicy = TokenRotationPolicy(
                 enabled = true, gracePeriod = 2.seconds,
                 detectReplayAttacks = true, revokeOnReplay = true
@@ -239,14 +217,13 @@ class TokenRotationSecurityTest : FunSpec({
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            Thread.sleep(500)
-
-            shouldNotThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            // Token is atomically revoked on rotation — grace period no longer allows reuse
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
 
-        test("should handle zero grace period correctly") {
+        test("should handle zero grace period correctly - reuse rejected") {
             val customPolicy = TokenRotationPolicy(
                 enabled = true, gracePeriod = 0.milliseconds,
                 detectReplayAttacks = true, revokeOnReplay = true
@@ -256,12 +233,12 @@ class TokenRotationSecurityTest : FunSpec({
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
 
-        test("should handle very long grace period") {
+        test("should reject reuse even with very long grace period since token is atomically revoked") {
             val customPolicy = TokenRotationPolicy(
                 enabled = true, gracePeriod = 1.hours,
                 detectReplayAttacks = true, revokeOnReplay = false
@@ -271,9 +248,8 @@ class TokenRotationSecurityTest : FunSpec({
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            Thread.sleep(100)
-
-            shouldNotThrow<Exception> {
+            // Token is atomically revoked — grace period no longer permits reuse
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
@@ -288,37 +264,29 @@ class TokenRotationSecurityTest : FunSpec({
 
             tokenPair2 shouldNotBe tokenPair1
 
-            shouldThrow<KodexThrowable.Authorization.SuspiciousToken> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
 
-        test("strict policy should have zero tolerance") {
+        test("strict policy should reject any reuse") {
             tokenManager = createTokenManager(TokenRotationPolicy.strict())
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
 
-        test("balanced policy should allow brief grace period") {
+        test("balanced policy should reject reuse since token is atomically revoked") {
             tokenManager = createTokenManager(TokenRotationPolicy.balanced())
 
             val tokenPair1 = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
 
-            Thread.sleep(100)
-
-            shouldNotThrow<Exception> {
-                tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
-            }
-
-            Thread.sleep(5000)
-
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
             }
         }
@@ -410,21 +378,22 @@ class TokenRotationSecurityTest : FunSpec({
 
             val user1TokenPair = tokenManager.issueNewTokens(testUserId)
 
-            shouldThrow<KodexThrowable.Authorization.SuspiciousToken> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(user2Id, user1TokenPair.refresh)
             }
         }
 
-        test("should handle concurrent refresh attempts gracefully") {
-            tokenManager = createTokenManager(TokenRotationPolicy.unsafe())
+        test("should allow exactly one of two sequential refresh attempts") {
+            tokenManager = createTokenManager(TokenRotationPolicy.balanced())
 
             val tokenPair = tokenManager.issueNewTokens(testUserId)
 
             val result1 = runCatching { tokenManager.refreshTokens(testUserId, tokenPair.refresh) }
             val result2 = runCatching { tokenManager.refreshTokens(testUserId, tokenPair.refresh) }
 
+            // Atomic consumption means exactly one succeeds
             result1.isSuccess shouldBe true
-            result2.isSuccess shouldBe true
+            result2.isSuccess shouldBe false
         }
 
         test("should reject access tokens for refresh") {

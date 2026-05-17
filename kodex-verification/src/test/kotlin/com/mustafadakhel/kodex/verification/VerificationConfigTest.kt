@@ -4,8 +4,12 @@ import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
+import com.mustafadakhel.kodex.verification.schema.VerificationSchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
@@ -13,6 +17,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.mockk.mockk
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -34,6 +39,14 @@ class VerificationConfigTest : FunSpec({
         override val eventBus = mockEventBus
         override val rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
     }
+
+    val stubSchema = VerificationSchema("test_")
+    val stubDb = KodexDatabase(
+        dataSource = mockk(relaxed = true),
+        dialect = DatabaseDialect.H2,
+        core = CoreSchema("test_"),
+        extensionSchemas = mapOf(VerificationSchema::class to stubSchema)
+    )
 
     context("Valid configurations") {
         test("valid configuration passes validation") {
@@ -67,7 +80,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             // Should not throw
-            val extension = config.build(testContext)
+            val extension = config.build(testContext, stubDb)
             extension.shouldNotBeNull()
         }
     }
@@ -387,7 +400,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "brute-force"
@@ -402,7 +415,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "VerificationConfig validation failed"
@@ -420,7 +433,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "sendCooldownPeriod should not exceed 1 hour"

@@ -1,6 +1,7 @@
 package com.mustafadakhel.kodex.schema
 
 import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.TableDef
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.kotest.assertions.throwables.shouldThrow
@@ -12,13 +13,12 @@ import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 
 private class TestExtensionSchema(private val names: List<String> = emptyList()) : ExtensionSchema {
-    override fun ddl(dialect: DatabaseDialect): List<String> = emptyList()
+    override fun tables(): List<TableDef> = emptyList()
     override fun tableNames(): List<String> = names
 }
 
 private class AnotherExtensionSchema : ExtensionSchema {
-    override fun ddl(dialect: DatabaseDialect): List<String> = emptyList()
-    override fun tableNames(): List<String> = emptyList()
+    override fun tables(): List<TableDef> = emptyList()
 }
 
 class KodexDatabaseTest : FunSpec({

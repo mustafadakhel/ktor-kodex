@@ -16,12 +16,12 @@ internal class ChangeTracker {
         when (val emailUpdate = updates.email) {
             is FieldUpdate.SetValue -> {
                 if (current.email != emailUpdate.value) {
-                    put("email", FieldChange("email", current.email, emailUpdate.value))
+                    put(UserField.EMAIL.key, FieldChange(UserField.EMAIL.key, current.email, emailUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
                 if (current.email != null) {
-                    put("email", FieldChange("email", current.email, null))
+                    put(UserField.EMAIL.key, FieldChange(UserField.EMAIL.key, current.email, null))
                 }
             }
             is FieldUpdate.NoChange -> {} // No change
@@ -30,12 +30,12 @@ internal class ChangeTracker {
         when (val phoneUpdate = updates.phone) {
             is FieldUpdate.SetValue -> {
                 if (current.phoneNumber != phoneUpdate.value) {
-                    put("phoneNumber", FieldChange("phoneNumber", current.phoneNumber, phoneUpdate.value))
+                    put(UserField.PHONE.key, FieldChange(UserField.PHONE.key, current.phoneNumber, phoneUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
                 if (current.phoneNumber != null) {
-                    put("phoneNumber", FieldChange("phoneNumber", current.phoneNumber, null))
+                    put(UserField.PHONE.key, FieldChange(UserField.PHONE.key, current.phoneNumber, null))
                 }
             }
             is FieldUpdate.NoChange -> {}
@@ -44,7 +44,7 @@ internal class ChangeTracker {
         when (val statusUpdate = updates.status) {
             is FieldUpdate.SetValue -> {
                 if (current.status != statusUpdate.value) {
-                    put("status", FieldChange("status", current.status, statusUpdate.value))
+                    put(UserField.STATUS.key, FieldChange(UserField.STATUS.key, current.status, statusUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
@@ -61,12 +61,12 @@ internal class ChangeTracker {
         when (val firstNameUpdate = updates.firstName) {
             is FieldUpdate.SetValue -> {
                 if (currentProfile?.firstName != firstNameUpdate.value) {
-                    put("profile.firstName", FieldChange("profile.firstName", currentProfile?.firstName, firstNameUpdate.value))
+                    put(UserField.PROFILE_FIRST_NAME.key, FieldChange(UserField.PROFILE_FIRST_NAME.key, currentProfile?.firstName, firstNameUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
                 if (currentProfile?.firstName != null) {
-                    put("profile.firstName", FieldChange("profile.firstName", currentProfile.firstName, null))
+                    put(UserField.PROFILE_FIRST_NAME.key, FieldChange(UserField.PROFILE_FIRST_NAME.key, currentProfile.firstName, null))
                 }
             }
             is FieldUpdate.NoChange -> {}
@@ -75,12 +75,12 @@ internal class ChangeTracker {
         when (val lastNameUpdate = updates.lastName) {
             is FieldUpdate.SetValue -> {
                 if (currentProfile?.lastName != lastNameUpdate.value) {
-                    put("profile.lastName", FieldChange("profile.lastName", currentProfile?.lastName, lastNameUpdate.value))
+                    put(UserField.PROFILE_LAST_NAME.key, FieldChange(UserField.PROFILE_LAST_NAME.key, currentProfile?.lastName, lastNameUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
                 if (currentProfile?.lastName != null) {
-                    put("profile.lastName", FieldChange("profile.lastName", currentProfile.lastName, null))
+                    put(UserField.PROFILE_LAST_NAME.key, FieldChange(UserField.PROFILE_LAST_NAME.key, currentProfile.lastName, null))
                 }
             }
             is FieldUpdate.NoChange -> {}
@@ -89,12 +89,12 @@ internal class ChangeTracker {
         when (val addressUpdate = updates.address) {
             is FieldUpdate.SetValue -> {
                 if (currentProfile?.address != addressUpdate.value) {
-                    put("profile.address", FieldChange("profile.address", currentProfile?.address, addressUpdate.value))
+                    put(UserField.PROFILE_ADDRESS.key, FieldChange(UserField.PROFILE_ADDRESS.key, currentProfile?.address, addressUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
                 if (currentProfile?.address != null) {
-                    put("profile.address", FieldChange("profile.address", currentProfile.address, null))
+                    put(UserField.PROFILE_ADDRESS.key, FieldChange(UserField.PROFILE_ADDRESS.key, currentProfile.address, null))
                 }
             }
             is FieldUpdate.NoChange -> {}
@@ -103,12 +103,12 @@ internal class ChangeTracker {
         when (val pictureUpdate = updates.profilePicture) {
             is FieldUpdate.SetValue -> {
                 if (currentProfile?.profilePicture != pictureUpdate.value) {
-                    put("profile.profilePicture", FieldChange("profile.profilePicture", currentProfile?.profilePicture, pictureUpdate.value))
+                    put(UserField.PROFILE_PICTURE.key, FieldChange(UserField.PROFILE_PICTURE.key, currentProfile?.profilePicture, pictureUpdate.value))
                 }
             }
             is FieldUpdate.ClearValue -> {
                 if (currentProfile?.profilePicture != null) {
-                    put("profile.profilePicture", FieldChange("profile.profilePicture", currentProfile.profilePicture, null))
+                    put(UserField.PROFILE_PICTURE.key, FieldChange(UserField.PROFILE_PICTURE.key, currentProfile.profilePicture, null))
                 }
             }
             is FieldUpdate.NoChange -> {}
@@ -124,15 +124,15 @@ internal class ChangeTracker {
                 is AttributeChange.Set -> {
                     val currentValue = currentAttributes[change.key]
                     if (currentValue != change.value) {
-                        put("customAttributes.${change.key}",
-                            FieldChange("customAttributes.${change.key}", currentValue, change.value))
+                        put(UserField.customAttribute(change.key),
+                            FieldChange(UserField.customAttribute(change.key), currentValue, change.value))
                     }
                 }
                 is AttributeChange.Remove -> {
                     val currentValue = currentAttributes[change.key]
                     if (currentValue != null) {
-                        put("customAttributes.${change.key}",
-                            FieldChange("customAttributes.${change.key}", currentValue, null))
+                        put(UserField.customAttribute(change.key),
+                            FieldChange(UserField.customAttribute(change.key), currentValue, null))
                     }
                 }
                 is AttributeChange.ReplaceAll -> {
@@ -140,16 +140,16 @@ internal class ChangeTracker {
                     // Keys that exist in current but not in new are removed
                     currentAttributes.forEach { (key, value) ->
                         if (key !in change.attributes) {
-                            put("customAttributes.$key",
-                                FieldChange("customAttributes.$key", value, null))
+                            put(UserField.customAttribute(key),
+                                FieldChange(UserField.customAttribute(key), value, null))
                         }
                     }
                     // Keys in new that differ from current
                     change.attributes.forEach { (key, value) ->
                         val currentValue = currentAttributes[key]
                         if (currentValue != value) {
-                            put("customAttributes.$key",
-                                FieldChange("customAttributes.$key", currentValue, value))
+                            put(UserField.customAttribute(key),
+                                FieldChange(UserField.customAttribute(key), currentValue, value))
                         }
                     }
                 }

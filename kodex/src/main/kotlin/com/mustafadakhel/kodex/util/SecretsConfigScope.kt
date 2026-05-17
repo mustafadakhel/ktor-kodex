@@ -13,7 +13,11 @@ import java.security.SecureRandom
 public interface SecretsConfigScope {
     public fun RealmConfigScope.raw(vararg secrets: String)
 
-    public fun RealmConfigScope.fromEnv(applicationConfig: ApplicationConfig, vararg keys: String)
+    /** Read secrets from Ktor ApplicationConfig (application.conf / application.yaml). */
+    public fun RealmConfigScope.fromConfig(applicationConfig: ApplicationConfig, vararg keys: String)
+
+    /** Read secrets from system environment variables via System.getenv(). */
+    public fun RealmConfigScope.fromEnv(vararg envVarNames: String)
 
     public interface Provider {
         public val secrets: List<String>
@@ -32,11 +36,30 @@ internal class SecretsConfig : SecretsConfigScope {
         override val secrets = rawSecrets.secrets
     }
 
+    private class ConfigProvider(
+        secretsFromConfig: Secrets.FromConfig,
+    ) : SecretsConfigScope.Provider {
+        override val secrets = secretsFromConfig.keys.mapIndexed { index, key ->
+            val secret = secretsFromConfig.applicationConfig.property(key).getString()
+            require(secret.length >= 32) {
+                "Secret from config key '$key' (index $index) is ${secret.length} characters. " +
+                    "JWT secrets must be at least 32 characters for adequate security."
+            }
+            secret
+        }
+    }
+
     private class EnvProvider(
         secretsFromEnv: Secrets.FromEnv,
     ) : SecretsConfigScope.Provider {
-        override val secrets = secretsFromEnv.keys.map {
-            secretsFromEnv.applicationConfig.property(it).getString()
+        override val secrets = secretsFromEnv.envVarNames.mapIndexed { index, envVar ->
+            val secret = System.getenv(envVar)
+                ?: throw IllegalStateException("Environment variable '$envVar' is not set")
+            require(secret.length >= 32) {
+                "Secret from env var '$envVar' (index $index) is ${secret.length} characters. " +
+                    "JWT secrets must be at least 32 characters for adequate security."
+            }
+            secret
         }
     }
 
@@ -50,8 +73,13 @@ internal class SecretsConfig : SecretsConfigScope {
         this@SecretsConfig.provider = RawProvider(Secrets.Raw(secrets.toList()))
     }
 
-    override fun RealmConfigScope.fromEnv(applicationConfig: ApplicationConfig, vararg keys: String) {
-        this@SecretsConfig.provider = EnvProvider(Secrets.FromEnv(keys.toList(), applicationConfig))
+    override fun RealmConfigScope.fromConfig(applicationConfig: ApplicationConfig, vararg keys: String) {
+        this@SecretsConfig.provider = ConfigProvider(Secrets.FromConfig(keys.toList(), applicationConfig))
+    }
+
+    override fun RealmConfigScope.fromEnv(vararg envVarNames: String) {
+        require(envVarNames.isNotEmpty()) { "At least one environment variable name must be provided" }
+        this@SecretsConfig.provider = EnvProvider(Secrets.FromEnv(envVarNames.toList()))
     }
 
     internal fun secrets() = provider.secrets

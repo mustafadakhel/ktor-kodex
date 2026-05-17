@@ -1,18 +1,23 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.lockout
 
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.greater
 import com.mustafadakhel.kodex.lockout.schema.LockoutSchema
 import com.mustafadakhel.kodex.schema.CoreSchema
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.test.TestDatabaseSetup
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -24,21 +29,19 @@ class LockoutIntegrationTest : FunSpec({
     lateinit var testSetup: TestDatabaseSetup
 
     beforeTest {
-        val database = Database.connect(
-            "jdbc:h2:mem:lockout_${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:lockout_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        lockoutSchema = LockoutSchema(core)
-        db = KodexDatabase(database, core, mapOf(LockoutSchema::class to lockoutSchema))
+        lockoutSchema = LockoutSchema(core.prefix)
+        db = KodexDatabase(
+            dataSource = ds,
+            dialect = DatabaseDialect.H2,
+            core = core,
+            extensionSchemas = mapOf(LockoutSchema::class to lockoutSchema)
+        )
         db.createSchema()
         testSetup = TestDatabaseSetup(db)
-    }
-
-    afterTest {
-        db.transaction {
-            SchemaUtils.drop(lockoutSchema.accountLocks, lockoutSchema.failedLoginAttempts)
-        }
     }
 
     context("Layer 1: Identifier Throttling") {
@@ -96,14 +99,14 @@ class LockoutIntegrationTest : FunSpec({
                 val clockNow = CurrentKotlinInstant
                 val windowStart = (clockNow - policy.attemptWindow).toLocalDateTime(TimeZone.UTC)
 
-                val count = attempts.selectAll().where {
+                val count = select(attempts).where {
                     (attempts.identifier eq identifier) and (attempts.attemptedAt greater windowStart)
                 }.count()
                 count shouldBe 3
             }
 
             db.transaction {
-                attempts.deleteWhere { attempts.identifier eq identifier }
+                deleteFrom(attempts).where { attempts.identifier eq identifier }.execute()
             }
 
             service.shouldThrottleIdentifier(identifier).shouldBeInstanceOf<ThrottleResult.NotThrottled>()
@@ -226,12 +229,12 @@ class LockoutIntegrationTest : FunSpec({
 
             val locks = lockoutSchema.accountLocks
             db.transaction {
-                locks.insert {
-                    it[locks.realmId] = "test-realm"
-                    it[locks.userId] = userId
-                    it[locks.lockedUntil] = null
-                    it[locks.reason] = "Permanent ban"
-                    it[locks.lockedAt] = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
+                insertInto(locks) {
+                    this[locks.realmId] = "test-realm"
+                    this[locks.userId] = userId
+                    this[locks.lockedUntil] = null
+                    this[locks.reason] = "Permanent ban"
+                    this[locks.lockedAt] = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
                 }
             }
 
@@ -323,14 +326,21 @@ class LockoutIntegrationTest : FunSpec({
 
             val attempts = lockoutSchema.failedLoginAttempts
             db.transaction {
-                val attempt = attempts.selectAll().where {
+                val attempt = select(attempts).where {
                     attempts.identifier eq identifier
-                }.single()
+                }.firstOrNull { row ->
+                    object {
+                        val identifier = row[attempts.identifier]
+                        val userId = row[attempts.userId]
+                        val ipAddress = row[attempts.ipAddress]
+                        val reason = row[attempts.reason]
+                    }
+                }!!
 
-                attempt[attempts.identifier] shouldBe identifier
-                attempt[attempts.userId] shouldBe userId
-                attempt[attempts.ipAddress] shouldBe ipAddress
-                attempt[attempts.reason] shouldBe reason
+                attempt.identifier shouldBe identifier
+                attempt.userId shouldBe userId
+                attempt.ipAddress shouldBe ipAddress
+                attempt.reason shouldBe reason
             }
         }
 
@@ -351,18 +361,18 @@ class LockoutIntegrationTest : FunSpec({
                 val clockNow = CurrentKotlinInstant
                 val oldTime = (clockNow - 10.minutes).toLocalDateTime(TimeZone.UTC)
 
-                attempts.insert {
-                    it[attempts.realmId] = "test-realm"
-                    it[attempts.identifier] = identifier
-                    it[attempts.userId] = userId
-                    it[attempts.ipAddress] = ipAddress
-                    it[attempts.attemptedAt] = oldTime
-                    it[attempts.reason] = "Old attempt"
+                insertInto(attempts) {
+                    this[attempts.realmId] = "test-realm"
+                    this[attempts.identifier] = identifier
+                    this[attempts.userId] = userId
+                    this[attempts.ipAddress] = ipAddress
+                    this[attempts.attemptedAt] = oldTime
+                    this[attempts.reason] = "Old attempt"
                 }
             }
 
             db.transaction {
-                val count = attempts.selectAll().where {
+                val count = select(attempts).where {
                     attempts.identifier eq identifier
                 }.count()
                 count shouldBe 3
@@ -371,7 +381,7 @@ class LockoutIntegrationTest : FunSpec({
             service.recordFailedAttempt(identifier, userId, ipAddress, "New attempt")
 
             db.transaction {
-                val count = attempts.selectAll().where {
+                val count = select(attempts).where {
                     attempts.identifier eq identifier
                 }.count()
                 count shouldBe 3

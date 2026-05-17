@@ -5,7 +5,11 @@ import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.extension.LoginMetadata
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.mustafadakhel.kodex.extension.LogoutMetadata
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.HashingService
@@ -71,7 +75,7 @@ internal class DefaultAuthService(
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
         val timestamp = CurrentKotlinInstant
 
-        val user = userRepository.findById(userId)
+        userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         if (!authenticateInternal(oldPassword, userId)) {
@@ -111,7 +115,7 @@ internal class DefaultAuthService(
     override suspend fun resetPassword(userId: UUID, newPassword: String) {
         val timestamp = CurrentKotlinInstant
 
-        val user = userRepository.findById(userId)
+        userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         val hashedPassword = hashingService.hash(newPassword)
@@ -134,6 +138,26 @@ internal class DefaultAuthService(
         )
     }
 
+    override suspend fun logout(
+        userId: UUID,
+        tokenFamily: UUID?,
+        ipAddress: String,
+        userAgent: String?,
+        reason: String
+    ) {
+        tokenService.revoke(userId)
+
+        hookExecutor.executeAfterLogout(
+            userId,
+            tokenFamily,
+            LogoutMetadata(
+                ipAddress = ipAddress,
+                userAgent = userAgent,
+                reason = reason
+            )
+        )
+    }
+
     private suspend fun authenticateAndGenerateToken(
         identifier: String,
         password: String,
@@ -141,13 +165,13 @@ internal class DefaultAuthService(
         ipAddress: String,
         userAgent: String?,
         userFetcher: suspend (String) -> UserEntity?
-    ): TokenPair {
+    ): TokenPair = withContext(Dispatchers.IO) {
         val timestamp = CurrentKotlinInstant
         val metadata = LoginMetadata(ipAddress, userAgent)
 
-        hookExecutor.executeBeforeLogin(identifier, metadata)
+        val transformedIdentifier = hookExecutor.executeBeforeLogin(identifier, metadata)
 
-        val user = userFetcher(identifier)
+        val user = userFetcher(transformedIdentifier)
 
         val authSuccess = if (user != null) {
             authenticateInternal(password, user.id)
@@ -180,7 +204,13 @@ internal class DefaultAuthService(
             throw KodexThrowable.Authorization.InvalidCredentials
         }
 
-        val userRoles = userRepository.findRoles(user!!.id)
+        when (user!!.status) {
+            UserStatus.SUSPENDED -> throw KodexThrowable.Authorization.AccountSuspended
+            UserStatus.PENDING -> throw KodexThrowable.Authorization.AccountPending
+            UserStatus.ACTIVE -> {}
+        }
+
+        val userRoles = userRepository.findRoles(user.id)
         val authenticatedUser = AuthenticatedUser(
             userId = user.id,
             email = user.email,
@@ -203,7 +233,7 @@ internal class DefaultAuthService(
             )
         )
 
-        return generateTokenInternal(user.id, ipAddress, userAgent)
+        generateTokenInternal(user.id, ipAddress, userAgent)
     }
 
     private fun authenticateInternal(password: String, userId: UUID): Boolean {

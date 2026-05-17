@@ -1,8 +1,15 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.isNull
 import com.mustafadakhel.kodex.mfa.device.DeviceFingerprint
 import com.mustafadakhel.kodex.mfa.encryption.AesGcmSecretEncryption
 import com.mustafadakhel.kodex.mfa.schema.MfaSchema
@@ -29,12 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
+import org.h2.jdbcx.JdbcDataSource
 import java.util.UUID
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
@@ -52,13 +54,17 @@ class Phase3IntegrationTest : FunSpec({
     lateinit var hashMap: MutableMap<String, String>
 
     beforeEach {
-        val database = Database.connect(
-            "jdbc:h2:mem:test_${UUID.randomUUID()};DB_CLOSE_DELAY=-1;",
-            driver = "org.h2.Driver"
-        )
+        val ds = JdbcDataSource().apply {
+            setUrl("jdbc:h2:mem:test_${UUID.randomUUID()};DB_CLOSE_DELAY=-1")
+        }
         val core = CoreSchema("test_")
-        mfaSchema = MfaSchema(core)
-        db = KodexDatabase(database, core, mapOf(MfaSchema::class to mfaSchema))
+        mfaSchema = MfaSchema(core.prefix)
+        db = KodexDatabase(
+            dataSource = ds,
+            dialect = DatabaseDialect.H2,
+            core = core,
+            extensionSchemas = mapOf(MfaSchema::class to mfaSchema)
+        )
         db.createSchema()
         testSetup = TestDatabaseSetup(db)
 
@@ -180,7 +186,7 @@ class Phase3IntegrationTest : FunSpec({
             val ipAddress = "192.168.1.1"
             val userAgent = "Mozilla/5.0"
 
-            val deviceId = mfaService.trustDevice(
+            mfaService.trustDevice(
                 userId = testUserId,
                 ipAddress = ipAddress,
                 userAgent = userAgent,
@@ -209,17 +215,16 @@ class Phase3IntegrationTest : FunSpec({
                 val now = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
                 val expiredTime = now.toInstant(TimeZone.UTC).minus(1.days).toLocalDateTime(TimeZone.UTC)
 
-                trustedDevices.insert {
-                    it[trustedDevices.realmId] = "test-realm"
-                    it[trustedDevices.id] = UUID.randomUUID()
-                    it[trustedDevices.userId] = testUserId
-                    it[trustedDevices.deviceFingerprint] = fingerprint
-                    it[trustedDevices.deviceName] = "Expired Device"
-                    it[trustedDevices.ipAddress] = ipAddress
-                    it[trustedDevices.userAgent] = userAgent
-                    it[trustedDevices.trustedAt] = now
-                    it[trustedDevices.lastUsedAt] = null
-                    it[trustedDevices.expiresAt] = expiredTime
+                insertInto(trustedDevices) {
+                    set(trustedDevices.realmId, "test-realm")
+                    set(trustedDevices.userId, testUserId)
+                    set(trustedDevices.deviceFingerprint, fingerprint)
+                    set(trustedDevices.deviceName, "Expired Device")
+                    set(trustedDevices.ipAddress, ipAddress)
+                    set(trustedDevices.userAgent, userAgent)
+                    set(trustedDevices.trustedAt, now)
+                    set(trustedDevices.lastUsedAt, null)
+                    set(trustedDevices.expiresAt, expiredTime)
                 }
             }
 
@@ -290,14 +295,16 @@ class Phase3IntegrationTest : FunSpec({
     context("Admin Management") {
 
         test("should allow admin to force remove user's MFA method") {
-            // Enroll TOTP for user
-            val enrollResult = mfaService.enrollTotp(testUserId, "test@example.com")
-
             val methods = mfaSchema.mfaMethods
+
+            // Enroll TOTP for user
+            mfaService.enrollTotp(testUserId, "test@example.com")
+
             // Manually activate the method for testing (normally done via verifyTotpEnrollment)
             db.transaction {
-                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
-                    it[isActive] = true
+                update(methods) {
+                    set(methods.isActive, true)
+                    where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }
                 }
             }
 
@@ -322,8 +329,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Manually activate the method for testing
             db.transaction {
-                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
-                    it[isActive] = true
+                update(methods) {
+                    set(methods.isActive, true)
+                    where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }
                 }
             }
 
@@ -333,7 +341,9 @@ class Phase3IntegrationTest : FunSpec({
             // Verify everything is set up
             mfaService.getMethods(testUserId) shouldHaveSize 1
             db.transaction {
-                backupCodes.selectAll().where { backupCodes.userId eq testUserId }.count()
+                select(backupCodes)
+                    .where { backupCodes.userId eq testUserId }
+                    .count()
             } shouldNotBe 0L
             mfaService.getTrustedDevices(testUserId) shouldHaveSize 1
 
@@ -343,7 +353,9 @@ class Phase3IntegrationTest : FunSpec({
             // Verify everything is removed
             mfaService.getMethods(testUserId) shouldHaveSize 0
             db.transaction {
-                backupCodes.selectAll().where { backupCodes.userId eq testUserId }.count()
+                select(backupCodes)
+                    .where { backupCodes.userId eq testUserId }
+                    .count()
             } shouldBe 0L
             mfaService.getTrustedDevices(testUserId) shouldHaveSize 0
         }
@@ -356,8 +368,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Manually activate the method for testing
             db.transaction {
-                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
-                    it[isActive] = true
+                update(methods) {
+                    set(methods.isActive, true)
+                    where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }
                 }
             }
 
@@ -379,8 +392,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Manually activate the method
             db.transaction {
-                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
-                    it[isActive] = true
+                update(methods) {
+                    set(methods.isActive, true)
+                    where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }
                 }
             }
 
@@ -423,7 +437,7 @@ class Phase3IntegrationTest : FunSpec({
             val methods = mfaSchema.mfaMethods
 
             // Create another user without MFA
-            val user2Id = testSetup.createTestUser(
+            testSetup.createTestUser(
                 email = "user2@example.com",
                 passwordHash = "hash",
                 status = UserStatus.ACTIVE
@@ -434,8 +448,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Manually activate the method for testing
             db.transaction {
-                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
-                    it[isActive] = true
+                update(methods) {
+                    set(methods.isActive, true)
+                    where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }
                 }
             }
 
@@ -454,8 +469,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Manually activate the method for testing
             db.transaction {
-                methods.update({ (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }) {
-                    it[isActive] = true
+                update(methods) {
+                    set(methods.isActive, true)
+                    where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.TOTP) }
                 }
             }
 
@@ -506,9 +522,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Get the email method ID
             val methodId = db.transaction {
-                methods.selectAll()
+                select(methods)
                     .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[methods.id]
+                    .singleOrNull { row -> row[methods.id] }!!
             }
 
             // Clear sent codes to test challenge
@@ -542,9 +558,9 @@ class Phase3IntegrationTest : FunSpec({
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             val methodId = db.transaction {
-                methods.selectAll()
+                select(methods)
                     .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[methods.id]
+                    .singleOrNull { row -> row[methods.id] }!!
             }
 
             // Exhaust rate limit attempts
@@ -574,9 +590,9 @@ class Phase3IntegrationTest : FunSpec({
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             val methodId = db.transaction {
-                methods.selectAll()
+                select(methods)
                     .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[methods.id]
+                    .singleOrNull { row -> row[methods.id] }!!
             }
 
             // Send challenge
@@ -605,9 +621,9 @@ class Phase3IntegrationTest : FunSpec({
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             val methodId = db.transaction {
-                methods.selectAll()
+                select(methods)
                     .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[methods.id]
+                    .singleOrNull { row -> row[methods.id] }!!
             }
 
             // Send challenge
@@ -635,9 +651,9 @@ class Phase3IntegrationTest : FunSpec({
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             val methodId = db.transaction {
-                methods.selectAll()
+                select(methods)
                     .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[methods.id]
+                    .singleOrNull { row -> row[methods.id] }!!
             }
 
             // Send challenge
@@ -649,8 +665,9 @@ class Phase3IntegrationTest : FunSpec({
 
             // Manually expire the challenge
             db.transaction {
-                challenges.update({ challenges.id eq challengeId }) {
-                    it[expiresAt] = CurrentKotlinInstant.minus(1.milliseconds).toLocalDateTime(TimeZone.UTC)
+                update(challenges) {
+                    set(challenges.expiresAt, CurrentKotlinInstant.minus(1.milliseconds).toLocalDateTime(TimeZone.UTC))
+                    where { challenges.id eq challengeId }
                 }
             }
 
@@ -673,9 +690,9 @@ class Phase3IntegrationTest : FunSpec({
             verifyResult.shouldBeInstanceOf<EnrollmentVerificationResult.Success>()
 
             val methodId = db.transaction {
-                methods.selectAll()
+                select(methods)
                     .where { (methods.userId eq testUserId) and (methods.methodType eq MfaMethodType.EMAIL) }
-                    .single()[methods.id]
+                    .singleOrNull { row -> row[methods.id] }!!
             }
 
             // Send challenge

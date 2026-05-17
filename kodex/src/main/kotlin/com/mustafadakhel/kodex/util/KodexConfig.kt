@@ -23,6 +23,7 @@ private const val DEFAULT_TABLE_PREFIX = "kodex_"
 public class KodexConfig internal constructor() {
 
     internal val realmConfigScopes: MutableList<RealmConfigScope> = mutableListOf()
+    private val registeredRealmNames: MutableSet<String> = mutableSetOf()
     private var databaseConfig: DatabaseConfig? = null
 
     internal val autoCreateTables: Boolean
@@ -73,6 +74,7 @@ public class KodexConfig internal constructor() {
         name: String,
         realmConfigScope: RealmConfigScope.() -> Unit,
     ) {
+        require(registeredRealmNames.add(name)) { "Duplicate realm name: '$name'. Each realm must have a unique name." }
         val realm = Realm(name)
         val config = RealmConfigScope(realm).apply(realmConfigScope)
         realmConfigScopes += config
@@ -82,6 +84,7 @@ public class KodexConfig internal constructor() {
         realm: Realm,
         realmConfigScope: RealmConfigScope.() -> Unit,
     ) {
+        require(registeredRealmNames.add(realm.name)) { "Duplicate realm name: '${realm.name}'. Each realm must have a unique name." }
         val config = RealmConfigScope(realm).apply(realmConfigScope)
         realmConfigScopes += config
     }

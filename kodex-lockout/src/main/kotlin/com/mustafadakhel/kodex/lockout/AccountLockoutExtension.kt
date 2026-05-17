@@ -2,39 +2,62 @@ package com.mustafadakhel.kodex.lockout
 
 import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.LoginMetadata
-import com.mustafadakhel.kodex.extension.PersistentExtension
+import com.mustafadakhel.kodex.extension.Shutdownable
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserUpdateData
-import com.mustafadakhel.kodex.lockout.schema.LockoutSchema
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.schema.CoreSchema
-import com.mustafadakhel.kodex.schema.DatabaseAwareExtension
-import com.mustafadakhel.kodex.schema.ExtensionSchema
-import com.mustafadakhel.kodex.schema.KodexDatabase
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import java.util.*
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 
 public class AccountLockoutExtension internal constructor(
-    private val policy: AccountLockoutPolicy,
+    private val service: AccountLockoutService,
     private val timeZone: TimeZone,
-    private val realmId: String
-) : UserLifecycleHooks, PersistentExtension, DatabaseAwareExtension {
+    private val sweepInterval: Duration = 1.hours,
+    private val attemptRetentionPeriod: Duration = (7 * 24).hours
+) : UserLifecycleHooks, Shutdownable {
+
+    private val sweepScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var sweepJob: Job? = null
+
+    init {
+        sweepJob = sweepScope.launch {
+            delay(sweepInterval)
+            while (isActive) {
+                try {
+                    val cutoff = (CurrentKotlinInstant - attemptRetentionPeriod).toLocalDateTime(TimeZone.UTC)
+                    service.sweepOldAttempts(cutoff)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
+                delay(sweepInterval)
+            }
+        }
+    }
+
+    override fun shutdown() {
+        sweepJob?.cancel()
+        sweepScope.cancel()
+    }
 
     override val priority: Int = 10
 
-    private lateinit var service: AccountLockoutService
-
-    override fun createSchema(core: CoreSchema): ExtensionSchema = LockoutSchema(core)
-
-    override fun initialize(db: KodexDatabase) {
-        val schema = db.schema<LockoutSchema>()
-        service = accountLockoutService(db, schema, policy, timeZone, realmId)
-    }
-
     override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
-        val identifierThrottle = service.shouldThrottleIdentifier(identifier)
+        val identifierThrottle = service.shouldThrottleIdentifier(identifier.lowercase())
         if (identifierThrottle is ThrottleResult.Throttled) {
             throw LockoutThrowable.TooManyAttempts(
                 reason = identifierThrottle.reason
@@ -52,7 +75,7 @@ public class AccountLockoutExtension internal constructor(
     }
 
     override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
-        val nowLocal = now(timeZone)
+        val nowLocal = now(TimeZone.UTC)
 
         if (service.isAccountLocked(user.userId, nowLocal)) {
             throw LockoutThrowable.AccountLocked(
@@ -62,6 +85,10 @@ public class AccountLockoutExtension internal constructor(
         }
 
         val lockResult = service.shouldLockAccount(user.userId)
+        if (lockResult is LockAccountResult.NoAction) {
+            service.clearFailedAttemptsForUser(user.userId)
+            return
+        }
         if (lockResult is LockAccountResult.ShouldLock) {
             service.lockAccount(
                 userId = user.userId,
@@ -82,7 +109,7 @@ public class AccountLockoutExtension internal constructor(
         metadata: LoginMetadata
     ) {
         service.recordFailedAttempt(
-            identifier = identifier,
+            identifier = identifier.lowercase(),
             userId = userId,
             ipAddress = metadata.ipAddress,
             reason = "Invalid credentials"

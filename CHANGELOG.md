@@ -2,7 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.4.0] - 2026-05-17
+
+### Security
+
+- Token refresh uses atomic `SELECT FOR UPDATE` + delete/revoke in a single transaction, fixing double-spend on concurrent refresh
+- Old refresh token is revoked on rotation (was left with `revoked=false`)
+- Internal timestamps use UTC consistently; realm timezone no longer leaks into `firstUsedAt` comparisons
+- **BREAKING:** Access tokens are persisted by default; opt out with `persist(TokenType.AccessToken, false)`
+- `additionalClaims` can no longer overwrite reserved JWT keys (`realm`, `roles`, `token_type`, `sub`, etc.)
+- Lockout identifiers normalized to lowercase before throttle checks
+- Lockout time comparisons use UTC to match storage
+- Failed login attempts cleared on successful authentication
+- Redis rate limiter reservation separator changed from `:` to `|` (fixes release on keys containing colons)
+
+### Fixed
+
+- `NullableSqlType` NPE when reading NULL timestamp columns
+- H2 `insertOrIgnore` replaced `MERGE INTO` (upsert) with `NOT EXISTS` subquery to match PostgreSQL `ON CONFLICT DO NOTHING`
+- EventBus overflow changed from `DROP_OLDEST` to `SUSPEND` (backpressure)
+- EventBus subscriber registration uses atomic `compute()` instead of `clear()` + `addAll()`
+- EventBus shutdown waits for in-flight subscriber coroutines before cancelling scope
+- Sessions revoked on password change via `TokenRevokedSubscriber`
+- `executeAfterLogout` added to `HookExecutor`; `AuthService.logout()` wired to invoke it
+- Auth service DB calls wrapped in `Dispatchers.IO`
+
+### Changed
+
+- **BREAKING:** Replaced JetBrains Exposed ORM with internal JDBC query DSL across all modules
+- **BREAKING:** `KodexConfig.database(db: Database)` overload removed; use `database(dataSource: DataSource)` or `database { jdbcUrl = "..." }`
+- **BREAKING:** `ExtensionSchema` interface changed from `tables(): List<Table>` to `tables(): List<TableDef>` with default `ddl()`/`tableNames()`
+- **BREAKING:** `PersistentExtension.createSchema(core: CoreSchema)` changed to `createSchema(tablePrefix: String)`
+- **BREAKING:** Supported databases narrowed to H2 (testing) and PostgreSQL (production); MySQL/MariaDB/SQLite rejected at config time
+- Removed Exposed ORM, Flyway, and all SQL migration files from the project
+- Extension schemas decoupled from CoreSchema (receive prefix string instead)
+- TestDatabaseSetup moved from production JAR to testFixtures source set
+- MFA method type storage changed from ordinal INT to VARCHAR name
 
 ## [0.3.1] - 2025-12-19
 

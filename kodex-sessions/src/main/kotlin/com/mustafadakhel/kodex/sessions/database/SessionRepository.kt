@@ -1,6 +1,17 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.sessions.database
 
-import com.mustafadakhel.kodex.schema.KodexDatabase
+import com.mustafadakhel.kodex.jdbc.ConnectionScope
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.Row
+import com.mustafadakhel.kodex.jdbc.SortOrder
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.inList
+import com.mustafadakhel.kodex.jdbc.isNotNull
+import com.mustafadakhel.kodex.jdbc.less
+import com.mustafadakhel.kodex.jdbc.neq
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
 import com.mustafadakhel.kodex.sessions.model.Session
 import com.mustafadakhel.kodex.sessions.model.SessionHistoryEntry
@@ -10,22 +21,16 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import java.util.UUID
 
-public class SessionRepository(
-    private val db: KodexDatabase,
+internal class SessionRepository(
     private val schema: SessionSchema,
-    public val realmId: String
+    internal val realmId: String
 ) {
     private val sessions = schema.sessions
     private val history = schema.sessionHistory
 
-    public fun create(
+    public fun ConnectionScope.create(
         userId: UUID,
         tokenFamily: UUID,
         deviceInfo: DeviceInfo,
@@ -36,65 +41,60 @@ public class SessionRepository(
         now: Instant
     ): Session {
         val sessionId = UUID.randomUUID()
+        val nowLocal = now.toLocalDateTime(TimeZone.UTC)
 
-        sessions.insert {
-            it[sessions.id] = sessionId
-            it[sessions.realmId] = this@SessionRepository.realmId
-            it[sessions.userId] = userId
-            it[sessions.tokenFamily] = tokenFamily
-            it[sessions.deviceFingerprint] = deviceInfo.fingerprint
-            it[sessions.deviceName] = deviceInfo.name
-            it[sessions.ipAddress] = deviceInfo.ipAddress
-            it[sessions.userAgent] = deviceInfo.userAgent
-            it[sessions.location] = location
-            it[sessions.latitude] = latitude?.toBigDecimal()
-            it[sessions.longitude] = longitude?.toBigDecimal()
-            it[sessions.createdAt] = now.toLocalDateTime(TimeZone.UTC)
-            it[sessions.lastActivityAt] = now.toLocalDateTime(TimeZone.UTC)
-            it[sessions.expiresAt] = expiresAt.toLocalDateTime(TimeZone.UTC)
-            it[sessions.status] = SessionStatus.ACTIVE
-            it[sessions.revokedAt] = null
-            it[sessions.revokedReason] = null
+        insertInto(sessions) {
+            set(sessions.id, sessionId)
+            set(sessions.realmId, this@SessionRepository.realmId)
+            set(sessions.userId, userId)
+            set(sessions.tokenFamily, tokenFamily)
+            set(sessions.deviceFingerprint, deviceInfo.fingerprint)
+            set(sessions.deviceName, deviceInfo.name)
+            set(sessions.ipAddress, deviceInfo.ipAddress)
+            set(sessions.userAgent, deviceInfo.userAgent)
+            set(sessions.location, location)
+            set(sessions.latitude, latitude?.toBigDecimal())
+            set(sessions.longitude, longitude?.toBigDecimal())
+            set(sessions.createdAt, nowLocal)
+            set(sessions.lastActivityAt, nowLocal)
+            set(sessions.expiresAt, expiresAt.toLocalDateTime(TimeZone.UTC))
+            set(sessions.status, SessionStatus.ACTIVE)
+            set(sessions.revokedAt, null)
+            set(sessions.revokedReason, null)
         }
 
         return findById(sessionId)!!
     }
 
-    public fun findById(sessionId: UUID): Session? {
-        return sessions
-            .selectAll()
+    public fun ConnectionScope.findById(sessionId: UUID): Session? {
+        return select(sessions)
             .where { (sessions.id eq sessionId) and (sessions.realmId eq realmId) }
-            .map { it.toSession() }
-            .singleOrNull()
+            .singleOrNull { it.toSession() }
     }
 
-    public fun findByTokenFamily(tokenFamily: UUID): Session? {
-        return sessions
-            .selectAll()
+    public fun ConnectionScope.findByTokenFamily(tokenFamily: UUID): Session? {
+        return select(sessions)
             .where { (sessions.tokenFamily eq tokenFamily) and (sessions.realmId eq realmId) }
-            .map { it.toSession() }
-            .singleOrNull()
+            .singleOrNull { it.toSession() }
     }
 
-    public fun findActiveByUserId(userId: UUID): List<Session> {
-        return sessions
-            .selectAll()
+    public fun ConnectionScope.findActiveByUserId(userId: UUID): List<Session> {
+        return select(sessions)
             .where {
                 (sessions.userId eq userId) and
-                (sessions.realmId eq realmId) and
-                (sessions.status eq SessionStatus.ACTIVE)
+                    (sessions.realmId eq realmId) and
+                    (sessions.status eq SessionStatus.ACTIVE)
             }
             .orderBy(sessions.createdAt, SortOrder.DESC)
             .map { it.toSession() }
     }
 
-    public fun countActiveByUserId(userId: UUID): Long {
-        return sessions
-            .selectAll()
+    public fun ConnectionScope.countActiveByUserId(userId: UUID): Long {
+        return select(sessions)
             .where {
                 (sessions.userId eq userId) and
-                (sessions.realmId eq realmId) and
-                (sessions.status eq SessionStatus.ACTIVE)
+                    (sessions.realmId eq realmId) and
+                    (sessions.status eq SessionStatus.ACTIVE)
             }
             .count()
     }
@@ -103,23 +103,22 @@ public class SessionRepository(
      * Count active sessions with row-level locking to prevent race conditions.
      * Must be called within a transaction.
      */
-    public fun countActiveByUserIdForUpdate(userId: UUID): Long {
-        return sessions
-            .selectAll()
+    public fun ConnectionScope.countActiveByUserIdForUpdate(userId: UUID): Long {
+        return select(sessions)
             .where {
                 (sessions.userId eq userId) and
-                (sessions.realmId eq realmId) and
-                (sessions.status eq SessionStatus.ACTIVE)
+                    (sessions.realmId eq realmId) and
+                    (sessions.status eq SessionStatus.ACTIVE)
             }
             .forUpdate()
-            .toList()
+            .map { Unit }
             .size
             .toLong()
     }
 
-    public fun findOldestActiveSessionId(userId: UUID, excludeSessionId: UUID? = null): UUID? {
-        return sessions
-            .select(sessions.id)
+    public fun ConnectionScope.findOldestActiveSessionId(userId: UUID, excludeSessionId: UUID? = null): UUID? {
+        return select(sessions)
+            .columns(sessions.id)
             .where {
                 val baseCondition = (sessions.userId eq userId) and
                     (sessions.realmId eq realmId) and
@@ -136,101 +135,101 @@ public class SessionRepository(
             .singleOrNull()
     }
 
-    public fun updateActivity(tokenFamily: UUID, now: Instant, newExpiresAt: Instant): Int {
-        return sessions.update({
-            (sessions.tokenFamily eq tokenFamily) and
-            (sessions.realmId eq realmId) and
-            (sessions.status eq SessionStatus.ACTIVE)
-        }) {
-            it[sessions.lastActivityAt] = now.toLocalDateTime(TimeZone.UTC)
-            it[sessions.expiresAt] = newExpiresAt.toLocalDateTime(TimeZone.UTC)
+    public fun ConnectionScope.updateActivity(tokenFamily: UUID, now: Instant, newExpiresAt: Instant): Int {
+        return update(sessions) {
+            set(sessions.lastActivityAt, now.toLocalDateTime(TimeZone.UTC))
+            set(sessions.expiresAt, newExpiresAt.toLocalDateTime(TimeZone.UTC))
+            where {
+                (sessions.tokenFamily eq tokenFamily) and
+                    (sessions.realmId eq realmId) and
+                    (sessions.status eq SessionStatus.ACTIVE)
+            }
         }
     }
 
-    public fun revoke(sessionId: UUID, reason: String, now: Instant): Int {
-        return sessions.update({
-            (sessions.id eq sessionId) and
-            (sessions.realmId eq realmId)
-        }) {
-            it[sessions.status] = SessionStatus.REVOKED
-            it[sessions.revokedAt] = now.toLocalDateTime(TimeZone.UTC)
-            it[sessions.revokedReason] = reason
+    public fun ConnectionScope.revoke(sessionId: UUID, reason: String, now: Instant): Int {
+        return update(sessions) {
+            set(sessions.status, SessionStatus.REVOKED)
+            set(sessions.revokedAt, now.toLocalDateTime(TimeZone.UTC))
+            set(sessions.revokedReason, reason)
+            where {
+                (sessions.id eq sessionId) and (sessions.realmId eq realmId)
+            }
         }
     }
 
-    public fun revokeAllForUser(userId: UUID, exceptSessionId: UUID?, reason: String, now: Instant): Int {
+    public fun ConnectionScope.revokeAllForUser(userId: UUID, exceptSessionId: UUID?, reason: String, now: Instant): Int {
         val condition = if (exceptSessionId != null) {
             (sessions.userId eq userId) and
-            (sessions.realmId eq realmId) and
-            (sessions.status eq SessionStatus.ACTIVE) and
-            (sessions.id neq exceptSessionId)
+                (sessions.realmId eq realmId) and
+                (sessions.status eq SessionStatus.ACTIVE) and
+                (sessions.id neq exceptSessionId)
         } else {
             (sessions.userId eq userId) and
-            (sessions.realmId eq realmId) and
-            (sessions.status eq SessionStatus.ACTIVE)
+                (sessions.realmId eq realmId) and
+                (sessions.status eq SessionStatus.ACTIVE)
         }
 
-        return sessions.update({ condition }) {
-            it[sessions.status] = SessionStatus.REVOKED
-            it[sessions.revokedAt] = now.toLocalDateTime(TimeZone.UTC)
-            it[sessions.revokedReason] = reason
-        }
-    }
-
-    public fun markExpired(cutoffTime: Instant): Int {
-        return sessions.update({
-            (sessions.expiresAt less cutoffTime.toLocalDateTime(TimeZone.UTC)) and
-            (sessions.realmId eq realmId) and
-            (sessions.status eq SessionStatus.ACTIVE)
-        }) {
-            it[sessions.status] = SessionStatus.EXPIRED
+        return update(sessions) {
+            set(sessions.status, SessionStatus.REVOKED)
+            set(sessions.revokedAt, now.toLocalDateTime(TimeZone.UTC))
+            set(sessions.revokedReason, reason)
+            where { condition }
         }
     }
 
-    public fun findExpiredSessions(): List<Session> {
-        return sessions
-            .selectAll()
+    public fun ConnectionScope.markExpired(cutoffTime: Instant): Int {
+        return update(sessions) {
+            set(sessions.status, SessionStatus.EXPIRED)
+            where {
+                (sessions.expiresAt less cutoffTime.toLocalDateTime(TimeZone.UTC)) and
+                    (sessions.realmId eq realmId) and
+                    (sessions.status eq SessionStatus.ACTIVE)
+            }
+        }
+    }
+
+    public fun ConnectionScope.findExpiredSessions(): List<Session> {
+        return select(sessions)
             .where {
                 (sessions.realmId eq realmId) and
-                (sessions.status eq SessionStatus.EXPIRED)
+                    (sessions.status eq SessionStatus.EXPIRED)
             }
             .map { it.toSession() }
     }
 
-    public fun deleteSession(sessionId: UUID): Int {
-        return sessions.deleteWhere {
-            (sessions.id eq sessionId) and
-            (sessions.realmId eq realmId)
-        }
+    public fun ConnectionScope.deleteSession(sessionId: UUID): Int {
+        return deleteFrom(sessions)
+            .where { (sessions.id eq sessionId) and (sessions.realmId eq realmId) }
+            .execute()
     }
 
     /**
      * Delete multiple sessions in a single batch operation.
      * Returns the number of deleted sessions.
      */
-    public fun deleteSessions(sessionIds: List<UUID>): Int {
+    public fun ConnectionScope.deleteSessions(sessionIds: List<UUID>): Int {
         if (sessionIds.isEmpty()) return 0
 
-        return sessions.deleteWhere {
-            (sessions.id inList sessionIds) and
-            (sessions.realmId eq realmId)
-        }
+        return deleteFrom(sessions)
+            .where { (sessions.id inList sessionIds) and (sessions.realmId eq realmId) }
+            .execute()
     }
 
-    public fun archiveToHistory(session: Session, endReason: String, logoutAt: Instant?): UUID {
+    public fun ConnectionScope.archiveToHistory(session: Session, endReason: String, logoutAt: Instant?): UUID {
         val historyId = UUID.randomUUID()
 
-        history.insert {
-            it[history.id] = historyId
-            it[history.realmId] = this@SessionRepository.realmId
-            it[history.userId] = session.userId
-            it[history.sessionId] = session.id
-            it[history.deviceName] = session.deviceName
-            it[history.ipAddress] = session.ipAddress
-            it[history.location] = session.location
-            it[history.loginAt] = session.createdAt.toLocalDateTime(TimeZone.UTC)
-            it[history.logoutAt] = logoutAt?.toLocalDateTime(TimeZone.UTC)
-            it[history.endReason] = endReason
+        insertInto(history) {
+            set(history.id, historyId)
+            set(history.realmId, this@SessionRepository.realmId)
+            set(history.userId, session.userId)
+            set(history.sessionId, session.id)
+            set(history.deviceName, session.deviceName)
+            set(history.ipAddress, session.ipAddress)
+            set(history.location, session.location)
+            set(history.loginAt, session.createdAt.toLocalDateTime(TimeZone.UTC))
+            set(history.logoutAt, logoutAt?.toLocalDateTime(TimeZone.UTC))
+            set(history.endReason, endReason)
         }
 
         return historyId
@@ -240,33 +239,36 @@ public class SessionRepository(
      * Archive multiple sessions to history in a single batch operation.
      * Returns a list of history entry IDs in the same order as the input sessions.
      */
-    public fun archiveSessionsToHistory(sessions: List<Session>, endReason: String, logoutAt: Instant?): List<UUID> {
+    public fun ConnectionScope.archiveSessionsToHistory(
+        sessions: List<Session>,
+        endReason: String,
+        logoutAt: Instant?
+    ): List<UUID> {
         if (sessions.isEmpty()) return emptyList()
 
         val historyIds = sessions.map { UUID.randomUUID() }
+        val items = sessions.zip(historyIds)
 
-        history.batchInsert(sessions.zip(historyIds)) { (session, historyId) ->
-            this[history.id] = historyId
-            this[history.realmId] = this@SessionRepository.realmId
-            this[history.userId] = session.userId
-            this[history.sessionId] = session.id
-            this[history.deviceName] = session.deviceName
-            this[history.ipAddress] = session.ipAddress
-            this[history.location] = session.location
-            this[history.loginAt] = session.createdAt.toLocalDateTime(TimeZone.UTC)
-            this[history.logoutAt] = logoutAt?.toLocalDateTime(TimeZone.UTC)
-            this[history.endReason] = endReason
+        batchInsert(history, items) { (session, historyId) ->
+            set(history.id, historyId)
+            set(history.realmId, this@SessionRepository.realmId)
+            set(history.userId, session.userId)
+            set(history.sessionId, session.id)
+            set(history.deviceName, session.deviceName)
+            set(history.ipAddress, session.ipAddress)
+            set(history.location, session.location)
+            set(history.loginAt, session.createdAt.toLocalDateTime(TimeZone.UTC))
+            set(history.logoutAt, logoutAt?.toLocalDateTime(TimeZone.UTC))
+            set(history.endReason, endReason)
         }
 
         return historyIds
     }
 
-    public fun findHistoryByUserId(userId: UUID, limit: Int, offset: Int = 0): List<SessionHistoryEntry> {
-        return history
-            .selectAll()
+    public fun ConnectionScope.findHistoryByUserId(userId: UUID, limit: Int, offset: Int = 0): List<SessionHistoryEntry> {
+        return select(history)
             .where {
-                (history.userId eq userId) and
-                (history.realmId eq realmId)
+                (history.userId eq userId) and (history.realmId eq realmId)
             }
             .orderBy(history.loginAt, SortOrder.DESC)
             .limit(limit)
@@ -274,26 +276,26 @@ public class SessionRepository(
             .map { it.toSessionHistoryEntry() }
     }
 
-    public fun countHistoryByUserId(userId: UUID): Long {
-        return history
-            .selectAll()
+    public fun ConnectionScope.countHistoryByUserId(userId: UUID): Long {
+        return select(history)
             .where {
-                (history.userId eq userId) and
-                (history.realmId eq realmId)
+                (history.userId eq userId) and (history.realmId eq realmId)
             }
             .count()
     }
 
-    public fun deleteOldHistory(cutoffTime: Instant): Int {
-        return history.deleteWhere {
-            (history.loginAt less cutoffTime.toLocalDateTime(TimeZone.UTC)) and
-            (history.realmId eq realmId)
-        }
+    public fun ConnectionScope.deleteOldHistory(cutoffTime: Instant): Int {
+        return deleteFrom(history)
+            .where {
+                (history.loginAt less cutoffTime.toLocalDateTime(TimeZone.UTC)) and
+                    (history.realmId eq realmId)
+            }
+            .execute()
     }
 
-    public fun findPreviousDevices(userId: UUID, excludeSessionId: UUID? = null): List<String> {
-        return sessions
-            .select(sessions.deviceFingerprint)
+    public fun ConnectionScope.findPreviousDevices(userId: UUID, excludeSessionId: UUID? = null): List<String> {
+        return select(sessions)
+            .columns(sessions.deviceFingerprint)
             .where {
                 val baseCondition = (sessions.userId eq userId) and (sessions.realmId eq realmId)
                 if (excludeSessionId != null) {
@@ -306,9 +308,13 @@ public class SessionRepository(
             .distinct()
     }
 
-    public fun findPreviousLocations(userId: UUID, limit: Int = 10, excludeSessionId: UUID? = null): List<Pair<Double, Double>> {
-        return sessions
-            .select(sessions.latitude, sessions.longitude)
+    public fun ConnectionScope.findPreviousLocations(
+        userId: UUID,
+        limit: Int = 10,
+        excludeSessionId: UUID? = null
+    ): List<Pair<Double, Double>> {
+        return select(sessions)
+            .columns(sessions.latitude, sessions.longitude)
             .where {
                 val baseCondition = (sessions.userId eq userId) and
                     (sessions.realmId eq realmId) and
@@ -321,14 +327,15 @@ public class SessionRepository(
                 }
             }
             .limit(limit)
-            .mapNotNull {
-                val lat = it[sessions.latitude]?.toDouble()
-                val lon = it[sessions.longitude]?.toDouble()
+            .map { row ->
+                val lat = row[sessions.latitude]?.toDouble()
+                val lon = row[sessions.longitude]?.toDouble()
                 if (lat != null && lon != null) lat to lon else null
             }
+            .filterNotNull()
     }
 
-    private fun ResultRow.toSession() = Session(
+    private fun Row.toSession() = Session(
         id = this[sessions.id],
         realmId = this[sessions.realmId],
         userId = this[sessions.userId],
@@ -348,7 +355,7 @@ public class SessionRepository(
         revokedReason = this[sessions.revokedReason]
     )
 
-    private fun ResultRow.toSessionHistoryEntry() = SessionHistoryEntry(
+    private fun Row.toSessionHistoryEntry() = SessionHistoryEntry(
         id = this[history.id],
         realmId = this[history.realmId],
         userId = this[history.userId],

@@ -1,16 +1,18 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.audit
 
 import com.mustafadakhel.kodex.audit.schema.AuditSchema
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.jdbc.less
 import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
@@ -38,9 +40,9 @@ internal class DefaultAuditRetentionService(
     override fun cleanupAuditLogsOlderThan(cutoffDate: LocalDateTime): Int {
         return db.transaction {
             val cutoffInstant = cutoffDate.toInstant(timeZone)
-            auditEvents.deleteWhere {
-                (auditEvents.realmId eq realmId) and (auditEvents.timestamp less cutoffInstant)
-            }
+            deleteFrom(auditEvents)
+                .where { (auditEvents.realmId eq realmId) and (auditEvents.timestamp less cutoffInstant) }
+                .execute()
         }
     }
 
