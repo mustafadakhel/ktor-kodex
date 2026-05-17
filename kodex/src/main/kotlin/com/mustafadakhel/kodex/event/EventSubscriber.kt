@@ -2,10 +2,7 @@ package com.mustafadakhel.kodex.event
 
 import kotlin.reflect.KClass
 
-/** Interface for extensions that receive events. */
 public interface EventSubscriber<T : KodexEvent> {
-
-    /** The event type this subscriber handles. */
     public val eventType: KClass<out T>
 
     /** Called when event is published. Runs in isolated coroutine. */

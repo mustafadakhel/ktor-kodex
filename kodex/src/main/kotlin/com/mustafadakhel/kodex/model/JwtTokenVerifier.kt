@@ -2,7 +2,6 @@ package com.mustafadakhel.kodex.model
 
 import com.mustafadakhel.kodex.model.database.PersistedToken
 import com.mustafadakhel.kodex.repository.TokenRepository
-import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.DecodedToken
@@ -20,7 +19,7 @@ internal class JwtTokenVerifier(
     private val hashingService: HashingService,
     private val tokenRepository: TokenRepository,
     private val tokenPersistence: Map<TokenType, Boolean>,
-    private val userRepository: UserRepository,
+    private val realm: Realm,
 ) : TokenVerifier {
     override fun verify(
         decodedToken: DecodedToken,
@@ -39,11 +38,10 @@ internal class JwtTokenVerifier(
         val decodedType = decodedToken.claims.filterIsInstance<Claim.TokenType>().firstOrNull()
             ?: throw KodexThrowable.Authorization.SuspiciousToken("Token does not contain a valid type claim")
 
-        val expectedRoles = userRepository.findRoles(userId).takeIf { it.isNotEmpty() }
-            ?: throw KodexThrowable.Authorization.UserHasNoRoles
+        val tokenRoles = decodedToken.claims.filterIsInstance<Claim.Roles>().firstOrNull()?.value
+            ?: emptyList()
 
         val tokenType = TokenType.fromClaim(decodedType)
-
 
         if (tokenType != expectedType)
             throw KodexThrowable.Authorization.SuspiciousToken("Token type does not match expected type: $expectedType")
@@ -51,7 +49,6 @@ internal class JwtTokenVerifier(
         val validClaims = claimsValidator.validate(
             claims = decodedToken.claims,
             expectedType = expectedType,
-            expectedRoles = expectedRoles.map { it.name },
         )
         if (!validClaims) throw KodexThrowable.Authorization.SuspiciousToken("Token claims are not valid")
 
@@ -69,7 +66,7 @@ internal class JwtTokenVerifier(
             userId = userId,
             tokenId = tokenId,
             type = tokenType,
-            roles = expectedRoles.map { Role(it.name, it.description) },
+            roles = tokenRoles.filterNotNull().map { Role(name = it, description = null) },
             claims = decodedToken.claims,
         )
 

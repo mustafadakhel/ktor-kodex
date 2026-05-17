@@ -1,7 +1,6 @@
 package com.mustafadakhel.kodex.mfa
 
 import com.mustafadakhel.kodex.Kodex
-import com.mustafadakhel.kodex.mfa.database.MfaMethodType
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.service.passwordHashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
@@ -36,7 +35,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-admin-force-remove;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -128,7 +126,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-non-admin-force-remove;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -207,7 +204,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-admin-disable-all;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -300,7 +296,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-non-admin-disable;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -375,7 +370,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-admin-list-methods;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -460,7 +454,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-non-admin-list;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -532,7 +525,6 @@ class MfaAdminOperationsTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-statistics;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

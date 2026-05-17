@@ -110,7 +110,6 @@ fun Application.installMfaTest(realm: Realm, emailSender: MockEmailSender, dbNam
 
     return install(Kodex) {
         database {
-            driverClassName = "org.h2.Driver"
             jdbcUrl = "jdbc:h2:mem:$dbName;DB_CLOSE_DELAY=-1;"
             username = "test"
             password = "test"

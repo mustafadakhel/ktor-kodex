@@ -1,63 +1,30 @@
 package com.mustafadakhel.kodex.sessions
 
-import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.event.TokenEvent
 import com.mustafadakhel.kodex.extension.*
 import com.mustafadakhel.kodex.observability.KodexLogger
 import com.mustafadakhel.kodex.sessions.cleanup.SessionCleanupService
-import com.mustafadakhel.kodex.sessions.database.SessionRepository
-import com.mustafadakhel.kodex.sessions.database.SessionHistory
-import com.mustafadakhel.kodex.sessions.database.Sessions
 import com.mustafadakhel.kodex.sessions.device.DeviceFingerprint
 import com.mustafadakhel.kodex.sessions.model.DeviceInfo
-import com.mustafadakhel.kodex.sessions.security.AnomalyDetector
-import com.mustafadakhel.kodex.sessions.security.DefaultAnomalyDetector
-import com.mustafadakhel.kodex.sessions.security.DefaultGeoLocationService
 import com.mustafadakhel.kodex.sessions.security.GeoLocationService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Table
 import java.util.UUID
 import kotlin.reflect.KClass
-import kotlin.time.Duration.Companion.days
 
-public class SessionExtension(
-    private val config: SessionConfig,
-    private val timeZone: TimeZone,
-    private val eventBus: EventBus,
+public class SessionExtension internal constructor(
+    private val sessionService: SessionService,
+    private val cleanupService: SessionCleanupService,
+    private val geoLocationService: GeoLocationService?,
+    private val sessionExpiration: kotlin.time.Duration,
     private val realmId: String
-) : UserLifecycleHooks, PersistentExtension, ServiceProvider, EventSubscriberProvider {
+) : UserLifecycleHooks, ServiceProvider, EventSubscriberProvider, Shutdownable {
 
     override val priority: Int = 100
-
-    private val repository = SessionRepository(realmId)
-
-    private val anomalyDetector: AnomalyDetector? = if (config.anomalyDetection.enabled) {
-        DefaultAnomalyDetector(config.anomalyDetection)
-    } else {
-        null
-    }
-
-    private val geoLocationService: GeoLocationService? = if (config.geoLocation.enabled) {
-        DefaultGeoLocationService(config.geoLocation)
-    } else {
-        null
-    }
-
-    private val sessionService: SessionService = DefaultSessionService(
-        repository = repository,
-        config = config,
-        eventBus = eventBus,
-        anomalyDetector = anomalyDetector,
-        geoLocationService = geoLocationService
-    )
-
-    private val cleanupService = SessionCleanupService(sessionService, config)
 
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -65,12 +32,11 @@ public class SessionExtension(
         cleanupService.start(cleanupScope)
     }
 
-    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
-        return listOf(
-            TokenIssuedSubscriber(realmId, sessionService, config.sessionExpiration),
-            TokenRefreshedSubscriber(realmId, sessionService, config.sessionExpiration)
-        )
-    }
+    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> = listOf(
+        TokenIssuedSubscriber(realmId, sessionService, sessionExpiration),
+        TokenRefreshedSubscriber(realmId, sessionService, sessionExpiration),
+        TokenRevokedSubscriber(realmId, sessionService)
+    )
 
     private class TokenIssuedSubscriber(
         private val realmId: String,
@@ -134,14 +100,32 @@ public class SessionExtension(
         }
     }
 
-    override fun tables(): List<Table> = listOf(Sessions, SessionHistory)
+    private class TokenRevokedSubscriber(
+        private val realmId: String,
+        private val sessionService: SessionService
+    ) : EventSubscriber<TokenEvent.Revoked> {
+        override val eventType: KClass<out TokenEvent.Revoked> = TokenEvent.Revoked::class
+
+        private val logger = KodexLogger.logger<TokenRevokedSubscriber>()
+
+        override suspend fun onEvent(event: TokenEvent.Revoked) {
+            if (event.realmId != realmId) return
+
+            try {
+                sessionService.revokeAllSessions(event.userId)
+            } catch (e: Exception) {
+                logger.error(
+                    "Failed to revoke sessions for user ${event.userId} after token revocation: ${e.message}",
+                    e
+                )
+            }
+        }
+    }
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : Any> getService(type: KClass<T>): T? {
-        return when (type) {
-            SessionService::class -> sessionService as T
-            else -> null
-        }
+    override fun <T : Any> getService(type: KClass<T>): T? = when (type) {
+        SessionService::class -> sessionService as T
+        else -> null
     }
 
     override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
@@ -165,7 +149,7 @@ public class SessionExtension(
      * Stops the cleanup service and cancels the cleanup scope.
      * Should be called when the application is shutting down.
      */
-    public fun shutdown() {
+    override public fun shutdown() {
         cleanupService.stop()
         cleanupScope.cancel()
         geoLocationService?.close()

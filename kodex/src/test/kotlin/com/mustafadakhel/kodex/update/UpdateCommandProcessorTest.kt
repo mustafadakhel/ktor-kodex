@@ -43,11 +43,14 @@ class UpdateCommandProcessorTest : DescribeSpec({
         val changeTracker = ChangeTracker()
         val timeZone = TimeZone.UTC
 
+        val testRealmId = "test-realm"
+
         val processor = UpdateCommandProcessor(
             userRepository = mockRepository,
             hookExecutor = mockHookExecutor,
             changeTracker = changeTracker,
-            timeZone = timeZone
+            timeZone = timeZone,
+            realmId = testRealmId
         )
 
         val testUserId = UUID.randomUUID()
@@ -87,8 +90,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 verify { mockRepository.updateById(
                     userId = testUserId,
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.NoChange(),
-                    status = FieldUpdate.NoChange(),
+                    phone = FieldUpdate.NoChange,
+                    status = FieldUpdate.NoChange,
                     currentTime = any()
                 )}
             }
@@ -156,7 +159,7 @@ class UpdateCommandProcessorTest : DescribeSpec({
 
                 val command = UpdateUserFields(
                     userId = testUserId,
-                    fields = UserFieldUpdates(email = FieldUpdate.ClearValue())
+                    fields = UserFieldUpdates(email = FieldUpdate.ClearValue)
                 )
 
                 val result = processor.execute(command)
@@ -164,9 +167,9 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    email = FieldUpdate.ClearValue(),
-                    phone = FieldUpdate.NoChange(),
-                    status = FieldUpdate.NoChange(),
+                    email = FieldUpdate.ClearValue,
+                    phone = FieldUpdate.NoChange,
+                    status = FieldUpdate.NoChange,
                     currentTime = any()
                 )}
             }
@@ -185,8 +188,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 result.shouldBeInstanceOf<UpdateResult.Success>()
                 verify { mockRepository.updateById(
                     userId = testUserId,
-                    email = FieldUpdate.NoChange(),
-                    phone = FieldUpdate.NoChange(),
+                    email = FieldUpdate.NoChange,
+                    phone = FieldUpdate.NoChange,
                     status = FieldUpdate.SetValue(UserStatus.SUSPENDED),
                     currentTime = any()
                 )}
@@ -234,8 +237,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 val command = UpdateProfileFields(
                     userId = testUserId,
                     fields = ProfileFieldUpdates(
-                        address = FieldUpdate.ClearValue(),
-                        profilePicture = FieldUpdate.ClearValue()
+                        address = FieldUpdate.ClearValue,
+                        profilePicture = FieldUpdate.ClearValue
                     )
                 )
 
@@ -386,8 +389,8 @@ class UpdateCommandProcessorTest : DescribeSpec({
                 verify { mockRepository.updateBatch(
                     userId = testUserId,
                     email = FieldUpdate.SetValue("new@example.com"),
-                    phone = FieldUpdate.NoChange(),
-                    status = FieldUpdate.NoChange(),
+                    phone = FieldUpdate.NoChange,
+                    status = FieldUpdate.NoChange,
                     profile = any(),
                     customAttributes = FieldUpdate.SetValue(mapOf("key" to "value")),
                     currentTime = any()

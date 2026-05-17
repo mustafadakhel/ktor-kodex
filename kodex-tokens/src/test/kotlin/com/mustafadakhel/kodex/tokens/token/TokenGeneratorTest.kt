@@ -116,7 +116,7 @@ class TokenGeneratorTest : StringSpec({
     }
 
     "AlphanumericFormat lowercase mode excludes uppercase" {
-        val tokens = (1..100).map { TokenGenerator.generate(AlphanumericFormat(100, uppercase = false)) }
+        val tokens = (1..100).map { TokenGenerator.generate(AlphanumericFormat(100, includeUppercase = false)) }
 
         tokens.forEach { token ->
             token.any { it in 'A'..'Z' }.shouldBeFalse()
@@ -124,7 +124,7 @@ class TokenGeneratorTest : StringSpec({
     }
 
     "AlphanumericFormat uppercase mode includes uppercase" {
-        val tokens = (1..100).map { TokenGenerator.generate(AlphanumericFormat(100, uppercase = true)) }
+        val tokens = (1..100).map { TokenGenerator.generate(AlphanumericFormat(100, includeUppercase = true)) }
 
         // At least some tokens should have uppercase (statistically certain)
         tokens.any { token -> token.any { it in 'A'..'Z' } }.shouldBeTrue()

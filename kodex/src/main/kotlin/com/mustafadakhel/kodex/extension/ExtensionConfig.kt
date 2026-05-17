@@ -1,7 +1,12 @@
 package com.mustafadakhel.kodex.extension
 
-/** Base class for extension configuration with DSL support. */
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
+
 public abstract class ExtensionConfig {
-    /** Builds the configured extension instance. */
-    public abstract fun build(context: ExtensionContext): RealmExtension
+
+    /** Returns the schema this extension needs, or null for non-persistent extensions. */
+    public open fun schema(tablePrefix: String): ExtensionSchema? = null
+
+    public abstract fun build(context: ExtensionContext, db: KodexDatabase): RealmExtension
 }

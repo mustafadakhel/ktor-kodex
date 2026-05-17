@@ -47,6 +47,25 @@ public sealed interface AuthEvent : KodexEvent {
         override val eventType: String = "LOGIN_FAILED"
     }
 
+    public data class Logout(
+        override val eventId: UUID,
+        override val timestamp: Instant,
+        override val realmId: String,
+        val userId: UUID,
+        val tokenFamily: UUID? = null,
+        val reason: String = "user_initiated",
+        override val requestId: UUID? = null,
+        override val sessionId: UUID? = tokenFamily,
+        override val sourceIp: String? = null,
+        override val userAgent: String? = null,
+        override val correlationId: UUID? = requestId,
+        override val durationMs: Long? = null,
+        override val tags: Map<String, String> = emptyMap()
+    ) : AuthEvent {
+        override val eventType: String = "LOGOUT"
+        override val severity: EventSeverity = EventSeverity.INFO
+    }
+
     public data class PasswordChanged(
         override val eventId: UUID,
         override val timestamp: Instant,

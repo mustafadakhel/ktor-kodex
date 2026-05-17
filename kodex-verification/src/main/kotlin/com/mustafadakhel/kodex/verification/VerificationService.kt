@@ -15,48 +15,39 @@ public interface VerificationService {
      * If the contact value changes, verification status is reset.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier (email, phone, or custom attribute)
+     * @param contactType The contact type (Email, Phone, or CustomAttribute)
      * @param value The contact value (email address, phone number, etc.)
      */
-    public suspend fun setContact(userId: UUID, identifier: ContactIdentifier, value: String)
+    public suspend fun setContact(userId: UUID, contactType: ContactType, value: String)
 
-    /**
-     * Set email contact for a user.
-     */
     public suspend fun setEmail(userId: UUID, email: String) {
-        setContact(userId, ContactIdentifier(ContactType.EMAIL), email)
+        setContact(userId, ContactType.Email, email)
     }
 
-    /**
-     * Set phone contact for a user.
-     */
     public suspend fun setPhone(userId: UUID, phone: String) {
-        setContact(userId, ContactIdentifier(ContactType.PHONE), phone)
+        setContact(userId, ContactType.Phone, phone)
     }
 
-    /**
-     * Set a custom attribute contact for a user.
-     */
     public suspend fun setCustomAttribute(userId: UUID, attributeKey: String, value: String) {
-        setContact(userId, ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, attributeKey), value)
+        setContact(userId, ContactType.CustomAttribute(attributeKey), value)
     }
 
     /**
      * Remove a contact for a user.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier to remove
+     * @param contactType The contact type to remove
      */
-    public suspend fun removeContact(userId: UUID, identifier: ContactIdentifier)
+    public suspend fun removeContact(userId: UUID, contactType: ContactType)
 
     /**
      * Get a specific contact for a user.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier
+     * @param contactType The contact type
      * @return The contact verification info, or null if not found
      */
-    public fun getContact(userId: UUID, identifier: ContactIdentifier): ContactVerification?
+    public fun getContact(userId: UUID, contactType: ContactType): ContactVerification?
 
     /**
      * Get all contacts for a user.
@@ -70,10 +61,10 @@ public interface VerificationService {
      * Check if a specific contact is verified.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier
+     * @param contactType The contact type
      * @return true if the contact is verified, false otherwise
      */
-    public fun isContactVerified(userId: UUID, identifier: ContactIdentifier): Boolean
+    public fun isContactVerified(userId: UUID, contactType: ContactType): Boolean
 
     /**
      * Check if user satisfies verification policy and can login.
@@ -97,9 +88,9 @@ public interface VerificationService {
      * Get list of required contacts that are still unverified.
      *
      * @param userId The ID of the user
-     * @return List of contact identifiers that are required but not verified
+     * @return List of contact types that are required but not verified
      */
-    public fun getMissingVerifications(userId: UUID): List<ContactIdentifier>
+    public fun getMissingVerifications(userId: UUID): List<ContactType>
 
     /**
      * Send verification token for a specific contact.
@@ -108,14 +99,14 @@ public interface VerificationService {
      * Throws if no sender is configured for this contact type.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier
+     * @param contactType The contact type
      * @param ipAddress Optional IP address for rate limiting
      * @return VerificationSendResult indicating success or rate limit exceeded
      * @throws IllegalStateException if no sender is configured for this contact type
      */
     public suspend fun sendVerification(
         userId: UUID,
-        identifier: ContactIdentifier,
+        contactType: ContactType,
         ipAddress: String? = null
     ): VerificationSendResult
 
@@ -123,14 +114,14 @@ public interface VerificationService {
      * Verify a token for a specific contact.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier
+     * @param contactType The contact type
      * @param token The verification token
      * @param ipAddress Optional IP address for rate limiting
      * @return VerificationResult indicating success, invalid token, or rate limit exceeded
      */
     public suspend fun verifyToken(
         userId: UUID,
-        identifier: ContactIdentifier,
+        contactType: ContactType,
         token: String,
         ipAddress: String? = null
     ): VerificationResult
@@ -142,14 +133,14 @@ public interface VerificationService {
      * Throws if no sender is configured for this contact type.
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier
+     * @param contactType The contact type
      * @param ipAddress Optional IP address for rate limiting
      * @return VerificationSendResult indicating success or rate limit exceeded
      * @throws IllegalStateException if no sender is configured for this contact type
      */
     public suspend fun resendVerification(
         userId: UUID,
-        identifier: ContactIdentifier,
+        contactType: ContactType,
         ipAddress: String? = null
     ): VerificationSendResult
 
@@ -157,8 +148,8 @@ public interface VerificationService {
      * Manually mark a contact as verified (for admin/testing purposes).
      *
      * @param userId The ID of the user
-     * @param identifier The contact identifier
+     * @param contactType The contact type
      * @param verified Whether the contact should be marked as verified
      */
-    public fun setVerified(userId: UUID, identifier: ContactIdentifier, verified: Boolean)
+    public fun setVerified(userId: UUID, contactType: ContactType, verified: Boolean)
 }

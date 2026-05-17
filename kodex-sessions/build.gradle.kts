@@ -41,9 +41,6 @@ tasks {
 dependencies {
     api(project(":kodex"))
 
-    implementation(libs.exposed.dao)
-    implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.datetime)
     implementation(libs.kotlinx.datetime)
     implementation(libs.bundles.ktor.server)
 
@@ -54,6 +51,7 @@ dependencies {
 
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
+    testImplementation(libs.h2.database)
     testImplementation(project(":kodex-ratelimit-inmemory"))
 }
 

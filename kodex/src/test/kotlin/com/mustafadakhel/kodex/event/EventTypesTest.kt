@@ -681,11 +681,10 @@ class EventTypesTest : DescribeSpec({
                     timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
-                    email = "test@example.com",
-                    verificationCode = "123456"
+                    email = "test@example.com"
                 )
 
-                event.verificationCode shouldBe "123456"
+                event.email shouldBe "test@example.com"
             }
         }
 
@@ -750,11 +749,10 @@ class EventTypesTest : DescribeSpec({
                     timestamp = CurrentKotlinInstant,
                     realmId = "test-realm",
                     userId = UUID.randomUUID(),
-                    phone = "+1234567890",
-                    verificationCode = "789012"
+                    phone = "+1234567890"
                 )
 
-                event.verificationCode shouldBe "789012"
+                event.phone shouldBe "+1234567890"
             }
         }
 

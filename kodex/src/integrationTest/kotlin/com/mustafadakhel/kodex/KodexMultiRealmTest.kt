@@ -20,7 +20,6 @@ class KodexMultiRealmTest : StringSpec({
             application {
                 val actualKodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -31,7 +30,7 @@ class KodexMultiRealmTest : StringSpec({
                             audience("audience")
                         }
                         secrets {
-                            raw("secret1")
+                            raw("test-secret-key-must-be-32-ch-01")
                         }
                     }
                     realm(userRealm) {
@@ -40,7 +39,7 @@ class KodexMultiRealmTest : StringSpec({
                             audience("audience")
                         }
                         secrets {
-                            raw("secret2")
+                            raw("test-secret-key-must-be-32-ch-02")
                         }
                     }
                 }
@@ -68,7 +67,6 @@ class KodexMultiRealmTest : StringSpec({
             application {
                 val actualKodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -82,7 +80,7 @@ class KodexMultiRealmTest : StringSpec({
                             audience("audience")
                         }
                         secrets {
-                            raw("secret1")
+                            raw("test-secret-key-must-be-32-ch-01")
                         }
                     }
                     realm(userRealm) {
@@ -94,16 +92,16 @@ class KodexMultiRealmTest : StringSpec({
                             audience("audience")
                         }
                         secrets {
-                            raw("secret2")
+                            raw("test-secret-key-must-be-32-ch-02")
                         }
                     }
                 }
 
                 actualKodex.servicesOf(adminRealm).users.getSeededRoles() shouldContainExactlyInAnyOrder listOf(
-                    "admin",
-                    "user",
-                    "maintain",
-                    "view"
+                    "admin", "maintain"
+                )
+                actualKodex.servicesOf(userRealm).users.getSeededRoles() shouldContainExactlyInAnyOrder listOf(
+                    "user", "view"
                 )
             }
         }

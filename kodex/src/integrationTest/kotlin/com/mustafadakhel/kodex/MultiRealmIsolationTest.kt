@@ -22,7 +22,6 @@ class MultiRealmIsolationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:cross-realm-token;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -33,7 +32,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("realm-a-audience")
                         }
                         secrets {
-                            raw("realm-a-secret-key-32-chars!!!")
+                            raw("realm-a-secret-key-32-chars!!!AB")
                         }
                     }
                     realm(realmB) {
@@ -42,7 +41,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("realm-b-audience")
                         }
                         secrets {
-                            raw("realm-b-secret-key-32-chars!!!")
+                            raw("realm-b-secret-key-32-chars!!!AB")
                         }
                     }
                 }
@@ -85,7 +84,6 @@ class MultiRealmIsolationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:realm-secrets;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -96,7 +94,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("audience")
                         }
                         secrets {
-                            raw("first-realm-secret-32-chars!!!")
+                            raw("first-realm-secret-32-chars!!!AB")
                         }
                     }
                     realm(realm2) {
@@ -105,7 +103,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("audience")
                         }
                         secrets {
-                            raw("second-realm-secret-32-chars!!")
+                            raw("second-realm-secret-32-chars!!AB")
                         }
                     }
                 }
@@ -144,7 +142,6 @@ class MultiRealmIsolationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:realm-roles;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -159,7 +156,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("tenant-a-audience")
                         }
                         secrets {
-                            raw("tenant-a-secret-key-32-chars!!")
+                            raw("tenant-a-secret-key-32-chars!!AB")
                         }
                     }
                     realm(tenantB) {
@@ -172,17 +169,16 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("tenant-b-audience")
                         }
                         secrets {
-                            raw("tenant-b-secret-key-32-chars!!")
+                            raw("tenant-b-secret-key-32-chars!!AB")
                         }
                     }
                 }
 
-                val servicesA = kodex.servicesOf(tenantA)
+                val rolesA = kodex.servicesOf(tenantA).users.getSeededRoles()
+                rolesA shouldContainExactlyInAnyOrder listOf("tenant-a", "manager", "analyst")
 
-                val seededRoles = servicesA.users.getSeededRoles()
-                seededRoles shouldContainExactlyInAnyOrder listOf(
-                    "tenant-a", "tenant-b", "manager", "analyst", "supervisor", "operator"
-                )
+                val rolesB = kodex.servicesOf(tenantB).users.getSeededRoles()
+                rolesB shouldContainExactlyInAnyOrder listOf("tenant-b", "supervisor", "operator")
             }
         }
     }
@@ -195,7 +191,6 @@ class MultiRealmIsolationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:realm-config;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -206,7 +201,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("high-security-audience")
                         }
                         secrets {
-                            raw("high-security-secret-32-chars!!")
+                            raw("high-security-secret-32-chars!!A")
                         }
                         tokenValidity {
                             access(5.hours)
@@ -218,7 +213,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("low-friction-audience")
                         }
                         secrets {
-                            raw("low-friction-secret-32-chars!!!")
+                            raw("low-friction-secret-32-chars!!!A")
                         }
                         tokenValidity {
                             access(24.hours)
@@ -284,7 +279,6 @@ class MultiRealmIsolationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:realm-refresh;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -295,7 +289,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("p-audience")
                         }
                         secrets {
-                            raw("realm-p-secret-key-32-chars!!!!")
+                            raw("realm-p-secret-key-32-chars!!!!A")
                         }
                         tokenValidity {
                             persist(TokenType.RefreshToken, true)
@@ -307,7 +301,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("q-audience")
                         }
                         secrets {
-                            raw("realm-q-secret-key-32-chars!!!!")
+                            raw("realm-q-secret-key-32-chars!!!!A")
                         }
                         tokenValidity {
                             persist(TokenType.RefreshToken, true)
@@ -353,7 +347,6 @@ class MultiRealmIsolationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:multi-realm-login;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -364,7 +357,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("m-audience")
                         }
                         secrets {
-                            raw("realm-m-secret-key-32-chars!!!!")
+                            raw("realm-m-secret-key-32-chars!!!!A")
                         }
                     }
                     realm(realmN) {
@@ -373,7 +366,7 @@ class MultiRealmIsolationTest : FunSpec({
                             audience("n-audience")
                         }
                         secrets {
-                            raw("realm-n-secret-key-32-chars!!!!")
+                            raw("realm-n-secret-key-32-chars!!!!A")
                         }
                     }
                 }

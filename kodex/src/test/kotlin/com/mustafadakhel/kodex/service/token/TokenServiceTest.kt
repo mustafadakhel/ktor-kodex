@@ -6,6 +6,7 @@ import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
+import com.mustafadakhel.kodex.token.JwtSignatureVerifier
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
 import io.kotest.core.spec.style.FunSpec
@@ -21,16 +22,18 @@ import java.util.UUID
 
 class TokenServiceTest : FunSpec({
     lateinit var tokenManager: TokenManager
+    lateinit var signatureVerifier: JwtSignatureVerifier
     lateinit var eventBus: EventBus
     lateinit var realm: Realm
     lateinit var tokenService: TokenService
 
     beforeEach {
         tokenManager = mockk()
+        signatureVerifier = mockk()
         eventBus = mockk(relaxed = true)
         realm = mockk()
-        every { realm.owner } returns "test-realm"
-        tokenService = DefaultTokenService(tokenManager, eventBus, realm)
+        every { realm.name } returns "test-realm"
+        tokenService = DefaultTokenService(tokenManager, signatureVerifier, eventBus, realm)
     }
 
     test("issueTokens should delegate to TokenManager.issueNewTokens") {
@@ -39,13 +42,15 @@ class TokenServiceTest : FunSpec({
             access = "access-token",
             refresh = "refresh-token"
         )
+        val tokenFamily = UUID.randomUUID()
+        val result = com.mustafadakhel.kodex.token.TokenPairWithFamily(expectedTokenPair, tokenFamily)
 
-        coEvery { tokenManager.issueNewTokens(userId) } returns expectedTokenPair
+        coEvery { tokenManager.issueNewTokensWithFamily(userId) } returns result
 
-        val result = tokenService.issue(userId)
+        val actual = tokenService.issue(userId)
 
-        result shouldBe expectedTokenPair
-        coVerify(exactly = 1) { tokenManager.issueNewTokens(userId) }
+        actual shouldBe expectedTokenPair
+        coVerify(exactly = 1) { tokenManager.issueNewTokensWithFamily(userId) }
     }
 
     test("refresh should delegate to TokenManager.refreshTokens") {
@@ -55,13 +60,15 @@ class TokenServiceTest : FunSpec({
             access = "new-access-token",
             refresh = "new-refresh-token"
         )
+        val tokenFamily = UUID.randomUUID()
+        val result = com.mustafadakhel.kodex.token.TokenPairWithFamily(expectedTokenPair, tokenFamily)
 
-        coEvery { tokenManager.refreshTokens(userId, refreshToken) } returns expectedTokenPair
+        coEvery { tokenManager.refreshTokensWithFamily(userId, refreshToken) } returns result
 
-        val result = tokenService.refresh(userId, refreshToken)
+        val actual = tokenService.refresh(userId, refreshToken)
 
-        result shouldBe expectedTokenPair
-        coVerify(exactly = 1) { tokenManager.refreshTokens(userId, refreshToken) }
+        actual shouldBe expectedTokenPair
+        coVerify(exactly = 1) { tokenManager.refreshTokensWithFamily(userId, refreshToken) }
     }
 
     test("revokeTokens should delegate to TokenManager.revokeTokensForUser") {
@@ -94,34 +101,36 @@ class TokenServiceTest : FunSpec({
         verify(exactly = 1) { tokenManager.revokeToken(token, false) }
     }
 
-    test("verifyAccessToken should decode JWT and verify via TokenManager") {
+    test("verifyAccessToken should verify signature and verify via TokenManager") {
         val userId = UUID.randomUUID()
-        val token = JWT.create()
+        val rawToken = "signed-jwt-token"
+        val decodedJwt = JWT.create()
             .withSubject(userId.toString())
             .withClaim("type", TokenType.AccessToken.name)
             .withExpiresAt(Date(System.currentTimeMillis() + 3600000))
             .sign(Algorithm.HMAC256("test-secret"))
+            .let { JWT.decode(it) }
 
         val expectedPrincipal = mockk<KodexPrincipal>()
         every { expectedPrincipal.userId } returns userId
 
+        every { signatureVerifier.verify(rawToken) } returns decodedJwt
         every { tokenManager.verifyToken(any(), TokenType.AccessToken) } returns expectedPrincipal
 
-        val result = tokenService.verify(token)
+        val result = tokenService.verify(rawToken)
 
         result shouldNotBe null
         result?.userId shouldBe userId
+        verify(exactly = 1) { signatureVerifier.verify(rawToken) }
         verify(exactly = 1) { tokenManager.verifyToken(any(), TokenType.AccessToken) }
     }
 
-    test("verifyAccessToken should return null when verification fails") {
-        val token = JWT.create()
-            .withSubject(UUID.randomUUID().toString())
-            .sign(Algorithm.HMAC256("test-secret"))
+    test("verifyAccessToken should return null when signature verification fails") {
+        val rawToken = "forged-jwt-token"
 
-        every { tokenManager.verifyToken(any(), TokenType.AccessToken) } throws RuntimeException("Invalid token")
+        every { signatureVerifier.verify(rawToken) } throws RuntimeException("Invalid signature")
 
-        val result = tokenService.verify(token)
+        val result = tokenService.verify(rawToken)
 
         result shouldBe null
     }

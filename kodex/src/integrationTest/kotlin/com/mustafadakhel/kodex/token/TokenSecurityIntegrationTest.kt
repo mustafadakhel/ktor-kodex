@@ -31,7 +31,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:token-expiry-valid;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -79,7 +78,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:single-revoke;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -149,7 +147,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:revoke-all;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -227,7 +224,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:multi-realm-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -238,7 +234,7 @@ class TokenSecurityIntegrationTest : FunSpec({
                             audience("audience-a")
                         }
                         secrets {
-                            raw("realm-a-secret-key-32-chars!!!!")
+                            raw("realm-a-secret-key-32-chars!!!!A")
                         }
                     }
                     realm(realmB) {
@@ -247,7 +243,7 @@ class TokenSecurityIntegrationTest : FunSpec({
                             audience("audience-b")
                         }
                         secrets {
-                            raw("realm-b-secret-key-32-chars!!!!")
+                            raw("realm-b-secret-key-32-chars!!!!A")
                         }
                     }
                 }
@@ -302,7 +298,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:invalid-sig;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -362,7 +357,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:malformed-token;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -396,7 +390,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:role-claims;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -447,7 +440,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:refresh-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -504,7 +496,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:access-for-refresh;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -553,7 +544,6 @@ class TokenSecurityIntegrationTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:wrong-user-refresh;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

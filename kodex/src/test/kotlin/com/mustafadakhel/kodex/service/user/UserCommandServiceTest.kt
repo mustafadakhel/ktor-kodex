@@ -16,6 +16,7 @@ import com.mustafadakhel.kodex.service.HashingService
 import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.update.ChangeSet
 import com.mustafadakhel.kodex.update.FieldChange
+import com.mustafadakhel.kodex.update.UserField
 import com.mustafadakhel.kodex.update.UpdateCommand
 import com.mustafadakhel.kodex.update.UpdateCommandProcessor
 import com.mustafadakhel.kodex.update.UpdateResult
@@ -75,7 +76,6 @@ class UserCommandServiceTest : FunSpec({
         updateCommandProcessor = mockk()
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns realmOwner
         every { realm.name } returns realmOwner
 
         userCommandService = DefaultUserService(
@@ -103,7 +103,6 @@ class UserCommandServiceTest : FunSpec({
             currentTime = any(),
             customAttributes = null,
             profile = testProfile,
-            realmId = realmOwner
         ) } returns UserRepository.CreateUserResult.Success(testUserEntity)
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
@@ -144,7 +143,6 @@ class UserCommandServiceTest : FunSpec({
             currentTime = any(),
             customAttributes = any(),
             profile = any(),
-            realmId = realmOwner
         ) } returns UserRepository.CreateUserResult.Success(testUserEntity)
         coEvery { eventBus.publish(any<UserEvent.Created>()) } returns Unit
 
@@ -164,7 +162,6 @@ class UserCommandServiceTest : FunSpec({
                 currentTime = any(),
                 customAttributes = any(),
                 profile = any(),
-                realmId = realmOwner
             )
         }
     }
@@ -174,7 +171,7 @@ class UserCommandServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeUserCreate(any(), any(), any(), any(), any()) } returns transformedData
         every { hashingService.hash(any()) } returns testHashedPassword
-        every { userRepository.create(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        every { userRepository.create(any(), any(), any(), any(), any(), any(), any()) } returns
             UserRepository.CreateUserResult.EmailAlreadyExists
 
         shouldThrow<KodexThrowable.EmailAlreadyExists> {
@@ -191,7 +188,7 @@ class UserCommandServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeUserCreate(any(), any(), any(), any(), any()) } returns transformedData
         every { hashingService.hash(any()) } returns testHashedPassword
-        every { userRepository.create(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        every { userRepository.create(any(), any(), any(), any(), any(), any(), any()) } returns
             UserRepository.CreateUserResult.PhoneAlreadyExists
 
         shouldThrow<KodexThrowable.PhoneAlreadyExists> {
@@ -209,7 +206,7 @@ class UserCommandServiceTest : FunSpec({
 
         coEvery { hookExecutor.executeBeforeUserCreate(any(), any(), any(), any(), any()) } returns transformedData
         every { hashingService.hash(any()) } returns testHashedPassword
-        every { userRepository.create(any(), any(), any(), any(), any(), any(), any(), any()) } returns
+        every { userRepository.create(any(), any(), any(), any(), any(), any(), any()) } returns
             UserRepository.CreateUserResult.InvalidRole(invalidRole)
 
         val exception = shouldThrow<KodexThrowable.RoleNotFound> {
@@ -240,7 +237,7 @@ class UserCommandServiceTest : FunSpec({
         val changeSet = ChangeSet(
             timestamp = CurrentKotlinInstant,
             changedFields = mapOf(
-                "email" to FieldChange("email", "old@example.com", testEmail)
+                UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, "old@example.com", testEmail)
             )
         )
         val successResult = UpdateResult.Success(fullUser, changeSet)
@@ -322,7 +319,7 @@ class UserCommandServiceTest : FunSpec({
         val changeSet = ChangeSet(
             timestamp = CurrentKotlinInstant,
             changedFields = mapOf(
-                "email" to FieldChange("email", testEmail, null)
+                UserField.EMAIL.key to FieldChange(UserField.EMAIL.key, testEmail, null)
             )
         )
         val successResult = UpdateResult.Success(fullUser, changeSet)

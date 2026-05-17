@@ -1,51 +1,72 @@
 package com.mustafadakhel.kodex.lockout
 
+import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.LoginMetadata
-import com.mustafadakhel.kodex.extension.PersistentExtension
+import com.mustafadakhel.kodex.extension.Shutdownable
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserUpdateData
-import com.mustafadakhel.kodex.lockout.database.AccountLocks
-import com.mustafadakhel.kodex.lockout.database.FailedLoginAttempts
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.throwable.KodexThrowable
+import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import com.mustafadakhel.kodex.util.now
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
-import org.jetbrains.exposed.sql.Table
+import kotlinx.datetime.toLocalDateTime
 import java.util.*
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 
-/**
- * Account lockout extension that protects against brute force attacks.
- * Implements OWASP/NIST compliant two-layer protection:
- * - Layer 1 (beforeLogin): Throttling based on identifier + IP
- * - Layer 2 (afterAuthentication): Account lockout for real accounts only
- *
- * Priority: 10 (critical) - runs early to block throttled requests and locked accounts.
- */
 public class AccountLockoutExtension internal constructor(
     private val service: AccountLockoutService,
-    private val timeZone: TimeZone
-) : UserLifecycleHooks, PersistentExtension {
+    private val timeZone: TimeZone,
+    private val sweepInterval: Duration = 1.hours,
+    private val attemptRetentionPeriod: Duration = (7 * 24).hours
+) : UserLifecycleHooks, Shutdownable {
+
+    private val sweepScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var sweepJob: Job? = null
+
+    init {
+        sweepJob = sweepScope.launch {
+            delay(sweepInterval)
+            while (isActive) {
+                try {
+                    val cutoff = (CurrentKotlinInstant - attemptRetentionPeriod).toLocalDateTime(TimeZone.UTC)
+                    service.sweepOldAttempts(cutoff)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
+                delay(sweepInterval)
+            }
+        }
+    }
+
+    override fun shutdown() {
+        sweepJob?.cancel()
+        sweepScope.cancel()
+    }
 
     override val priority: Int = 10
 
-    override fun tables(): List<Table> = listOf(
-        FailedLoginAttempts,
-        AccountLocks
-    )
-
     override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String {
-        // Layer 1: Check throttling (identifier + IP based)
-        val identifierThrottle = service.shouldThrottleIdentifier(identifier)
+        val identifierThrottle = service.shouldThrottleIdentifier(identifier.lowercase())
         if (identifierThrottle is ThrottleResult.Throttled) {
-            throw KodexThrowable.Authorization.TooManyAttempts(
+            throw LockoutThrowable.TooManyAttempts(
                 reason = identifierThrottle.reason
             )
         }
 
         val ipThrottle = service.shouldThrottleIp(metadata.ipAddress)
         if (ipThrottle is ThrottleResult.Throttled) {
-            throw KodexThrowable.Authorization.TooManyAttempts(
+            throw LockoutThrowable.TooManyAttempts(
                 reason = ipThrottle.reason
             )
         }
@@ -53,28 +74,28 @@ public class AccountLockoutExtension internal constructor(
         return identifier
     }
 
-    override suspend fun afterAuthentication(userId: UUID) {
-        // Layer 2: Check if account is locked or should be locked
-        val nowLocal = now(timeZone)
+    override suspend fun afterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
+        val nowLocal = now(TimeZone.UTC)
 
-        // First check if account is already locked
-        if (service.isAccountLocked(userId, nowLocal)) {
-            // Account is already locked - block login
-            throw KodexThrowable.Authorization.AccountLocked(
-                lockedUntil = nowLocal,  // We don't have exact time but nowLocal is safe
+        if (service.isAccountLocked(user.userId, nowLocal)) {
+            throw LockoutThrowable.AccountLocked(
+                lockedUntil = nowLocal,
                 reason = "Account is locked due to too many failed login attempts"
             )
         }
 
-        // Check if account should be locked based on recent failures
-        val lockResult = service.shouldLockAccount(userId)
+        val lockResult = service.shouldLockAccount(user.userId)
+        if (lockResult is LockAccountResult.NoAction) {
+            service.clearFailedAttemptsForUser(user.userId)
+            return
+        }
         if (lockResult is LockAccountResult.ShouldLock) {
             service.lockAccount(
-                userId = userId,
+                userId = user.userId,
                 lockedUntil = lockResult.lockedUntil,
                 reason = "Account locked due to ${lockResult.attemptCount} failed login attempts"
             )
-            throw KodexThrowable.Authorization.AccountLocked(
+            throw LockoutThrowable.AccountLocked(
                 lockedUntil = lockResult.lockedUntil,
                 reason = "Account locked due to ${lockResult.attemptCount} failed login attempts"
             )
@@ -87,10 +108,8 @@ public class AccountLockoutExtension internal constructor(
         identifierType: String,
         metadata: LoginMetadata
     ) {
-        // Record failed attempt with all metadata
-        // userId will be null if account doesn't exist (prevents username enumeration)
         service.recordFailedAttempt(
-            identifier = identifier,
+            identifier = identifier.lowercase(),
             userId = userId,
             ipAddress = metadata.ipAddress,
             reason = "Invalid credentials"

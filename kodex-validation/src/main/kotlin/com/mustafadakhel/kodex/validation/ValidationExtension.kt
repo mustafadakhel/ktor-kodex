@@ -1,10 +1,10 @@
 package com.mustafadakhel.kodex.validation
 
+import com.mustafadakhel.kodex.extension.LoginMetadata
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.UserCreateData
 import com.mustafadakhel.kodex.extension.UserUpdateData
 import com.mustafadakhel.kodex.model.UserProfile
-import com.mustafadakhel.kodex.throwable.KodexThrowable
 import java.util.*
 
 /**
@@ -12,7 +12,8 @@ import java.util.*
  * Validates and sanitizes user input before persistence.
  */
 public class ValidationExtension internal constructor(
-    private val service: ValidationService
+    private val service: ValidationService,
+    private val profileConfig: ProfileValidationConfig = ProfileValidationConfig()
 ) : UserLifecycleHooks {
 
     override suspend fun beforeUserCreate(
@@ -26,7 +27,7 @@ public class ValidationExtension internal constructor(
         email?.let {
             val emailResult = service.validateEmail(it)
             if (!emailResult.isValid) {
-                throw KodexThrowable.Validation.InvalidEmail(
+                throw ValidationThrowable.InvalidEmail(
                     email = it,
                     errors = emailResult.errors.map { error -> error.message }
                 )
@@ -37,7 +38,7 @@ public class ValidationExtension internal constructor(
         phone?.let {
             val phoneResult = service.validatePhone(it)
             if (!phoneResult.isValid) {
-                throw KodexThrowable.Validation.InvalidPhone(
+                throw ValidationThrowable.InvalidPhone(
                     phone = it,
                     errors = phoneResult.errors.map { error -> error.message }
                 )
@@ -48,26 +49,33 @@ public class ValidationExtension internal constructor(
         val passwordResult = service.validatePassword(password)
         if (!passwordResult.isValid) {
             val strength = service.analyzePasswordStrength(password)
-            throw KodexThrowable.Validation.WeakPassword(
+            throw ValidationThrowable.WeakPassword(
                 score = strength.score,
                 feedback = strength.feedback
             )
+        }
+
+        // Validate profile picture length if provided
+        profile?.profilePicture?.let { pic ->
+            if (pic.length > profileConfig.maxProfilePictureLength) {
+                throw ValidationThrowable.InvalidInput(
+                    field = "profilePicture",
+                    errors = listOf("profilePicture exceeds maximum length of ${profileConfig.maxProfilePictureLength}")
+                )
+            }
         }
 
         // Validate and sanitize custom attributes if provided
         val sanitizedAttributes = customAttributes?.let { attrs ->
             val attrsResult = service.validateCustomAttributes(attrs)
             if (!attrsResult.isValid) {
-                throw KodexThrowable.Validation.InvalidInput(
+                throw ValidationThrowable.InvalidInput(
                     field = "customAttributes",
                     errors = attrsResult.errors.map { error -> error.message }
                 )
             }
 
-            // Sanitize values to prevent XSS
-            attrs.mapValues { (_, value) ->
-                service.sanitizeHtml(value, InputContext.PLAIN_TEXT)
-            }
+            attrsResult.sanitizedAttributes ?: attrs
         }
 
         return UserCreateData(
@@ -87,7 +95,7 @@ public class ValidationExtension internal constructor(
         email?.let {
             val emailResult = service.validateEmail(it)
             if (!emailResult.isValid) {
-                throw KodexThrowable.Validation.InvalidEmail(
+                throw ValidationThrowable.InvalidEmail(
                     email = it,
                     errors = emailResult.errors.map { error -> error.message }
                 )
@@ -98,7 +106,7 @@ public class ValidationExtension internal constructor(
         phone?.let {
             val phoneResult = service.validatePhone(it)
             if (!phoneResult.isValid) {
-                throw KodexThrowable.Validation.InvalidPhone(
+                throw ValidationThrowable.InvalidPhone(
                     phone = it,
                     errors = phoneResult.errors.map { error -> error.message }
                 )
@@ -115,25 +123,22 @@ public class ValidationExtension internal constructor(
         // Validate custom attributes
         val attrsResult = service.validateCustomAttributes(customAttributes)
         if (!attrsResult.isValid) {
-            throw KodexThrowable.Validation.InvalidInput(
+            throw ValidationThrowable.InvalidInput(
                 field = "customAttributes",
                 errors = attrsResult.errors.map { error -> error.message }
             )
         }
 
-        // Sanitize values to prevent XSS
-        return customAttributes.mapValues { (_, value) ->
-            service.sanitizeHtml(value, InputContext.PLAIN_TEXT)
-        }
+        return attrsResult.sanitizedAttributes ?: customAttributes
     }
 
-    override suspend fun beforeLogin(identifier: String, metadata: com.mustafadakhel.kodex.extension.LoginMetadata): String = identifier
+    override suspend fun beforeLogin(identifier: String, metadata: LoginMetadata): String = identifier
 
     override suspend fun afterLoginFailure(
         identifier: String,
-        userId: java.util.UUID?,
+        userId: UUID?,
         identifierType: String,
-        metadata: com.mustafadakhel.kodex.extension.LoginMetadata
+        metadata: LoginMetadata
     ) {
         // Extension point for future validation tracking
     }

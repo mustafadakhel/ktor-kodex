@@ -6,12 +6,6 @@ import java.util.UUID
 
 /**
  * Executes hooks from registered extensions in a chained manner.
- * Supports multiple extensions of the same type, executing them in priority order.
- *
- * Lower priority extensions run first (e.g., priority 10 runs before priority 100).
- *
- * @param registry Extension registry containing all registered extensions
- * @param failureStrategy Strategy for handling hook execution failures
  */
 internal class HookExecutor(
     private val registry: ExtensionRegistry,
@@ -29,7 +23,6 @@ internal class HookExecutor(
         var current = UserCreateData(email, phone, customAttributes, profile)
         val failures = mutableListOf<HookFailure>()
 
-        // Execute hooks in priority order (lower values runs first)
         registry.getAllOfType(UserLifecycleHooks::class)
             .sortedBy { it.priority }
             .forEach { hook ->
@@ -53,7 +46,6 @@ internal class HookExecutor(
                                 current.profile
                             )
                         } catch (e: Throwable) {
-                            // Collect error but continue processing remaining hooks
                             failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
                         }
                     }
@@ -73,7 +65,6 @@ internal class HookExecutor(
                 }
             }
 
-        // Throw exception if any hooks fail during execution
         if (failures.isNotEmpty()) {
             throw HookExecutionException(
                 "Multiple hooks failed during beforeUserCreate execution",
@@ -307,7 +298,7 @@ internal class HookExecutor(
         }
     }
 
-    suspend fun executeAfterAuthentication(userId: UUID) {
+    suspend fun executeAfterAuthentication(user: AuthenticatedUser, metadata: LoginMetadata) {
         val failures = mutableListOf<HookFailure>()
 
         registry.getAllOfType(UserLifecycleHooks::class)
@@ -315,18 +306,18 @@ internal class HookExecutor(
             .forEach { hook ->
                 when (failureStrategy) {
                     HookFailureStrategy.FAIL_FAST -> {
-                        hook.afterAuthentication(userId)
+                        hook.afterAuthentication(user, metadata)
                     }
                     HookFailureStrategy.COLLECT_ERRORS -> {
                         try {
-                            hook.afterAuthentication(userId)
+                            hook.afterAuthentication(user, metadata)
                         } catch (e: Throwable) {
                             failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
                         }
                     }
                     HookFailureStrategy.SKIP_FAILED -> {
                         try {
-                            hook.afterAuthentication(userId)
+                            hook.afterAuthentication(user, metadata)
                         } catch (e: Throwable) {
                             logger.warn("Hook ${hook::class.simpleName} failed in afterAuthentication", e)
                         }
@@ -372,6 +363,41 @@ internal class HookExecutor(
         if (failures.isNotEmpty()) {
             throw HookExecutionException(
                 "Multiple hooks failed during beforeUserDelete execution",
+                failures
+            )
+        }
+    }
+
+    suspend fun executeAfterLogout(userId: UUID, tokenFamily: UUID?, metadata: LogoutMetadata) {
+        val failures = mutableListOf<HookFailure>()
+
+        registry.getAllOfType(UserLifecycleHooks::class)
+            .sortedBy { it.priority }
+            .forEach { hook ->
+                when (failureStrategy) {
+                    HookFailureStrategy.FAIL_FAST -> {
+                        hook.afterLogout(userId, tokenFamily, metadata)
+                    }
+                    HookFailureStrategy.COLLECT_ERRORS -> {
+                        try {
+                            hook.afterLogout(userId, tokenFamily, metadata)
+                        } catch (e: Throwable) {
+                            failures.add(HookFailure(hook::class.simpleName ?: "Unknown", e))
+                        }
+                    }
+                    HookFailureStrategy.SKIP_FAILED -> {
+                        try {
+                            hook.afterLogout(userId, tokenFamily, metadata)
+                        } catch (e: Throwable) {
+                            logger.warn("Hook ${hook::class.simpleName} failed in afterLogout", e)
+                        }
+                    }
+                }
+            }
+
+        if (failures.isNotEmpty()) {
+            throw HookExecutionException(
+                "Multiple hooks failed during afterLogout execution",
                 failures
             )
         }

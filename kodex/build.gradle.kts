@@ -9,6 +9,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("com.vanniktech.maven.publish")
+    `java-test-fixtures`
     jacoco
 }
 
@@ -16,8 +17,6 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
 }
 
 sourceSets {
@@ -85,8 +84,11 @@ tasks {
 
     named<Task>("compileIntegrationTestKotlin") {
         (this as org.jetbrains.kotlin.gradle.tasks.KotlinCompile).compilerOptions {
+            val buildDir = project.layout.buildDirectory.get()
             jvmTarget.set(JvmTarget.JVM_17)
-            freeCompilerArgs.add("-Xfriend-paths=${project.layout.buildDirectory.get()}/classes/kotlin/main")
+            freeCompilerArgs.addAll(
+                "-Xfriend-paths=$buildDir/classes/kotlin/main,$buildDir/libs/${project.name}-${project.version}.jar"
+            )
         }
     }
 
@@ -100,17 +102,18 @@ val integrationTestImplementation by configurations.getting {
 }
 
 dependencies {
-    implementation(libs.h2.database)
+    implementation(kotlin("reflect"))
     api(libs.hikari)
     api(libs.kotlinx.datetime)
     implementation(project(":kodex-tokens"))
     api(libs.slf4j.api)
-    implementation(libs.bundles.exposed)
     implementation(libs.bundles.ktor.server)
     implementation(libs.bouncycastle.bcprov)
-    implementation(libs.flyway.core)
     compileOnly(libs.micrometer.core)
 
+    testFixturesImplementation(libs.h2.database)
+
+    testImplementation(libs.h2.database)
     testImplementation(libs.bundles.kotest)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)

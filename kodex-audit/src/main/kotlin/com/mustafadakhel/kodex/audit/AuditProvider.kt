@@ -17,9 +17,6 @@ public interface AuditProvider {
     public suspend fun log(event: AuditEvent)
 }
 
-/**
- * Simple console-based audit provider for development and testing.
- */
 public class ConsoleAuditProvider : AuditProvider {
     override suspend fun log(event: AuditEvent) {
         println("[AUDIT] ${event.timestamp} | ${event.eventType} | ${event.actorType} | ${event.result} | ${event.realmId}")
@@ -29,10 +26,6 @@ public class ConsoleAuditProvider : AuditProvider {
     }
 }
 
-/**
- * No-op audit provider that does nothing.
- * Useful for disabling audit logging.
- */
 public class NoOpAuditProvider : AuditProvider {
     override suspend fun log(event: AuditEvent) {
         // Do nothing

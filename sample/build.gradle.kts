@@ -27,6 +27,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.mock)
+    runtimeOnly(libs.h2.database)
     implementation(project(":kodex"))
     implementation(project(":kodex-validation"))
     implementation(project(":kodex-lockout"))
@@ -34,4 +35,9 @@ dependencies {
     implementation(project(":kodex-metrics"))
     implementation(project(":kodex-verification"))
     implementation(project(":kodex-password-reset"))
+    implementation(project(":kodex-mfa"))
+    implementation(project(":kodex-sessions"))
+    implementation(project(":kodex-ratelimit-inmemory"))
+    // Optional: Add Redis rate limiter for distributed deployments
+    // implementation(project(":kodex-ratelimit-redis"))
 }

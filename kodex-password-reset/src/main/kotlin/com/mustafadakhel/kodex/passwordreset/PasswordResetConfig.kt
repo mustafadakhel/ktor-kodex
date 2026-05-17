@@ -2,62 +2,36 @@ package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
 import com.mustafadakhel.kodex.validation.ValidatableConfig
 import com.mustafadakhel.kodex.validation.validate
-import kotlinx.datetime.TimeZone
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
-/**
- * Configuration for password reset functionality.
- */
 public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
 
-    /**
-     * How long reset tokens remain valid.
-     * Default: 1 hour
-     */
+    /** How long reset tokens remain valid (default: 1 hour) */
     public var tokenValidity: Duration = 1.hours
 
-    /**
-     * Maximum reset attempts per user in the rate limit window.
-     * Default: 3
-     */
+    /** Maximum reset attempts per user in the rate limit window (default: 3) */
     public var maxAttemptsPerUser: Int = 3
 
-    /**
-     * Maximum reset attempts per identifier (email/phone) in the rate limit window.
-     * Default: 5
-     */
+    /** Maximum reset attempts per identifier in the rate limit window (default: 5) */
     public var maxAttemptsPerIdentifier: Int = 5
 
-    /**
-     * Maximum reset attempts per IP address in the rate limit window.
-     * Default: 10
-     */
+    /** Maximum reset attempts per IP address in the rate limit window (default: 10) */
     public var maxAttemptsPerIp: Int = 10
 
-    /**
-     * Time window for rate limiting.
-     * Default: 15 minutes
-     */
+    /** Time window for rate limiting (default: 15 minutes) */
     public var rateLimitWindow: Duration = 15.minutes
 
-    /**
-     * Minimum time between password reset requests (cooldown period).
-     * Prevents users from spamming requests even within the rate limit.
-     * Set to null to disable cooldown.
-     * Default: null (no cooldown)
-     *
-     * Example: 30.seconds prevents more than 1 request per 30 seconds
-     */
+    /** Minimum time between password reset requests, null to disable cooldown (default: null) */
     public var cooldownPeriod: Duration? = null
 
-    /**
-     * Sender for password reset notifications (email, SMS, etc.).
-     */
     public var passwordResetSender: PasswordResetSender? = null
 
     override fun validate(): ConfigValidationResult = validate {
@@ -75,10 +49,8 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
         requirePositive(maxAttemptsPerIdentifier, "maxAttemptsPerIdentifier")
         requirePositive(maxAttemptsPerIp, "maxAttemptsPerIp")
 
-        // Validate rate limit window
         requirePositive(rateLimitWindow, "rateLimitWindow")
 
-        // Validate cooldown period (optional, but must be reasonable if provided)
         cooldownPeriod?.let { cooldown ->
             require(cooldown.isPositive()) {
                 "cooldownPeriod must be positive if provided, got: $cooldown"
@@ -95,7 +67,9 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
         requireNotNull(passwordResetSender, "passwordResetSender")
     }
 
-    override fun build(context: ExtensionContext): PasswordResetExtension {
+    override fun schema(tablePrefix: String): ExtensionSchema = PasswordResetSchema(tablePrefix)
+
+    override fun build(context: ExtensionContext, db: KodexDatabase): PasswordResetExtension {
         // Validate configuration before building
         val validationResult = validate()
         if (!validationResult.isValid()) {
@@ -119,30 +93,43 @@ public class PasswordResetConfig : ExtensionConfig(), ValidatableConfig {
             )
         )
 
-        val service = DefaultPasswordResetService(
+        val realm = context.realm.name
+        val schema = db.schema<PasswordResetSchema>()
+
+        val passwordResetService = DefaultPasswordResetService(
+            db = db,
+            schema = schema,
             config = config,
             passwordResetSender = sender,
             timeZone = context.timeZone,
             eventBus = context.eventBus,
-            realm = context.realm.owner
+            realm = realm,
+            rateLimiter = context.rateLimiter
         )
-        val cleanupService = DefaultTokenCleanupService(context.timeZone, context.eventBus, context.realm.owner)
 
-        return PasswordResetExtension(service, cleanupService, context.timeZone)
+        val tokenCleanupService = DefaultTokenCleanupService(
+            db = db,
+            schema = schema,
+            timeZone = context.timeZone,
+            eventBus = context.eventBus,
+            realm = realm
+        )
+
+        return PasswordResetExtension(
+            passwordResetService = passwordResetService,
+            tokenCleanupService = tokenCleanupService,
+            db = db,
+            schema = schema,
+            timeZone = context.timeZone
+        )
     }
 }
 
-/**
- * Immutable configuration data for password reset.
- */
 internal data class PasswordResetConfigData(
     val tokenValidity: Duration,
     val rateLimit: RateLimitConfigData
 )
 
-/**
- * Immutable rate limit configuration data.
- */
 internal data class RateLimitConfigData(
     val maxAttemptsPerUser: Int,
     val maxAttemptsPerIdentifier: Int,

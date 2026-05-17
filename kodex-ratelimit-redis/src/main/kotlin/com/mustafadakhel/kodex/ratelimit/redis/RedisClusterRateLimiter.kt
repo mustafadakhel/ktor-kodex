@@ -123,7 +123,7 @@ public class RedisClusterRateLimiter(
             } else {
                 RateLimitReservation(
                     result = RateLimitResult.Allowed,
-                    reservationId = "$redisKey:$result"
+                    reservationId = "$redisKey|$result"
                 )
             }
         } catch (e: Exception) {
@@ -139,11 +139,11 @@ public class RedisClusterRateLimiter(
             return
         }
 
-        val parts = reservationId.split(":", limit = 2)
-        if (parts.size != 2) return
+        val separatorIndex = reservationId.lastIndexOf('|')
+        if (separatorIndex < 0) return
 
-        val redisKey = parts[0]
-        val actualReservationId = parts[1]
+        val redisKey = reservationId.substring(0, separatorIndex)
+        val actualReservationId = reservationId.substring(separatorIndex + 1)
 
         try {
             async.eval<Long>(

@@ -7,6 +7,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.ktor.server.application.*
 import io.ktor.server.testing.*
 import kotlin.math.abs
@@ -25,7 +26,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:timing-attack-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -99,7 +99,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:invalid-creds-existing;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -140,7 +139,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:invalid-creds-nonexisting;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -174,7 +172,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:password-change-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -224,7 +221,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:password-change-fail;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -270,7 +266,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:admin-reset-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -320,7 +315,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:multi-session-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -377,10 +371,9 @@ class AuthFlowSecurityTest : FunSpec({
                 tokens3.access.shouldNotBeNull()
 
                 // Each device should have a unique token
-                tokens1.access shouldBe tokens1.access // self-equality check
-                (tokens1.access != tokens2.access) shouldBe true
-                (tokens2.access != tokens3.access) shouldBe true
-                (tokens1.access != tokens3.access) shouldBe true
+                tokens1.access shouldNotBe tokens2.access
+                tokens2.access shouldNotBe tokens3.access
+                tokens1.access shouldNotBe tokens3.access
             }
         }
     }
@@ -392,7 +385,6 @@ class AuthFlowSecurityTest : FunSpec({
             application {
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:token-claims-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -430,8 +422,8 @@ class AuthFlowSecurityTest : FunSpec({
                 val principal = services.tokens.verify(tokens.access)
                 principal.shouldNotBeNull()
                 principal.userId shouldBe user.id
-                principal.realm.owner shouldBe "test-realm"
-                // Roles should include realm owner role (auto-added with name = realm.owner)
+                principal.realm.name shouldBe "test-realm"
+                // Roles should include realm owner role (auto-added with name = realm.name)
                 principal.roles.any { it.name == "test-realm" } shouldBe true
             }
         }

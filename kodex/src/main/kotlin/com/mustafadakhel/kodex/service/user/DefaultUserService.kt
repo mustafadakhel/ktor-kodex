@@ -21,12 +21,6 @@ import com.mustafadakhel.kodex.util.now as nowLocal
 import kotlinx.datetime.TimeZone
 import java.util.UUID
 
-/**
- * Default implementation of UserService.
- *
- * Consolidates user queries, commands, profile management, role assignments,
- * verification, and custom attributes into a single cohesive service.
- */
 internal class DefaultUserService(
     private val userRepository: UserRepository,
     private val hashingService: HashingService,
@@ -55,12 +49,12 @@ internal class DefaultUserService(
     }
 
     override fun getUserByEmail(email: String): User {
-        return userRepository.findByEmail(email, realm.name)?.toUser()
+        return userRepository.findByEmail(email)?.toUser()
             ?: throw KodexThrowable.UserNotFound("User with email $email not found")
     }
 
     override fun getUserByPhone(phone: String): User {
-        return userRepository.findByPhone(phone, realm.name)?.toUser()
+        return userRepository.findByPhone(phone)?.toUser()
             ?: throw KodexThrowable.UserNotFound("User with phone number $phone not found")
     }
 
@@ -93,41 +87,36 @@ internal class DefaultUserService(
         roleNames: List<String>,
         customAttributes: Map<String, String>?,
         profile: UserProfile?
-    ): User? {
+    ): User {
         val timestamp = CurrentKotlinInstant
 
-        return try {
-            val transformed = hookExecutor.executeBeforeUserCreate(
-                email, phone, password, customAttributes, profile
-            )
+        val transformed = hookExecutor.executeBeforeUserCreate(
+            email, phone, password, customAttributes, profile
+        )
 
-            val result = userRepository.create(
-                email = transformed.email,
-                phone = transformed.phone,
-                hashedPassword = hashingService.hash(password),
-                roleNames = (listOf(realm.owner) + roleNames).distinct(),
-                currentTime = nowLocal(timeZone),
-                customAttributes = transformed.customAttributes,
-                profile = transformed.profile,
-                realmId = realm.name
-            )
-            val user = result.userOrThrow().toUser()
+        val result = userRepository.create(
+            email = transformed.email,
+            phone = transformed.phone,
+            hashedPassword = hashingService.hash(password),
+            roleNames = (listOf(realm.name) + roleNames).distinct(),
+            currentTime = nowLocal(timeZone),
+            customAttributes = transformed.customAttributes,
+            profile = transformed.profile,
+        )
+        val user = result.userOrThrow().toUser()
 
-            eventBus.publish(
-                UserEvent.Created(
-                    eventId = UUID.randomUUID(),
-                    timestamp = timestamp,
-                    realmId = realm.owner,
-                    userId = user.id,
-                    email = email,
-                    phone = phone
-                )
+        eventBus.publish(
+            UserEvent.Created(
+                eventId = UUID.randomUUID(),
+                timestamp = timestamp,
+                realmId = realm.name,
+                userId = user.id,
+                email = email,
+                phone = phone
             )
+        )
 
-            user
-        } catch (e: Exception) {
-            throw e
-        }
+        return user
     }
 
     override suspend fun updateUser(command: UpdateCommand): UpdateResult {
@@ -146,7 +135,7 @@ internal class DefaultUserService(
                         UserEvent.Updated(
                             eventId = UUID.randomUUID(),
                             timestamp = result.changes.timestamp,
-                            realmId = realm.owner,
+                            realmId = realm.name,
                             userId = command.userId,
                             actorId = command.userId,
                             changes = changeMetadata
@@ -163,10 +152,8 @@ internal class DefaultUserService(
     }
 
     override suspend fun deleteUser(userId: UUID): Boolean {
-        // Execute beforeUserDelete hooks (extensions can perform cleanup)
         hookExecutor.executeBeforeUserDelete(userId)
 
-        // Delete user from database
         val result = userRepository.deleteUser(userId)
 
         if (result is UserRepository.DeleteResult.Success) {
@@ -174,7 +161,7 @@ internal class DefaultUserService(
                 UserEvent.Deleted(
                     eventId = UUID.randomUUID(),
                     timestamp = CurrentKotlinInstant,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     userId = userId,
                     actorId = userId
                 )
@@ -205,13 +192,16 @@ internal class DefaultUserService(
                     UserEvent.RolesUpdated(
                         eventId = UUID.randomUUID(),
                         timestamp = timestamp,
-                        realmId = realm.owner,
+                        realmId = realm.name,
                         userId = userId,
                         actorType = "ADMIN",
                         previousRoles = currentRoles.toSet(),
                         newRoles = roleNames.toSet()
                     )
                 )
+            }
+            is UserRepository.UpdateRolesResult.UserNotFound -> {
+                throw KodexThrowable.UserNotFound(userId.toString())
             }
             is UserRepository.UpdateRolesResult.InvalidRole -> {
                 throw KodexThrowable.RoleNotFound(result.roleName)

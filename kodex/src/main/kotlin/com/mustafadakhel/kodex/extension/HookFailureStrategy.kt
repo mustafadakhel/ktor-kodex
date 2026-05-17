@@ -1,6 +1,5 @@
 package com.mustafadakhel.kodex.extension
 
-/** Strategy for handling hook failures. */
 public enum class HookFailureStrategy {
     /** Stop on first failure and throw exception. */
     FAIL_FAST,

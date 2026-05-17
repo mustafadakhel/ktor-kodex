@@ -22,7 +22,7 @@ class ConfigurationExceptionsTest : DescribeSpec({
 
     describe("MissingRealmServiceException") {
         it("should include realm in message") {
-            val realm = Realm(owner = "test-realm")
+            val realm = Realm(name = "test-realm")
             val exception = MissingRealmServiceException(realm)
 
             exception.message shouldContain "test-realm"
@@ -30,14 +30,14 @@ class ConfigurationExceptionsTest : DescribeSpec({
         }
 
         it("should be a ConfigurationException") {
-            val realm = Realm(owner = "my-app")
+            val realm = Realm(name = "my-app")
             val exception = MissingRealmServiceException(realm)
 
             exception.shouldBeInstanceOf<ConfigurationException>()
         }
 
         it("should include full realm details in message") {
-            val realm = Realm(owner = "production-app")
+            val realm = Realm(name = "production-app")
             val exception = MissingRealmServiceException(realm)
 
             exception.message shouldContain realm.toString()
@@ -46,7 +46,7 @@ class ConfigurationExceptionsTest : DescribeSpec({
 
     describe("MissingRealmConfigException") {
         it("should include realm in message") {
-            val realm = Realm(owner = "test-realm")
+            val realm = Realm(name = "test-realm")
             val exception = MissingRealmConfigException(realm)
 
             exception.message shouldContain "test-realm"
@@ -54,14 +54,14 @@ class ConfigurationExceptionsTest : DescribeSpec({
         }
 
         it("should be a ConfigurationException") {
-            val realm = Realm(owner = "my-app")
+            val realm = Realm(name = "my-app")
             val exception = MissingRealmConfigException(realm)
 
             exception.shouldBeInstanceOf<ConfigurationException>()
         }
 
         it("should differentiate from MissingRealmServiceException") {
-            val realm = Realm(owner = "test-realm")
+            val realm = Realm(name = "test-realm")
             val serviceException = MissingRealmServiceException(realm)
             val configException = MissingRealmConfigException(realm)
 

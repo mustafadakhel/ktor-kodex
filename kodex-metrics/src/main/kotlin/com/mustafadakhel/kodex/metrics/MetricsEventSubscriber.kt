@@ -7,6 +7,8 @@ public class MetricsEventSubscriber internal constructor(
     private val metrics: KodexMetrics
 ) : EventSubscriber<KodexEvent> {
 
+    private val logger = org.slf4j.LoggerFactory.getLogger(MetricsEventSubscriber::class.java)
+
     override val eventType: KClass<out KodexEvent> = KodexEvent::class
 
     override suspend fun onEvent(event: KodexEvent) {
@@ -238,7 +240,7 @@ public class MetricsEventSubscriber internal constructor(
                 else -> {}
             }
         } catch (e: Exception) {
-            System.err.println("Failed to record metrics for event ${event.eventType}: ${e.message}")
+            logger.error("Failed to record metrics for event {}: {}", event.eventType, e.message, e)
         }
     }
 }

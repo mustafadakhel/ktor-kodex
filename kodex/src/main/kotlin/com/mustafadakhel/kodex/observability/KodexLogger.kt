@@ -5,13 +5,11 @@ import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import java.util.*
 
-/** Structured logging with MDC context support. */
 public object KodexLogger {
     public inline fun <reified T> logger(): Logger = LoggerFactory.getLogger(T::class.java)
     public fun logger(name: String): Logger = LoggerFactory.getLogger(name)
 }
 
-/** MDC keys for structured logging. */
 public object LogContext {
     public const val REALM_ID: String = "realm_id"
     public const val USER_ID: String = "user_id"
@@ -20,7 +18,6 @@ public object LogContext {
     public const val CORRELATION_ID: String = "correlation_id"
 }
 
-/** Executes block with MDC logging context. Cleans up after execution. */
 public inline fun <T> withLoggingContext(
     realmId: String? = null,
     userId: UUID? = null,
@@ -33,7 +30,6 @@ public inline fun <T> withLoggingContext(
     val keysSet = mutableSetOf<String>()
 
     try {
-        // Save previous context and set new values
         realmId?.let {
             keysSet.add(LogContext.REALM_ID)
             previousContext[LogContext.REALM_ID] = MDC.get(LogContext.REALM_ID)
@@ -62,7 +58,6 @@ public inline fun <T> withLoggingContext(
 
         return block()
     } finally {
-        // Restore previous context only for keys that were set in this call
         keysSet.forEach { key ->
             val previousValue = previousContext[key]
             if (previousValue != null) {

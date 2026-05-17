@@ -3,13 +3,19 @@ package com.mustafadakhel.kodex.routes.auth
 import com.mustafadakhel.kodex.event.EventBus
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionConfig
+import com.mustafadakhel.kodex.extension.ExtensionContext
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
-import com.mustafadakhel.kodex.extension.PersistentExtension
+import com.mustafadakhel.kodex.extension.HookFailureStrategy
 import com.mustafadakhel.kodex.extension.RealmExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
 import com.mustafadakhel.kodex.extension.UserLifecycleHooks
 import com.mustafadakhel.kodex.extension.extensionContext
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.model.TokenType
+import com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.util.*
 import io.ktor.utils.io.*
 import kotlinx.datetime.TimeZone
@@ -23,29 +29,51 @@ internal data class RealmConfig(
     internal val rolesConfig: RolesConfig,
     internal val passwordHashingConfig: PasswordHashingConfig,
     internal val tokenRotationConfig: TokenRotationConfig,
-    internal val extensions: ExtensionRegistry,
+    internal val extensionConfigs: List<ExtensionConfig>,
+    internal val extensionContext: ExtensionContext,
     val timeZone: TimeZone,
-    val hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy,
-    internal val eventBus: EventBus
-)
+    val hookFailureStrategy: HookFailureStrategy,
+    internal val eventBus: EventBus,
+    internal val rateLimiter: RateLimiter,
+) {
+    /** Built lazily after the database is available. */
+    internal lateinit var extensions: ExtensionRegistry
+        private set
+
+    internal fun collectSchemas(tablePrefix: String): Map<KClass<out ExtensionSchema>, ExtensionSchema> =
+        extensionConfigs
+            .mapNotNull { it.schema(tablePrefix) }
+            .associateBy { it::class }
+
+    internal fun buildExtensions(db: KodexDatabase) {
+        val extensionsMap = mutableMapOf<KClass<out RealmExtension>, MutableList<RealmExtension>>()
+
+        extensionConfigs.forEach { config ->
+            val extension = config.build(extensionContext, db)
+
+            if (extension is UserLifecycleHooks) {
+                extensionsMap.getOrPut(UserLifecycleHooks::class) { mutableListOf() }.add(extension)
+            }
+            if (extension is EventSubscriberProvider) {
+                extensionsMap.getOrPut(EventSubscriberProvider::class) { mutableListOf() }.add(extension)
+            }
+            if (extension is ServiceProvider) {
+                extensionsMap.getOrPut(ServiceProvider::class) { mutableListOf() }.add(extension)
+            }
+        }
+
+        extensions = ExtensionRegistry.fromLists(extensionsMap.toMap())
+    }
+}
 
 @KtorDsl
 /**
  * Scope used to configure a single kodex realm.
- *
- * Example:
- * ```kotlin
- * kodex {
- *     realm(Realm.Main) {
- *         tokenValidity { /* ... */ }
- *         passwordHashing { /* ... */ }
- *     }
- * }
- * ```
  */
 public class RealmConfigScope internal constructor(
     private val realm: Realm,
 ) {
+    private val logger = org.slf4j.LoggerFactory.getLogger(RealmConfigScope::class.java)
     private var secretsConfigScope: SecretsConfig = SecretsConfig()
     private var claimsConfigScope: ClaimsConfig = ClaimsConfig()
     private var tokenValidityConfig: TokenConfig = TokenConfig()
@@ -57,23 +85,16 @@ public class RealmConfigScope internal constructor(
     @PublishedApi
     internal var extensionPriorityCounter: Int = 0
     private var timeZone: TimeZone = TimeZone.currentSystemDefault()
+    private var rateLimiter: RateLimiter = NoOpRateLimiter()
 
-    /**
-     * Strategy for handling hook execution failures.
-     * Default is FAIL_FAST (stop on first error).
-     */
-    public var hookFailureStrategy: com.mustafadakhel.kodex.extension.HookFailureStrategy =
-        com.mustafadakhel.kodex.extension.HookFailureStrategy.FAIL_FAST
+    public var hookFailureStrategy: HookFailureStrategy =
+        HookFailureStrategy.FAIL_FAST
 
-    /**
-     * Gets the extension context for this realm configuration.
-     * Used internally during build() to create extension context with eventBus.
-     */
     @PublishedApi
     internal fun getExtensionContext(
-        eventBus: com.mustafadakhel.kodex.event.EventBus
-    ): com.mustafadakhel.kodex.extension.ExtensionContext {
-        return extensionContext(realm, timeZone, eventBus)
+        eventBus: EventBus
+    ): ExtensionContext {
+        return extensionContext(realm, timeZone, eventBus, rateLimiter)
     }
 
     public fun secrets(block: SecretsConfigScope.() -> Unit) {
@@ -128,19 +149,27 @@ public class RealmConfigScope internal constructor(
         config: C,
         block: C.() -> Unit
     ) {
+        val configType = config::class
+        require(extensionConfigs.none { (existing, _) -> existing::class == configType }) {
+            "Extension ${configType.simpleName} is already registered for this realm. " +
+                "Each extension type can only be configured once per realm."
+        }
         config.apply(block)
-        // Store config with order for later building
         extensionConfigs.add(config to extensionPriorityCounter++)
     }
 
-    /** Configure time zone for this realm. */
     public fun timeZone(zone: TimeZone) {
         this.timeZone = zone
     }
 
+    public fun rateLimiter(limiter: RateLimiter) {
+        this.rateLimiter = limiter
+    }
+
     /**
      * Finalises this scope returning an immutable [RealmConfig].
-     * Called by the plugin during installation with eventBus for extension building.
+     * Extension instances are NOT built here -- they are deferred until
+     * after the database is available via [RealmConfig.buildExtensions].
      */
     internal fun build(
         eventBus: EventBus
@@ -151,32 +180,32 @@ public class RealmConfigScope internal constructor(
         val passwordHashingConfig = passwordHashingConfigScope.build()
         val tokenRotationConfig = tokenRotationConfigScope.build()
 
-        // Build extensions from configs with eventBus access
         val context = getExtensionContext(eventBus)
-        val extensionsMap = mutableMapOf<KClass<out RealmExtension>, MutableList<RealmExtension>>()
+        val configs = extensionConfigs.map { (config, _) -> config }
 
-        extensionConfigs.forEach { (config, _) ->
-            val extension = config.build(context)
-
-            // Register the extension for each hook interface it implements
-            if (extension is UserLifecycleHooks) {
-                extensionsMap.getOrPut(UserLifecycleHooks::class) { mutableListOf() }.add(extension)
-            }
-            if (extension is PersistentExtension) {
-                extensionsMap.getOrPut(PersistentExtension::class) { mutableListOf() }.add(extension)
-            }
-            if (extension is EventSubscriberProvider) {
-                extensionsMap.getOrPut(EventSubscriberProvider::class) { mutableListOf() }.add(extension)
-            }
-            if (extension is ServiceProvider) {
-                extensionsMap.getOrPut(ServiceProvider::class) { mutableListOf() }.add(extension)
-            }
-        }
-
-        val extensionRegistry = ExtensionRegistry.fromLists(extensionsMap.toMap())
         if (secretsConfig.secrets().isEmpty()) throw IllegalArgumentException("Secrets must be provided")
         if (claimConfig.issuer.isNullOrBlank()) throw IllegalArgumentException("Issuer must be provided")
         if (claimConfig.audience.isNullOrBlank()) throw IllegalArgumentException("Audience must be provided")
+        if (rateLimiter is NoOpRateLimiter) {
+            logger.warn(
+                "Realm '{}': Rate limiting is disabled (NoOpRateLimiter). " +
+                    "MFA, password reset, and verification endpoints are unprotected against abuse.",
+                realm.name
+            )
+        }
+        if (hookFailureStrategy == HookFailureStrategy.SKIP_FAILED) {
+            logger.warn(
+                "Realm '{}': hookFailureStrategy is SKIP_FAILED. Failed lifecycle hooks " +
+                    "(validation, lockout) will be silently skipped. Not recommended for production.",
+                realm.name
+            )
+        }
+        if (tokenValidity.persistenceFlags[TokenType.RefreshToken] == false) {
+            throw IllegalStateException(
+                "Refresh token persistence is disabled. Token refresh requires persistence. " +
+                    "Either enable persist(TokenType.RefreshToken, true) or do not disable it."
+            )
+        }
         return RealmConfig(
             realm = realm,
             secretsProvider = secretsConfig,
@@ -185,10 +214,12 @@ public class RealmConfigScope internal constructor(
             rolesConfig = rolesConfig,
             passwordHashingConfig = passwordHashingConfig,
             tokenRotationConfig = tokenRotationConfig,
-            extensions = extensionRegistry,
+            extensionConfigs = configs,
+            extensionContext = context,
             timeZone = timeZone,
             hookFailureStrategy = hookFailureStrategy,
-            eventBus = eventBus
+            eventBus = eventBus,
+            rateLimiter = rateLimiter,
         )
     }
 }

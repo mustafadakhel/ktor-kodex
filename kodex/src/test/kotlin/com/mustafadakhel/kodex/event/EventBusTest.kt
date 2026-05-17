@@ -1,5 +1,6 @@
 package com.mustafadakhel.kodex.event
 
+import com.mustafadakhel.kodex.extension.EventSubscriberProvider
 import com.mustafadakhel.kodex.extension.ExtensionRegistry
 import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.spec.style.FunSpec
@@ -25,12 +26,12 @@ class EventBusTest : FunSpec({
             return eventBus
         }
 
-        val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
+        val provider = object : EventSubscriberProvider {
             override fun getEventSubscribers(): List<EventSubscriber<*>> = subscribers.toList()
         }
 
-        val registry = com.mustafadakhel.kodex.extension.ExtensionRegistry.from(
-            mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
+        val registry = ExtensionRegistry.from(
+            mapOf(EventSubscriberProvider::class to provider)
         )
 
         eventBus.registerExtensionSubscribers(registry)
@@ -283,12 +284,12 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
+            val provider = object : EventSubscriberProvider {
                 override fun getEventSubscribers(): List<EventSubscriber<*>> = listOf(subscriber)
             }
 
-            val registry = com.mustafadakhel.kodex.extension.ExtensionRegistry.from(
-                mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
+            val registry = ExtensionRegistry.from(
+                mapOf(EventSubscriberProvider::class to provider)
             )
 
             val eventBus = DefaultEventBus()
@@ -525,12 +526,12 @@ class EventBusTest : FunSpec({
                 }
             }
 
-            val provider = object : com.mustafadakhel.kodex.extension.EventSubscriberProvider {
+            val provider = object : EventSubscriberProvider {
                 override fun getEventSubscribers(): List<EventSubscriber<*>> = listOf(subscriber)
             }
 
-            val registry = com.mustafadakhel.kodex.extension.ExtensionRegistry.from(
-                mapOf(com.mustafadakhel.kodex.extension.EventSubscriberProvider::class to provider)
+            val registry = ExtensionRegistry.from(
+                mapOf(EventSubscriberProvider::class to provider)
             )
 
             val eventBus = DefaultEventBus()

@@ -19,9 +19,9 @@ public interface UserRepository {
 
     public fun findById(userId: UUID): UserEntity?
 
-    public fun findByPhone(phone: String, realmId: String): UserEntity?
+    public fun findByPhone(phone: String): UserEntity?
 
-    public fun findByEmail(email: String, realmId: String): UserEntity?
+    public fun findByEmail(email: String): UserEntity?
 
     public fun findFullById(userId: UUID): FullUserEntity?
 
@@ -33,14 +33,13 @@ public interface UserRepository {
         customAttributes: Map<String, String>? = null,
         profile: UserProfile? = null,
         currentTime: LocalDateTime,
-        realmId: String,
-    ) : CreateUserResult
+    ): CreateUserResult
 
     public fun updateById(
         userId: UUID,
-        email: FieldUpdate<String> = FieldUpdate.NoChange(),
-        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
+        email: FieldUpdate<String> = FieldUpdate.NoChange,
+        phone: FieldUpdate<String> = FieldUpdate.NoChange,
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange,
         currentTime: LocalDateTime,
     ): UpdateUserResult
 
@@ -55,9 +54,7 @@ public interface UserRepository {
         roleNames: List<String>,
     ): UpdateRolesResult
 
-    public fun getHashedPassword(
-        userId: UUID,
-    ): String?
+    public fun getHashedPassword(userId: UUID): String?
 
     public fun findProfileByUserId(userId: UUID): UserProfileEntity?
 
@@ -75,14 +72,13 @@ public interface UserRepository {
 
     public fun deleteUser(userId: UUID): DeleteResult
 
-    /** Updates multiple user fields atomically in one transaction. */
     public fun updateBatch(
         userId: UUID,
-        email: FieldUpdate<String> = FieldUpdate.NoChange(),
-        phone: FieldUpdate<String> = FieldUpdate.NoChange(),
-        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange(),
-        profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange(),
-        customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange(),
+        email: FieldUpdate<String> = FieldUpdate.NoChange,
+        phone: FieldUpdate<String> = FieldUpdate.NoChange,
+        status: FieldUpdate<UserStatus> = FieldUpdate.NoChange,
+        profile: FieldUpdate<UserProfile> = FieldUpdate.NoChange,
+        customAttributes: FieldUpdate<Map<String, String>> = FieldUpdate.NoChange,
         currentTime: LocalDateTime
     ): UpdateUserResult
 
@@ -105,7 +101,7 @@ public interface UserRepository {
 
     public sealed interface UpdateUserResult : UpdateResult {
         public data object Success : UpdateUserResult
-        public object NotFound : UpdateUserResult, UpdateResult.NotFound
+        public data object NotFound : UpdateUserResult, UpdateResult.NotFound
         public data object EmailAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
         public data object PhoneAlreadyExists : UpdateUserResult, UpdateResult.Duplicate
         public data class InvalidRole(val roleName: String) : UpdateUserResult, UpdateResult.NotFound
@@ -118,11 +114,12 @@ public interface UserRepository {
 
     public sealed interface UpdateRolesResult : UpdateResult {
         public data object Success : UpdateRolesResult
+        public data object UserNotFound : UpdateRolesResult, UpdateResult.NotFound
         public data class InvalidRole(val roleName: String) : UpdateRolesResult, UpdateResult.NotFound
     }
 
     public sealed interface DeleteResult {
-        public object NotFound : DeleteResult
-        public object Success : DeleteResult
+        public data object NotFound : DeleteResult
+        public data object Success : DeleteResult
     }
 }

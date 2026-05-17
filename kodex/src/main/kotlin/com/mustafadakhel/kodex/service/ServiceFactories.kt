@@ -8,6 +8,7 @@ import com.mustafadakhel.kodex.service.auth.AuthService
 import com.mustafadakhel.kodex.service.auth.DefaultAuthService
 import com.mustafadakhel.kodex.service.token.DefaultTokenService
 import com.mustafadakhel.kodex.service.token.TokenService
+import com.mustafadakhel.kodex.token.JwtSignatureVerifier
 import com.mustafadakhel.kodex.service.user.DefaultUserService
 import com.mustafadakhel.kodex.service.user.UserService
 import com.mustafadakhel.kodex.token.TokenManager
@@ -65,8 +66,9 @@ internal fun authService(
 
 internal fun tokenService(
     tokenManager: TokenManager,
+    signatureVerifier: JwtSignatureVerifier,
     eventBus: EventBus,
     realm: Realm
 ): TokenService {
-    return DefaultTokenService(tokenManager, eventBus, realm)
+    return DefaultTokenService(tokenManager, signatureVerifier, eventBus, realm)
 }

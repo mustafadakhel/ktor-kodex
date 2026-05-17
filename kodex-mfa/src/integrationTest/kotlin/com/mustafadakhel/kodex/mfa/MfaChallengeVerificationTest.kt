@@ -60,7 +60,6 @@ class MfaChallengeVerificationTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-challenge-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -235,7 +234,6 @@ class MfaChallengeVerificationTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-totp-verify-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -362,7 +360,6 @@ class MfaChallengeVerificationTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-invalid-code-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

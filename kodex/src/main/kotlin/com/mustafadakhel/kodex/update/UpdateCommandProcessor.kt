@@ -12,32 +12,19 @@ import kotlinx.datetime.TimeZone
 
 /**
  * Processes update commands and orchestrates the update workflow.
- *
- * Responsibilities:
- * - Fetch current user state
- * - Detect changes using ChangeTracker
- * - Execute lifecycle hooks
- * - Apply updates through repository
- * - Handle version conflicts (optimistic locking)
- * - Return detailed results with change tracking
  */
 internal class UpdateCommandProcessor(
     private val userRepository: UserRepository,
     private val hookExecutor: HookExecutor,
     private val changeTracker: ChangeTracker,
-    private val timeZone: TimeZone
+    private val timeZone: TimeZone,
+    private val realmId: String
 ) {
 
-    /**
-     * Executes an update command and returns the result.
-     */
     suspend fun execute(command: UpdateCommand): UpdateResult {
-        // 1. Fetch current user state
         val currentUserEntity = userRepository.findFullById(command.userId)
             ?: return UpdateResult.Failure.NotFound(command.userId)
 
-        // 2. Execute beforeUpdate hooks to validate and transform values
-        // Catch validation exceptions and convert to ValidationFailed results
         val transformedCommand = try {
             when (command) {
                 is UpdateUserFields -> executeUserFieldHooks(command)
@@ -49,10 +36,8 @@ internal class UpdateCommandProcessor(
             return convertValidationExceptionToResult(e)
         }
 
-        // 3. Detect what will actually change after transformation
         val changeSet = changeTracker.detectChanges(currentUserEntity, transformedCommand)
 
-        // 4. If no change after hooks, return early
         if (changeSet.changedFields.isEmpty()) {
             return UpdateResult.Success(
                 user = currentUserEntity.toFullUser(),
@@ -60,7 +45,6 @@ internal class UpdateCommandProcessor(
             )
         }
 
-        // 5. Apply the update through repository
         val result = when (transformedCommand) {
             is UpdateUserFields -> applyUserFieldUpdates(currentUserEntity, transformedCommand.fields)
             is UpdateProfileFields -> applyProfileFieldUpdates(currentUserEntity, transformedCommand.fields)
@@ -71,39 +55,16 @@ internal class UpdateCommandProcessor(
         return result
     }
 
-    /**
-     * Converts validation exceptions to ValidationFailed results.
-     */
     private fun convertValidationExceptionToResult(e: KodexThrowable.Validation): UpdateResult.Failure.ValidationFailed {
-        val errors = when (e) {
-            is KodexThrowable.Validation.ValidationFailed -> listOf(
-                ValidationError(field = "unknown", message = e.message ?: "Validation failed", code = "VALIDATION_FAILED")
-            )
-            is KodexThrowable.Validation.InvalidEmail -> listOf(
-                ValidationError(field = "email", message = e.errors.joinToString(", "), code = "INVALID_EMAIL")
-            )
-            is KodexThrowable.Validation.InvalidPhone -> listOf(
-                ValidationError(field = "phone", message = e.errors.joinToString(", "), code = "INVALID_PHONE")
-            )
-            is KodexThrowable.Validation.WeakPassword -> listOf(
-                ValidationError(field = "password", message = e.feedback.joinToString(". "), code = "WEAK_PASSWORD")
-            )
-            is KodexThrowable.Validation.InvalidCustomAttribute -> listOf(
-                ValidationError(field = "customAttributes.${e.key}", message = e.errors.joinToString(", "), code = "INVALID_ATTRIBUTE")
-            )
-            is KodexThrowable.Validation.InvalidInput -> listOf(
-                ValidationError(field = e.field, message = e.errors.joinToString(", "), code = "INVALID_INPUT")
-            )
-        }
-        return UpdateResult.Failure.ValidationFailed(errors)
+        val error = ValidationError(
+            field = "unknown",
+            message = e.message ?: "Validation failed",
+            code = "VALIDATION_FAILED"
+        )
+        return UpdateResult.Failure.ValidationFailed(listOf(error))
     }
 
-    /**
-     * Executes hooks for user field updates.
-     * Converts FieldUpdate to nullable values, applies hooks, converts back.
-     */
     private suspend fun executeUserFieldHooks(command: UpdateUserFields): UpdateUserFields {
-        // Extract actual values from FieldUpdate (NoChange -> null for hooks)
         val emailValue = when (val update = command.fields.email) {
             is FieldUpdate.SetValue -> update.value
             is FieldUpdate.ClearValue -> null
@@ -116,19 +77,16 @@ internal class UpdateCommandProcessor(
             is FieldUpdate.NoChange -> null
         }
 
-        // Only call hooks if there are actual changes
         if (emailValue == null && phoneValue == null) {
             return command
         }
 
-        // Execute hooks
         val transformed = hookExecutor.executeBeforeUserUpdate(
             userId = command.userId,
             email = emailValue,
             phone = phoneValue
         )
 
-        // Apply transformations back to FieldUpdate
         val newFields = command.fields.copy(
             email = if (emailValue != null) FieldUpdate.SetValue(transformed.email ?: emailValue) else command.fields.email,
             phone = if (phoneValue != null) FieldUpdate.SetValue(transformed.phone ?: phoneValue) else command.fields.phone
@@ -137,11 +95,7 @@ internal class UpdateCommandProcessor(
         return command.copy(fields = newFields)
     }
 
-    /**
-     * Executes hooks for profile field updates.
-     */
     private suspend fun executeProfileFieldHooks(command: UpdateProfileFields): UpdateProfileFields {
-        // Extract values
         val firstName = when (val update = command.fields.firstName) {
             is FieldUpdate.SetValue -> update.value
             is FieldUpdate.ClearValue -> null
@@ -166,12 +120,10 @@ internal class UpdateCommandProcessor(
             is FieldUpdate.NoChange -> null
         }
 
-        // Only call hooks if there are changes
         if (firstName == null && lastName == null && address == null && profilePicture == null) {
             return command
         }
 
-        // Execute hooks
         val transformed = hookExecutor.executeBeforeProfileUpdate(
             userId = command.userId,
             firstName = firstName,
@@ -180,7 +132,6 @@ internal class UpdateCommandProcessor(
             profilePicture = profilePicture
         )
 
-        // Apply transformations
         val newFields = command.fields.copy(
             firstName = if (firstName != null) FieldUpdate.SetValue(transformed.firstName ?: firstName) else command.fields.firstName,
             lastName = if (lastName != null) FieldUpdate.SetValue(transformed.lastName ?: lastName) else command.fields.lastName,
@@ -191,16 +142,12 @@ internal class UpdateCommandProcessor(
         return command.copy(fields = newFields)
     }
 
-    /**
-     * Executes hooks for custom attribute updates.
-     */
     private suspend fun executeAttributeHooks(command: UpdateAttributes): UpdateAttributes {
-        // Build the attribute map from changes
         val attributesToValidate = buildMap {
             command.changes.changes.forEach { change ->
                 when (change) {
                     is AttributeChange.Set -> put(change.key, change.value)
-                    is AttributeChange.Remove -> {} // Don't validate removed attributes
+                    is AttributeChange.Remove -> {}
                     is AttributeChange.ReplaceAll -> putAll(change.attributes)
                 }
             }
@@ -210,13 +157,11 @@ internal class UpdateCommandProcessor(
             return command
         }
 
-        // Execute hooks
         val transformed = hookExecutor.executeBeforeCustomAttributesUpdate(
             userId = command.userId,
             customAttributes = attributesToValidate
         )
 
-        // Apply transformations
         val newChanges = command.changes.changes.map { change ->
             when (change) {
                 is AttributeChange.Set -> {
@@ -231,9 +176,6 @@ internal class UpdateCommandProcessor(
         return command.copy(changes = AttributeChanges(newChanges))
     }
 
-    /**
-     * Executes hooks for batch updates.
-     */
     private suspend fun executeBatchHooks(command: UpdateUserBatch): UpdateUserBatch {
         val transformedUserFields = command.userFields?.let {
             executeUserFieldHooks(UpdateUserFields(command.userId, it)).fields
@@ -415,9 +357,9 @@ internal class UpdateCommandProcessor(
         // Execute batch update atomically in single transaction
         val repositoryResult = userRepository.updateBatch(
             userId = current.id,
-            email = batch.userFields?.email ?: FieldUpdate.NoChange(),
-            phone = batch.userFields?.phone ?: FieldUpdate.NoChange(),
-            status = batch.userFields?.status ?: FieldUpdate.NoChange(),
+            email = batch.userFields?.email ?: FieldUpdate.NoChange,
+            phone = batch.userFields?.phone ?: FieldUpdate.NoChange,
+            status = batch.userFields?.status ?: FieldUpdate.NoChange,
             profile = if (batch.profileFields?.hasChanges() == true) {
                 val currentProfile = current.profile
                 FieldUpdate.SetValue(
@@ -445,7 +387,7 @@ internal class UpdateCommandProcessor(
                     )
                 )
             } else {
-                FieldUpdate.NoChange()
+                FieldUpdate.NoChange
             },
             customAttributes = if (batch.attributeChanges?.hasChanges() == true) {
                 val currentAttrs = current.customAttributes ?: emptyMap()
@@ -463,7 +405,7 @@ internal class UpdateCommandProcessor(
                 }
                 FieldUpdate.SetValue(newAttrs)
             } else {
-                FieldUpdate.NoChange()
+                FieldUpdate.NoChange
             },
             currentTime = now(timeZone)
         )

@@ -34,7 +34,6 @@ class SimpleMfaTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:simple-mfa-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

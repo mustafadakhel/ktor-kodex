@@ -48,7 +48,6 @@ class BackupCodesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:backup-codes-enroll-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -185,7 +184,6 @@ class BackupCodesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:backup-codes-verify-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -292,7 +290,6 @@ class BackupCodesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:backup-codes-reuse-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -406,7 +403,6 @@ class BackupCodesTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:backup-codes-regen-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"

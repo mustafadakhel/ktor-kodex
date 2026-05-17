@@ -1,21 +1,21 @@
 package com.mustafadakhel.kodex.extension
 
-import org.jetbrains.exposed.sql.Table
 import kotlin.reflect.KClass
 
-/** Base interface for realm extensions. */
 public interface RealmExtension {
     /** Execution priority. Lower values run first. */
     public val priority: Int get() = 100
 }
 
-/** Extension that requires database tables. */
-public interface PersistentExtension : RealmExtension {
-    /** Returns database tables required by this extension. */
-    public fun tables(): List<Table>
+/**
+ * Interface for extensions that own resources requiring cleanup on application shutdown.
+ * Extensions implementing this will have [shutdown] called during [ApplicationStopping],
+ * before the database connection is closed.
+ */
+public interface Shutdownable {
+    public fun shutdown()
 }
 
-/** Registry for looking up extensions by type. */
 public class ExtensionRegistry internal constructor(
     private val extensions: Map<KClass<out RealmExtension>, List<RealmExtension>>
 ) {
@@ -32,12 +32,11 @@ public class ExtensionRegistry internal constructor(
         return extensions.containsKey(extensionClass) && extensions[extensionClass]?.isNotEmpty() == true
     }
 
-    public fun getTables(): List<Table> {
-        return extensions.values
-            .flatten()
-            .filterIsInstance<PersistentExtension>()
-            .flatMap { it.tables() }
+    internal fun shutdownAll() {
+        extensions.values.flatten()
             .distinct()
+            .filterIsInstance<Shutdownable>()
+            .forEach { it.shutdown() }
     }
 
     public companion object {

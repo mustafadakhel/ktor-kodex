@@ -15,18 +15,18 @@ class FieldUpdatesTest : DescribeSpec({
     describe("FieldUpdate") {
         describe("NoChange") {
             it("should be equal to other NoChange instances") {
-                val noChange1 = FieldUpdate.NoChange<String>()
-                val noChange2 = FieldUpdate.NoChange<String>()
+                val noChange1 = FieldUpdate.NoChange
+                val noChange2 = FieldUpdate.NoChange
                 noChange1 shouldBe noChange2
             }
 
             it("should have consistent hashCode") {
-                val noChange = FieldUpdate.NoChange<String>()
-                noChange.hashCode() shouldBe 0
+                val noChange = FieldUpdate.NoChange
+                noChange.hashCode() shouldBe FieldUpdate.NoChange.hashCode()
             }
 
             it("should have correct toString") {
-                val noChange = FieldUpdate.NoChange<String>()
+                val noChange = FieldUpdate.NoChange
                 noChange.toString() shouldBe "NoChange"
             }
         }
@@ -52,18 +52,18 @@ class FieldUpdatesTest : DescribeSpec({
 
         describe("ClearValue") {
             it("should be equal to other ClearValue instances") {
-                val clearValue1 = FieldUpdate.ClearValue<String>()
-                val clearValue2 = FieldUpdate.ClearValue<String>()
+                val clearValue1 = FieldUpdate.ClearValue
+                val clearValue2 = FieldUpdate.ClearValue
                 clearValue1 shouldBe clearValue2
             }
 
             it("should have consistent hashCode") {
-                val clearValue = FieldUpdate.ClearValue<String>()
-                clearValue.hashCode() shouldBe 1
+                val clearValue = FieldUpdate.ClearValue
+                clearValue.hashCode() shouldBe FieldUpdate.ClearValue.hashCode()
             }
 
             it("should have correct toString") {
-                val clearValue = FieldUpdate.ClearValue<String>()
+                val clearValue = FieldUpdate.ClearValue
                 clearValue.toString() shouldBe "ClearValue"
             }
         }
@@ -81,14 +81,14 @@ class FieldUpdatesTest : DescribeSpec({
         describe("clearField") {
             it("should create ClearValue") {
                 val update = clearField<String>()
-                update.shouldBeInstanceOf<FieldUpdate.ClearValue<String>>()
+                update.shouldBeInstanceOf<FieldUpdate.ClearValue>()
             }
         }
 
         describe("noChange") {
             it("should create NoChange") {
                 val update = noChange<String>()
-                update.shouldBeInstanceOf<FieldUpdate.NoChange<String>>()
+                update.shouldBeInstanceOf<FieldUpdate.NoChange>()
             }
         }
 
@@ -101,15 +101,15 @@ class FieldUpdatesTest : DescribeSpec({
             }
 
             it("should preserve NoChange") {
-                val update = FieldUpdate.NoChange<Int>()
+                val update: FieldUpdate<Int> = FieldUpdate.NoChange
                 val mapped = update.map { it * 2 }
-                mapped.shouldBeInstanceOf<FieldUpdate.NoChange<Int>>()
+                mapped.shouldBeInstanceOf<FieldUpdate.NoChange>()
             }
 
             it("should preserve ClearValue") {
-                val update = FieldUpdate.ClearValue<Int>()
+                val update: FieldUpdate<Int> = FieldUpdate.ClearValue
                 val mapped = update.map { it * 2 }
-                mapped.shouldBeInstanceOf<FieldUpdate.ClearValue<Int>>()
+                mapped.shouldBeInstanceOf<FieldUpdate.ClearValue>()
             }
         }
 
@@ -120,12 +120,12 @@ class FieldUpdatesTest : DescribeSpec({
             }
 
             it("should return null for NoChange") {
-                val update = FieldUpdate.NoChange<String>()
+                val update = FieldUpdate.NoChange
                 update.valueOrNull().shouldBeNull()
             }
 
             it("should return null for ClearValue") {
-                val update = FieldUpdate.ClearValue<String>()
+                val update = FieldUpdate.ClearValue
                 update.valueOrNull().shouldBeNull()
             }
         }
@@ -137,12 +137,12 @@ class FieldUpdatesTest : DescribeSpec({
             }
 
             it("should return false for NoChange") {
-                val update = FieldUpdate.NoChange<String>()
+                val update = FieldUpdate.NoChange
                 update.hasChange() shouldBe false
             }
 
             it("should return true for ClearValue") {
-                val update = FieldUpdate.ClearValue<String>()
+                val update = FieldUpdate.ClearValue
                 update.hasChange() shouldBe true
             }
         }
@@ -199,7 +199,7 @@ class FieldUpdatesTest : DescribeSpec({
             }
 
             it("should include fields cleared with ClearValue") {
-                val updates = UserFieldUpdates(email = FieldUpdate.ClearValue())
+                val updates = UserFieldUpdates(email = FieldUpdate.ClearValue)
                 updates.changedFields() shouldContain "email"
             }
         }
@@ -233,7 +233,7 @@ class FieldUpdatesTest : DescribeSpec({
             }
 
             it("should return true when field is cleared") {
-                val updates = ProfileFieldUpdates(address = FieldUpdate.ClearValue())
+                val updates = ProfileFieldUpdates(address = FieldUpdate.ClearValue)
                 updates.hasChanges() shouldBe true
             }
         }

@@ -10,8 +10,14 @@ import java.util.UUID
  * Handles token issuance, refresh, revocation, and verification.
  */
 public interface TokenService {
-    public suspend fun issue(userId: UUID): TokenPair
-    public suspend fun refresh(userId: UUID, refreshToken: String): TokenPair
+    public suspend fun issue(
+        userId: UUID,
+        sourceIp: String? = null,
+        userAgent: String? = null,
+        additionalClaims: Map<String, Any> = emptyMap()
+    ): TokenPair
+    public suspend fun refresh(userId: UUID, refreshToken: String, sourceIp: String? = null, userAgent: String? = null): TokenPair
+    public suspend fun refresh(refreshToken: String, sourceIp: String? = null, userAgent: String? = null): TokenPair
     public suspend fun revoke(userId: UUID)
     public suspend fun revokeToken(token: String, delete: Boolean = true)
     public suspend fun verify(token: String): KodexPrincipal?

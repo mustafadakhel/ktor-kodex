@@ -1,40 +1,45 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.audit.database.AuditLogDao
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.audit.schema.AuditSchema
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.observability.KodexLogger
+import com.mustafadakhel.kodex.schema.KodexDatabase
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
-/**
- * Database-backed audit provider that persists events to the AuditLogs table.
- *
- * This provider ensures all audit events are stored persistently in the database
- * for compliance, forensics, and audit trail purposes.
- *
- * Features:
- * - Atomic writes with transaction support
- * - Automatic metadata sanitization via AuditLogDao
- * - Graceful error handling (logging never fails main operations)
- */
-public class DatabaseAuditProvider : AuditProvider {
+public class DatabaseAuditProvider(
+    private val db: KodexDatabase,
+    private val schema: AuditSchema
+) : AuditProvider {
+
+    private val logger = KodexLogger.logger<DatabaseAuditProvider>()
+    private val json = Json { ignoreUnknownKeys = true }
+    private val auditEvents = schema.auditEvents
 
     override suspend fun log(event: AuditEvent) {
         try {
-            kodexTransaction {
-                AuditLogDao.new {
-                    this.eventType = event.eventType
-                    this.timestamp = event.timestamp
-                    this.actorId = event.actorId
-                    this.actorType = event.actorType
-                    this.targetId = event.targetId
-                    this.targetType = event.targetType
-                    this.result = event.result
-                    this.metadata = event.metadata
-                    this.realmId = event.realmId
-                    this.sessionId = event.sessionId
+            db.transaction {
+                val sanitized = MetadataSanitizer.sanitize(event.metadata)
+                val stringified = sanitized.mapValues { (_, v) -> v.toString() }
+                val metadataJson = json.encodeToString(stringified)
+
+                insertInto(auditEvents) {
+                    this[auditEvents.eventType] = event.eventType
+                    this[auditEvents.timestamp] = event.timestamp
+                    this[auditEvents.actorId] = event.actorId
+                    this[auditEvents.actorType] = event.actorType
+                    this[auditEvents.targetId] = event.targetId
+                    this[auditEvents.targetType] = event.targetType
+                    this[auditEvents.result] = event.result
+                    this[auditEvents.metadata] = metadataJson
+                    this[auditEvents.realmId] = event.realmId
+                    this[auditEvents.sessionId] = event.sessionId
                 }
             }
         } catch (e: Exception) {
-            System.err.println("Failed to persist audit event to database: ${e.message}")
-            e.printStackTrace()
+            logger.error("Failed to persist audit event: ${e.message}", e)
         }
     }
 }

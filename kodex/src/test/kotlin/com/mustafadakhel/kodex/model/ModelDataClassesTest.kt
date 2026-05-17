@@ -82,29 +82,29 @@ class ModelDataClassesTest : DescribeSpec({
     }
 
     describe("Realm") {
-        it("should create realm with owner") {
-            val realm = Realm(owner = "my-app")
+        it("should create realm with name") {
+            val realm = Realm(name = "my-app")
 
-            realm.owner shouldBe "my-app"
+            realm.name shouldBe "my-app"
         }
 
-        it("should generate authProviderName from owner") {
-            val realm = Realm(owner = "test-app")
+        it("should generate authProviderName from name") {
+            val realm = Realm(name = "test-app")
 
             realm.authProviderName shouldBe "auth-jwt-test-app"
         }
 
-        it("should generate name from owner") {
-            val realm = Realm(owner = "my-realm")
+        it("should generate displayName from name") {
+            val realm = Realm(name = "my-realm")
 
-            realm.name shouldBe "access to my-realm realm"
+            realm.displayName shouldBe "access to my-realm realm"
         }
 
-        it("should handle special characters in owner") {
-            val realm = Realm(owner = "app-with-dashes")
+        it("should handle special characters in name") {
+            val realm = Realm(name = "app-with-dashes")
 
             realm.authProviderName shouldBe "auth-jwt-app-with-dashes"
-            realm.name shouldBe "access to app-with-dashes realm"
+            realm.displayName shouldBe "access to app-with-dashes realm"
         }
 
         it("should support data class equality") {
@@ -116,13 +116,13 @@ class ModelDataClassesTest : DescribeSpec({
 
         it("should support data class copy") {
             val original = Realm("app1")
-            val copy = original.copy(owner = "app2")
+            val copy = original.copy(name = "app2")
 
-            copy.owner shouldBe "app2"
+            copy.name shouldBe "app2"
             copy.authProviderName shouldBe "auth-jwt-app2"
         }
 
-        it("should have different realms for different owners") {
+        it("should have different realms for different names") {
             val realm1 = Realm("app1")
             val realm2 = Realm("app2")
 

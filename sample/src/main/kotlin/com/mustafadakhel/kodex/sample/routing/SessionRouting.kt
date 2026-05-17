@@ -16,7 +16,7 @@ import java.util.UUID
 fun Application.setupSessionRouting() = routing {
     DefaultRealms.forEach { realm ->
         authenticateFor(realm) {
-            route("/${realm.owner}/sessions") {
+            route("/${realm.name}/sessions") {
                 // GET /sessions - List active sessions for the authenticated user
                 get {
                 val userId = with(KodexId) { call.idOrFail() }

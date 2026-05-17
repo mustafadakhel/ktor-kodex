@@ -1,85 +1,44 @@
 package com.mustafadakhel.kodex.verification
 
-/**
- * Strictly typed contact types supported by the verification system.
- */
-public enum class ContactType {
-    /**
-     * Email address contact.
-     */
-    EMAIL,
+public sealed interface ContactType {
 
     /**
-     * Phone number contact.
-     */
-    PHONE,
-
-    /**
-     * Custom attribute defined by library user.
-     * Requires a customAttributeKey to identify which attribute.
-     */
-    CUSTOM_ATTRIBUTE
-}
-
-/**
- * Full identifier for a verifiable contact.
- *
- * For EMAIL/PHONE: just the type is sufficient
- * For CUSTOM_ATTRIBUTE: requires the attribute key (e.g., "discord", "twitter")
- *
- * Examples:
- * ```kotlin
- * ContactIdentifier(ContactType.EMAIL)
- * ContactIdentifier(ContactType.PHONE)
- * ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, "discord")
- * ```
- */
-public data class ContactIdentifier(
-    val type: ContactType,
-    val customAttributeKey: String? = null
-) {
-    init {
-        require(type != ContactType.CUSTOM_ATTRIBUTE || customAttributeKey != null) {
-            "customAttributeKey is required for CUSTOM_ATTRIBUTE type"
-        }
-        require(type == ContactType.CUSTOM_ATTRIBUTE || customAttributeKey == null) {
-            "customAttributeKey should only be set for CUSTOM_ATTRIBUTE type"
-        }
-    }
-
-    /**
-     * String representation for storage/lookup.
-     * - EMAIL -> "email"
-     * - PHONE -> "phone"
-     * - CUSTOM_ATTRIBUTE("discord") -> "custom:discord"
+     * String key for storage and lookup.
+     * - Email -> "email"
+     * - Phone -> "phone"
+     * - CustomAttribute("discord") -> "custom:discord"
      */
     public val key: String
-        get() = when (type) {
-            ContactType.EMAIL -> "email"
-            ContactType.PHONE -> "phone"
-            ContactType.CUSTOM_ATTRIBUTE -> "custom:${customAttributeKey!!}"
+
+    public data object Email : ContactType {
+        override val key: String = "email"
+    }
+
+    public data object Phone : ContactType {
+        override val key: String = "phone"
+    }
+
+    public data class CustomAttribute(override val key: String) : ContactType {
+        init {
+            require(key.isNotBlank()) { "Custom attribute key cannot be blank" }
         }
+    }
 
     public companion object {
         /**
-         * Parse a ContactIdentifier from its string key representation.
+         * Parse a ContactType from its string key representation.
          *
-         * Examples:
-         * - "email" -> ContactIdentifier(EMAIL)
-         * - "phone" -> ContactIdentifier(PHONE)
-         * - "custom:discord" -> ContactIdentifier(CUSTOM_ATTRIBUTE, "discord")
+         * - "email" -> Email
+         * - "phone" -> Phone
+         * - "discord" -> CustomAttribute("discord")
          */
-        public fun fromKey(key: String): ContactIdentifier = when {
-            key == "email" -> ContactIdentifier(ContactType.EMAIL)
-            key == "phone" -> ContactIdentifier(ContactType.PHONE)
-            key.startsWith("custom:") -> {
-                val attrKey = key.substringAfter("custom:")
-                require(attrKey.isNotEmpty()) { "Custom attribute key cannot be empty" }
-                ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, attrKey)
+        public fun fromKey(key: String): ContactType = when (key) {
+            "email" -> Email
+            "phone" -> Phone
+            else -> {
+                require(key.isNotBlank()) { "Contact type key cannot be blank" }
+                CustomAttribute(key)
             }
-            else -> error("Invalid contact key: $key")
         }
     }
-
-    override fun toString(): String = key
 }

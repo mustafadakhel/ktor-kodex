@@ -2,45 +2,22 @@ package com.mustafadakhel.kodex.lockout
 
 import com.mustafadakhel.kodex.extension.ExtensionConfig
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.lockout.schema.LockoutSchema
+import com.mustafadakhel.kodex.schema.ExtensionSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import io.ktor.utils.io.*
-import kotlinx.datetime.TimeZone
 
-/**
- * Configuration for the account lockout extension.
- * Provides a type-safe DSL for configuring brute force protection.
- *
- * Example usage:
- * ```kotlin
- * realm("admin") {
- *     accountLockout {
- *         policy = AccountLockoutPolicy.strict()
- *         // Or configure inline:
- *         policy = AccountLockoutPolicy(
- *             maxFailedAttempts = 3,
- *             attemptWindow = 15.minutes,
- *             lockoutDuration = 1.hours
- *         )
- *     }
- * }
- * ```
- */
 @KtorDsl
 public class AccountLockoutConfig : ExtensionConfig() {
 
-    /**
-     * The lockout policy to use.
-     * Default: AccountLockoutPolicy.moderate()
-     *
-     * Available presets:
-     * - AccountLockoutPolicy.strict() - 3 attempts, 1 hour lockout
-     * - AccountLockoutPolicy.moderate() - 5 attempts, 30 min lockout
-     * - AccountLockoutPolicy.lenient() - 10 attempts, 15 min lockout
-     * - AccountLockoutPolicy.disabled() - No lockout
-     */
+    /** The lockout policy to use (default: moderate - 5 attempts, 30 min lockout) */
     public var policy: AccountLockoutPolicy = AccountLockoutPolicy.moderate()
 
-    override fun build(context: ExtensionContext): AccountLockoutExtension {
-        val service = accountLockoutService(policy, context.timeZone)
+    override fun schema(tablePrefix: String): ExtensionSchema = LockoutSchema(tablePrefix)
+
+    override fun build(context: ExtensionContext, db: KodexDatabase): AccountLockoutExtension {
+        val schema = db.schema<LockoutSchema>()
+        val service = accountLockoutService(db, schema, policy, context.timeZone, context.realm.name)
         return AccountLockoutExtension(service, context.timeZone)
     }
 }

@@ -1,15 +1,23 @@
 package com.mustafadakhel.kodex.verification
 
 import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.EventSubscriber
+import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.ExtensionContext
+import com.mustafadakhel.kodex.jdbc.DatabaseDialect
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.schema.CoreSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.validation.ConfigValidationResult
+import com.mustafadakhel.kodex.verification.schema.VerificationSchema
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.mockk.mockk
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -19,17 +27,26 @@ import kotlin.time.Duration.Companion.seconds
 class VerificationConfigTest : FunSpec({
 
     val mockEventBus = object : EventBus {
-        override suspend fun publish(event: com.mustafadakhel.kodex.event.KodexEvent) {}
-        override fun <T : com.mustafadakhel.kodex.event.KodexEvent> subscribe(subscriber: com.mustafadakhel.kodex.event.EventSubscriber<T>) {}
-        override fun <T : com.mustafadakhel.kodex.event.KodexEvent> unsubscribe(subscriber: com.mustafadakhel.kodex.event.EventSubscriber<T>) {}
+        override suspend fun publish(event: KodexEvent) {}
+        override fun <T : KodexEvent> subscribe(subscriber: EventSubscriber<T>) {}
+        override fun <T : KodexEvent> unsubscribe(subscriber: EventSubscriber<T>) {}
         override fun shutdown() {}
     }
 
     val testContext = object : ExtensionContext {
-        override val realm = Realm(owner = "test")
+        override val realm = Realm(name = "test")
         override val timeZone = TimeZone.UTC
         override val eventBus = mockEventBus
+        override val rateLimiter = com.mustafadakhel.kodex.ratelimit.NoOpRateLimiter()
     }
+
+    val stubSchema = VerificationSchema("test_")
+    val stubDb = KodexDatabase(
+        dataSource = mockk(relaxed = true),
+        dialect = DatabaseDialect.H2,
+        core = CoreSchema("test_"),
+        extensionSchemas = mapOf(VerificationSchema::class to stubSchema)
+    )
 
     context("Valid configurations") {
         test("valid configuration passes validation") {
@@ -63,8 +80,8 @@ class VerificationConfigTest : FunSpec({
             }
 
             // Should not throw
-            val extension = config.build(testContext)
-            (extension != null) shouldBe true
+            val extension = config.build(testContext, stubDb)
+            extension.shouldNotBeNull()
         }
     }
 
@@ -314,6 +331,82 @@ class VerificationConfigTest : FunSpec({
         }
     }
 
+    context("Dependency validation") {
+        test("autoSend with dependsOn should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                phone {
+                    autoSend = true
+                    dependsOn(ContactType.Email)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("autoSend=true but also has dependencies") } shouldBe true
+        }
+
+        test("circular dependency should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email {
+                    dependsOn(ContactType.Phone)
+                }
+                phone {
+                    dependsOn(ContactType.Email)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("Circular dependency") } shouldBe true
+        }
+
+        test("self-dependency should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                email {
+                    dependsOn(ContactType.Email)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("cannot depend on itself") } shouldBe true
+        }
+    }
+
+    context("Token format security") {
+        test("NumericFormat with length below 4 should fail validation") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                phone {
+                    tokenFormat = com.mustafadakhel.kodex.tokens.token.NumericFormat(3)
+                }
+            }
+
+            val result = config.validate()
+            (result is ConfigValidationResult.Invalid) shouldBe true
+            result.errors().any { it.contains("minimum is 4") } shouldBe true
+        }
+
+        test("NumericFormat with NoOpRateLimiter should fail build") {
+            val config = VerificationConfig().apply {
+                strategy = VerificationConfig.VerificationStrategy.MANUAL
+                phone {
+                    autoSend = false
+                    tokenFormat = com.mustafadakhel.kodex.tokens.token.NumericFormat(6)
+                }
+            }
+
+            val exception = shouldThrow<IllegalStateException> {
+                config.build(testContext, stubDb)
+            }
+
+            exception.message shouldContain "brute-force"
+        }
+    }
+
     context("Build method validation") {
         test("build throws IllegalStateException for invalid configuration") {
             val config = VerificationConfig().apply {
@@ -322,7 +415,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "VerificationConfig validation failed"
@@ -340,7 +433,7 @@ class VerificationConfigTest : FunSpec({
             }
 
             val exception = shouldThrow<IllegalStateException> {
-                config.build(testContext)
+                config.build(testContext, stubDb)
             }
 
             exception.message shouldContain "sendCooldownPeriod should not exceed 1 hour"

@@ -27,9 +27,6 @@ internal object MetadataSanitizer {
         "code"
     )
 
-    /**
-     * Redaction placeholder for sensitive fields.
-     */
     private const val REDACTED = "[REDACTED]"
 
     /**
@@ -72,9 +69,6 @@ internal object MetadataSanitizer {
         }
     }
 
-    /**
-     * Sanitizes a single value by escaping HTML entities.
-     */
     private fun sanitizeValue(value: Any?): Any {
         return when (value) {
             is String -> escapeHtml(value)

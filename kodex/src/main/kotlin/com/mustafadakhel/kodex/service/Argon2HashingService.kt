@@ -1,5 +1,7 @@
 package com.mustafadakhel.kodex.service
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator
 import org.bouncycastle.crypto.params.Argon2Parameters
 import java.security.MessageDigest
@@ -31,8 +33,7 @@ internal class Argon2HashingService(
             return false
         }
 
-        // Parse parameters: $argon2id$v=19$m=65536,t=4,p=1$salt$hash
-        val params = parseParameters(parts[3])
+        val params = parseParameters(parts[3]) ?: return false
         val salt = runCatching {
             Base64.getDecoder().decode(parts[4])
         }.getOrNull() ?: return false
@@ -50,7 +51,6 @@ internal class Argon2HashingService(
             hashLength = storedHash.size
         )
 
-        // Use constant-time comparison to prevent timing attacks
         return MessageDigest.isEqual(calculatedHash, storedHash)
     }
 
@@ -63,7 +63,7 @@ internal class Argon2HashingService(
         hashLength: Int = algorithm.hashLength
     ): ByteArray {
         val builder = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-            .withVersion(Argon2Parameters.ARGON2_VERSION_13) // Version 19 (0x13)
+            .withVersion(Argon2Parameters.ARGON2_VERSION_13)
             .withMemoryAsKB(memory)
             .withIterations(iterations)
             .withParallelism(parallelism)
@@ -101,16 +101,18 @@ internal class Argon2HashingService(
         }
     }
 
-    private fun parseParameters(paramString: String): HashParameters {
-        val params = paramString.split(',').associate { part ->
-            val (key, value) = part.split('=')
-            key to value.toInt()
-        }
-        return HashParameters(
-            memory = params["m"] ?: algorithm.memory,
-            iterations = params["t"] ?: algorithm.iterations,
-            parallelism = params["p"] ?: algorithm.parallelism
-        )
+    private fun parseParameters(paramString: String): HashParameters? {
+        return runCatching {
+            val params = paramString.split(',').associate { part ->
+                val (key, value) = part.split('=', limit = 2)
+                key to value.toInt()
+            }
+            HashParameters(
+                memory = params["m"] ?: return null,
+                iterations = params["t"] ?: return null,
+                parallelism = params["p"] ?: return null
+            )
+        }.getOrNull()
     }
 
     private data class HashParameters(

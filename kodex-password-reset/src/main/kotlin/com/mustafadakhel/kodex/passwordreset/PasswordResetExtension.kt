@@ -1,72 +1,58 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.passwordreset
 
 import com.mustafadakhel.kodex.event.EventSubscriber
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.event.UserEvent
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
-import com.mustafadakhel.kodex.extension.PersistentExtension
 import com.mustafadakhel.kodex.extension.ServiceProvider
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetContacts
-import com.mustafadakhel.kodex.passwordreset.database.PasswordResetTokens
-import com.mustafadakhel.kodex.util.kodexTransaction
+import com.mustafadakhel.kodex.passwordreset.schema.PasswordResetSchema
+import com.mustafadakhel.kodex.schema.KodexDatabase
+import com.mustafadakhel.kodex.update.UserField
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.insert
 import kotlin.reflect.KClass
 
-/**
- * Password reset extension that manages password reset requests via email/phone.
- *
- * This extension:
- * - Creates password reset contact records on user registration
- * - Provides a service for managing password reset tokens
- * - Handles rate limiting for reset attempts
- *
- * Priority: 100 - runs independently, no conflicts with other extensions.
- */
 public class PasswordResetExtension internal constructor(
-    public val passwordResetService: PasswordResetService,
-    public val tokenCleanupService: TokenCleanupService,
+    private val passwordResetService: PasswordResetService,
+    private val tokenCleanupService: TokenCleanupService,
+    private val db: KodexDatabase,
+    private val schema: PasswordResetSchema,
     private val timeZone: TimeZone
-) : PersistentExtension, EventSubscriberProvider, ServiceProvider {
+) : EventSubscriberProvider, ServiceProvider {
 
     override val priority: Int = 100
 
-    override fun tables(): List<Table> = listOf(
-        PasswordResetContacts,
-        PasswordResetTokens
-    )
-
-    override fun getEventSubscribers(): List<EventSubscriber<*>> {
-        return listOf(
+    override fun getEventSubscribers(): List<EventSubscriber<*>> = listOf(
             object : EventSubscriber<UserEvent.Created> {
                 override val eventType = UserEvent.Created::class
 
                 override suspend fun onEvent(event: UserEvent.Created) {
-                    // Store contacts for password reset
-                    // Note: Only handles UserEvent.Created. Contact updates via UserEvent.Updated
-                    // are not yet implemented - users must reset password using their original contact.
-                    kodexTransaction {
+                    val contacts = schema.passwordResetContacts
+                    db.transaction {
                         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
                         event.email?.let { email ->
-                            PasswordResetContacts.insert {
-                                it[PasswordResetContacts.userId] = event.userId
-                                it[PasswordResetContacts.contactType] = "EMAIL"
-                                it[PasswordResetContacts.contactValue] = email
-                                it[PasswordResetContacts.createdAt] = now
-                                it[PasswordResetContacts.updatedAt] = now
+                            insertInto(contacts) {
+                                set(contacts.realmId, event.realmId)
+                                set(contacts.userId, event.userId)
+                                set(contacts.contactType, "EMAIL")
+                                set(contacts.contactValue, email)
+                                set(contacts.createdAt, now)
+                                set(contacts.updatedAt, now)
                             }
                         }
 
                         event.phone?.let { phone ->
-                            PasswordResetContacts.insert {
-                                it[PasswordResetContacts.userId] = event.userId
-                                it[PasswordResetContacts.contactType] = "PHONE"
-                                it[PasswordResetContacts.contactValue] = phone
-                                it[PasswordResetContacts.createdAt] = now
-                                it[PasswordResetContacts.updatedAt] = now
+                            insertInto(contacts) {
+                                set(contacts.realmId, event.realmId)
+                                set(contacts.userId, event.userId)
+                                set(contacts.contactType, "PHONE")
+                                set(contacts.contactValue, phone)
+                                set(contacts.createdAt, now)
+                                set(contacts.updatedAt, now)
                             }
                         }
                     }
@@ -76,45 +62,42 @@ public class PasswordResetExtension internal constructor(
                 override val eventType = UserEvent.Updated::class
 
                 override suspend fun onEvent(event: UserEvent.Updated) {
-                    kodexTransaction {
+                    val contacts = schema.passwordResetContacts
+                    db.transaction {
                         val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-                        event.fieldChanges.forEach { change ->
-                            when (change.fieldName) {
-                                "email" -> {
-                                    val newEmail = change.newValue as? String
-                                    if (newEmail != null) {
-                                        PasswordResetContacts.upsert(
-                                            keys = arrayOf(
-                                                PasswordResetContacts.realmId,
-                                                PasswordResetContacts.userId,
-                                                PasswordResetContacts.contactType
-                                            )
-                                        ) {
-                                            it[PasswordResetContacts.realmId] = event.realmId
-                                            it[PasswordResetContacts.userId] = event.userId
-                                            it[PasswordResetContacts.contactType] = "EMAIL"
-                                            it[PasswordResetContacts.contactValue] = newEmail
-                                            it[PasswordResetContacts.updatedAt] = now
-                                        }
+                        event.changes.forEach { (fieldName, newValue) ->
+                            when (fieldName) {
+                                UserField.EMAIL.key -> {
+                                    upsert(
+                                        contacts,
+                                        conflictColumns = listOf(
+                                            contacts.realmId,
+                                            contacts.userId,
+                                            contacts.contactType
+                                        )
+                                    ) {
+                                        set(contacts.realmId, event.realmId)
+                                        set(contacts.userId, event.userId)
+                                        set(contacts.contactType, "EMAIL")
+                                        set(contacts.contactValue, newValue)
+                                        set(contacts.updatedAt, now)
                                     }
                                 }
-                                "phone" -> {
-                                    val newPhone = change.newValue as? String
-                                    if (newPhone != null) {
-                                        PasswordResetContacts.upsert(
-                                            keys = arrayOf(
-                                                PasswordResetContacts.realmId,
-                                                PasswordResetContacts.userId,
-                                                PasswordResetContacts.contactType
-                                            )
-                                        ) {
-                                            it[PasswordResetContacts.realmId] = event.realmId
-                                            it[PasswordResetContacts.userId] = event.userId
-                                            it[PasswordResetContacts.contactType] = "PHONE"
-                                            it[PasswordResetContacts.contactValue] = newPhone
-                                            it[PasswordResetContacts.updatedAt] = now
-                                        }
+                                UserField.PHONE.key -> {
+                                    upsert(
+                                        contacts,
+                                        conflictColumns = listOf(
+                                            contacts.realmId,
+                                            contacts.userId,
+                                            contacts.contactType
+                                        )
+                                    ) {
+                                        set(contacts.realmId, event.realmId)
+                                        set(contacts.userId, event.userId)
+                                        set(contacts.contactType, "PHONE")
+                                        set(contacts.contactValue, newValue)
+                                        set(contacts.updatedAt, now)
                                     }
                                 }
                             }
@@ -122,15 +105,12 @@ public class PasswordResetExtension internal constructor(
                     }
                 }
             }
-        )
-    }
+    )
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : Any> getService(type: KClass<T>): T? {
-        return when (type) {
-            PasswordResetService::class -> passwordResetService as T
-            TokenCleanupService::class -> tokenCleanupService as T
-            else -> null
-        }
+    override fun <T : Any> getService(type: KClass<T>): T? = when (type) {
+        PasswordResetService::class -> passwordResetService as T
+        TokenCleanupService::class -> tokenCleanupService as T
+        else -> null
     }
 }

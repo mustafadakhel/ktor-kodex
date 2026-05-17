@@ -68,7 +68,6 @@ class AuthServiceTest : FunSpec({
         eventBus = mockk(relaxed = true)
         timeZone = TimeZone.UTC
         realm = mockk()
-        every { realm.owner } returns realmOwner
         every { realm.name } returns realmOwner
 
         authService = DefaultAuthService(
@@ -86,7 +85,7 @@ class AuthServiceTest : FunSpec({
         val eventSlot = slot<AuthEvent.LoginSuccess>()
 
         coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
-        every { userRepository.findByEmail(testEmail, realmOwner) } returns testUserEntity
+        every { userRepository.findByEmail(testEmail) } returns testUserEntity
         every { userRepository.findRoles(testUserId) } returns emptyList()
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
@@ -99,7 +98,7 @@ class AuthServiceTest : FunSpec({
 
         result shouldBe testTokenPair
         coVerify(exactly = 1) { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) }
-        verify(exactly = 1) { userRepository.findByEmail(testEmail, realmOwner) }
+        verify(exactly = 1) { userRepository.findByEmail(testEmail) }
         verify(exactly = 1) { hashingService.verify(testPassword, testHashedPassword) }
         verify(exactly = 1) { userRepository.updateLastLogin(testUserId, any()) }
         coVerify(exactly = 1) { tokenService.issue(testUserId, any(), any()) }
@@ -116,7 +115,7 @@ class AuthServiceTest : FunSpec({
         val eventSlot = slot<AuthEvent.LoginFailed>()
 
         coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
-        every { userRepository.findByEmail(testEmail, realmOwner) } returns null
+        every { userRepository.findByEmail(testEmail) } returns null
         coEvery { hookExecutor.executeAfterLoginFailure(testEmail, null, "email", testLoginMetadata) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
@@ -140,7 +139,7 @@ class AuthServiceTest : FunSpec({
         val eventSlot = slot<AuthEvent.LoginFailed>()
 
         coEvery { hookExecutor.executeBeforeLogin(testEmail, testLoginMetadata) } returns testEmail
-        every { userRepository.findByEmail(testEmail, realmOwner) } returns testUserEntity
+        every { userRepository.findByEmail(testEmail) } returns testUserEntity
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns false
         coEvery { hookExecutor.executeAfterLoginFailure(testEmail, testUserId, "email", testLoginMetadata) } returns Unit
@@ -165,7 +164,7 @@ class AuthServiceTest : FunSpec({
         val eventSlot = slot<AuthEvent.LoginSuccess>()
 
         coEvery { hookExecutor.executeBeforeLogin(testPhone, testLoginMetadata) } returns testPhone
-        every { userRepository.findByPhone(testPhone, realmOwner) } returns testUserEntity
+        every { userRepository.findByPhone(testPhone) } returns testUserEntity
         every { userRepository.findRoles(testUserId) } returns emptyList()
         every { userRepository.getHashedPassword(testUserId) } returns testHashedPassword
         every { hashingService.verify(testPassword, testHashedPassword) } returns true
@@ -189,7 +188,7 @@ class AuthServiceTest : FunSpec({
         val eventSlot = slot<AuthEvent.LoginFailed>()
 
         coEvery { hookExecutor.executeBeforeLogin(testPhone, testLoginMetadata) } returns testPhone
-        every { userRepository.findByPhone(testPhone, realmOwner) } returns null
+        every { userRepository.findByPhone(testPhone) } returns null
         every { hashingService.hash("dummy-password-for-timing-attack-prevention") } returns dummyHash
         every { hashingService.verify(testPassword, dummyHash) } returns false
         coEvery { hookExecutor.executeAfterLoginFailure(testPhone, null, "phone", testLoginMetadata) } returns Unit
@@ -213,6 +212,7 @@ class AuthServiceTest : FunSpec({
         every { hashingService.verify(oldPassword, testHashedPassword) } returns true
         every { hashingService.hash(newPassword) } returns newHashedPassword
         every { userRepository.updatePassword(testUserId, newHashedPassword) } returns true
+        coEvery { tokenService.revoke(any()) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         authService.changePassword(testUserId, oldPassword, newPassword)
@@ -221,6 +221,7 @@ class AuthServiceTest : FunSpec({
         verify(exactly = 1) { hashingService.verify(oldPassword, testHashedPassword) }
         verify(exactly = 1) { hashingService.hash(newPassword) }
         verify(exactly = 1) { userRepository.updatePassword(testUserId, newHashedPassword) }
+        coVerify(exactly = 1) { tokenService.revoke(testUserId) }
 
         eventSlot.captured.apply {
             userId shouldBe testUserId
@@ -286,6 +287,7 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findById(testUserId) } returns testUserEntity
         every { hashingService.hash(newPassword) } returns newHashedPassword
         every { userRepository.updatePassword(testUserId, newHashedPassword) } returns true
+        coEvery { tokenService.revoke(any()) } returns Unit
         coEvery { eventBus.publish(capture(eventSlot)) } returns Unit
 
         authService.resetPassword(testUserId, newPassword)
@@ -293,6 +295,7 @@ class AuthServiceTest : FunSpec({
         verify(exactly = 1) { userRepository.findById(testUserId) }
         verify(exactly = 1) { hashingService.hash(newPassword) }
         verify(exactly = 1) { userRepository.updatePassword(testUserId, newHashedPassword) }
+        coVerify(exactly = 1) { tokenService.revoke(testUserId) }
 
         eventSlot.captured.apply {
             userId shouldBe testUserId
@@ -330,6 +333,7 @@ class AuthServiceTest : FunSpec({
         every { userRepository.findById(testUserId) } returns testUserEntity
         every { hashingService.hash(newPassword) } returns newHashedPassword
         every { userRepository.updatePassword(testUserId, newHashedPassword) } returns true
+        coEvery { tokenService.revoke(any()) } returns Unit
         coEvery { eventBus.publish(any<AuthEvent.PasswordReset>()) } returns Unit
 
         authService.resetPassword(testUserId, newPassword)

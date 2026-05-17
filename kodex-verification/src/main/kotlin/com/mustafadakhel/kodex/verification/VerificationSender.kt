@@ -9,8 +9,6 @@ package com.mustafadakhel.kodex.verification
  * Example implementations:
  * ```kotlin
  * class EmailVerificationSender(private val emailProvider: EmailProvider) : VerificationSender {
- *     override val contactType = ContactIdentifier(ContactType.EMAIL)
- *
  *     override suspend fun send(contactValue: String, token: String) {
  *         emailProvider.sendEmail(
  *             to = contactValue,
@@ -21,8 +19,6 @@ package com.mustafadakhel.kodex.verification
  * }
  *
  * class SMSVerificationSender(private val twilioClient: TwilioClient) : VerificationSender {
- *     override val contactType = ContactIdentifier(ContactType.PHONE)
- *
  *     override suspend fun send(contactValue: String, token: String) {
  *         twilioClient.sendSMS(
  *             to = contactValue,
@@ -32,8 +28,6 @@ package com.mustafadakhel.kodex.verification
  * }
  *
  * class DiscordVerificationSender(private val bot: DiscordBot) : VerificationSender {
- *     override val contactType = ContactIdentifier(ContactType.CUSTOM_ATTRIBUTE, "discord")
- *
  *     override suspend fun send(contactValue: String, token: String) {
  *         bot.sendDM(username = contactValue, message = "Verify: /verify/discord?token=$token")
  *     }

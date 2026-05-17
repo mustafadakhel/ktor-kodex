@@ -2,7 +2,7 @@ package com.mustafadakhel.kodex.util
 
 import com.mustafadakhel.kodex.model.Realm
 
-public abstract class ConfigurationException(
+public sealed class ConfigurationException(
     override val message: String
 ) : IllegalStateException(message)
 

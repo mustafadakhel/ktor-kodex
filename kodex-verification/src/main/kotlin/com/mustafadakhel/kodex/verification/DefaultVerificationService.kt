@@ -1,195 +1,211 @@
+@file:OptIn(InternalKodexApi::class)
+
 package com.mustafadakhel.kodex.verification
 
+import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.event.VerificationEvent
+import com.mustafadakhel.kodex.jdbc.InternalKodexApi
+import com.mustafadakhel.kodex.jdbc.and
+import com.mustafadakhel.kodex.jdbc.eq
+import com.mustafadakhel.kodex.ratelimit.RateLimitReservation
+import com.mustafadakhel.kodex.ratelimit.RateLimitResult
+import com.mustafadakhel.kodex.ratelimit.RateLimiter
+import com.mustafadakhel.kodex.schema.KodexDatabase
 import com.mustafadakhel.kodex.tokens.ExpirationCalculator
-import com.mustafadakhel.kodex.tokens.security.RateLimitReservation
-import com.mustafadakhel.kodex.tokens.security.RateLimitResult
-import com.mustafadakhel.kodex.tokens.security.RateLimiter
 import com.mustafadakhel.kodex.tokens.token.HexFormat
 import com.mustafadakhel.kodex.tokens.token.TokenGenerator
+import com.mustafadakhel.kodex.tokens.token.TokenHasher
 import com.mustafadakhel.kodex.tokens.token.TokenValidator
-import com.mustafadakhel.kodex.util.kodexTransaction
-import kotlinx.coroutines.delay
-import com.mustafadakhel.kodex.verification.database.VerifiableContacts
-import com.mustafadakhel.kodex.verification.database.VerificationTokens
 import com.mustafadakhel.kodex.util.CurrentKotlinInstant
+import com.mustafadakhel.kodex.verification.schema.VerificationSchema
+import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
-/**
- * Default implementation of VerificationService.
- *
- * Stores verification status per contact type in the database
- * and generates tokens for verification workflows.
- */
 internal class DefaultVerificationService(
+    private val db: KodexDatabase,
+    private val schema: VerificationSchema,
     private val config: VerificationConfig,
     private val timeZone: TimeZone,
-    private val eventBus: com.mustafadakhel.kodex.event.EventBus?,
-    private val realm: String
+    private val eventBus: EventBus?,
+    private val realm: String,
+    private val rateLimiter: RateLimiter
 ) : VerificationService {
 
-    private val rateLimiter = RateLimiter()
+    private val contacts = schema.verifiableContacts
+    private val tokens = schema.verificationTokens
 
-    // === Contact Management ===
+    override suspend fun setContact(userId: UUID, contactType: ContactType, value: String) {
+        val typeKey = contactType.key
 
-    override suspend fun setContact(userId: UUID, identifier: ContactIdentifier, value: String) {
-        kodexTransaction {
+        db.transaction {
             val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-            // Check if contact exists with different value
-            val existing = VerifiableContacts
-                .selectAll()
+            val existing = select(contacts)
                 .where {
-                    (VerifiableContacts.userId eq userId) and
-                    (VerifiableContacts.contactType eq identifier.type) and
-                    (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
+                    (contacts.realmId eq realm) and
+                    (contacts.userId eq userId) and
+                    (contacts.contactType eq typeKey)
                 }
-                .singleOrNull()
+                .singleOrNull { row ->
+                    row[contacts.contactValue] to row[contacts.isVerified] to row[contacts.verifiedAt]
+                }
 
             if (existing != null) {
-                // Update existing contact
-                val existingValue = existing[VerifiableContacts.contactValue]
+                val (pair, existingVerifiedAt) = existing
+                val (existingValue, existingIsVerified) = pair
                 val resetVerification = existingValue != value
 
-                VerifiableContacts.update({
-                    (VerifiableContacts.userId eq userId) and
-                    (VerifiableContacts.contactType eq identifier.type) and
-                    (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
-                }) {
-                    it[VerifiableContacts.contactValue] = value
-                    it[VerifiableContacts.isVerified] = if (resetVerification) false else existing[VerifiableContacts.isVerified]
-                    it[VerifiableContacts.verifiedAt] = if (resetVerification) null else existing[VerifiableContacts.verifiedAt]
-                    it[VerifiableContacts.updatedAt] = now
+                update(contacts) {
+                    set(contacts.contactValue, value)
+                    set(contacts.isVerified, if (resetVerification) false else existingIsVerified)
+                    set(contacts.verifiedAt, if (resetVerification) null else existingVerifiedAt)
+                    set(contacts.updatedAt, now)
+                    where {
+                        (contacts.realmId eq realm) and
+                        (contacts.userId eq userId) and
+                        (contacts.contactType eq typeKey)
+                    }
+                }
+
+                if (resetVerification) {
+                    deleteFrom(tokens)
+                        .where {
+                            (tokens.realmId eq realm) and
+                            (tokens.userId eq userId) and
+                            (tokens.contactType eq typeKey)
+                        }
+                        .execute()
                 }
             } else {
-                // Insert new contact
-                VerifiableContacts.insert {
-                    it[VerifiableContacts.userId] = userId
-                    it[VerifiableContacts.contactType] = identifier.type
-                    it[VerifiableContacts.customAttributeKey] = identifier.customAttributeKey
-                    it[VerifiableContacts.contactValue] = value
-                    it[VerifiableContacts.isVerified] = false
-                    it[VerifiableContacts.verifiedAt] = null
-                    it[VerifiableContacts.updatedAt] = now
+                insertInto(contacts) {
+                    set(contacts.realmId, realm)
+                    set(contacts.userId, userId)
+                    set(contacts.contactType, typeKey)
+                    set(contacts.contactValue, value)
+                    set(contacts.isVerified, false)
+                    set(contacts.verifiedAt, null)
+                    set(contacts.updatedAt, now)
                 }
             }
         }
     }
 
-    override suspend fun removeContact(userId: UUID, identifier: ContactIdentifier) {
-        kodexTransaction {
-            VerifiableContacts.deleteWhere {
-                (VerifiableContacts.userId eq userId) and
-                (contactType eq identifier.type) and
-                (customAttributeKey eq identifier.customAttributeKey)
-            }
+    override suspend fun removeContact(userId: UUID, contactType: ContactType) {
+        val typeKey = contactType.key
 
-            // Also delete any tokens for this contact
-            VerificationTokens.deleteWhere {
-                (VerificationTokens.userId eq userId) and
-                (contactType eq identifier.type) and
-                (customAttributeKey eq identifier.customAttributeKey)
-            }
-        }
-    }
-
-    override fun getContact(userId: UUID, identifier: ContactIdentifier): ContactVerification? {
-        return kodexTransaction {
-            VerifiableContacts
-                .selectAll()
+        db.transaction {
+            deleteFrom(contacts)
                 .where {
-                    (VerifiableContacts.userId eq userId) and
-                    (VerifiableContacts.contactType eq identifier.type) and
-                    (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
+                    (contacts.realmId eq realm) and
+                    (contacts.userId eq userId) and
+                    (contacts.contactType eq typeKey)
                 }
-                .singleOrNull()
-                ?.let {
+                .execute()
+
+            deleteFrom(tokens)
+                .where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.contactType eq typeKey)
+                }
+                .execute()
+        }
+    }
+
+    override fun getContact(userId: UUID, contactType: ContactType): ContactVerification? {
+        val typeKey = contactType.key
+
+        return db.transaction {
+            select(contacts)
+                .where {
+                    (contacts.realmId eq realm) and
+                    (contacts.userId eq userId) and
+                    (contacts.contactType eq typeKey)
+                }
+                .singleOrNull { row ->
                     ContactVerification(
-                        identifier = identifier,
-                        contactValue = it[VerifiableContacts.contactValue],
-                        isVerified = it[VerifiableContacts.isVerified],
-                        verifiedAt = it[VerifiableContacts.verifiedAt]
+                        contactType = contactType,
+                        contactValue = row[contacts.contactValue],
+                        isVerified = row[contacts.isVerified],
+                        verifiedAt = row[contacts.verifiedAt]
                     )
                 }
         }
     }
 
     override fun getUserContacts(userId: UUID): List<ContactVerification> {
-        return kodexTransaction {
-            VerifiableContacts
-                .selectAll()
-                .where { VerifiableContacts.userId eq userId }
-                .map {
-                    val type = it[VerifiableContacts.contactType]
-                    val attrKey = it[VerifiableContacts.customAttributeKey]
-                    val identifier = ContactIdentifier(type, attrKey)
-
+        return db.transaction {
+            select(contacts)
+                .where {
+                    (contacts.realmId eq realm) and (contacts.userId eq userId)
+                }
+                .map { row ->
                     ContactVerification(
-                        identifier = identifier,
-                        contactValue = it[VerifiableContacts.contactValue],
-                        isVerified = it[VerifiableContacts.isVerified],
-                        verifiedAt = it[VerifiableContacts.verifiedAt]
+                        contactType = ContactType.fromKey(row[contacts.contactType]),
+                        contactValue = row[contacts.contactValue],
+                        isVerified = row[contacts.isVerified],
+                        verifiedAt = row[contacts.verifiedAt]
                     )
                 }
         }
     }
 
-    // === Verification Status ===
-
-    override fun isContactVerified(userId: UUID, identifier: ContactIdentifier): Boolean {
-        return getContact(userId, identifier)?.isVerified ?: false
+    override fun isContactVerified(userId: UUID, contactType: ContactType): Boolean {
+        return getContact(userId, contactType)?.isVerified ?: false
     }
 
     override fun canLogin(userId: UUID): Boolean {
         val requiredContacts = config.getRequiredContacts()
 
         if (requiredContacts.isEmpty()) {
-            // No verification required
             return true
         }
 
-        // Check if all required contacts are verified
-        return requiredContacts.all { identifier ->
-            isContactVerified(userId, identifier)
+        return requiredContacts.all { type ->
+            isContactVerified(userId, type)
         }
     }
 
     override fun getStatus(userId: UUID): UserVerificationStatus {
-        val contacts = getUserContacts(userId)
-        val contactsMap = contacts.associateBy { it.identifier.key }
+        val userContacts = getUserContacts(userId)
+        val contactsMap = userContacts.associateBy { it.contactType.key }
         return UserVerificationStatus(userId, contactsMap)
     }
 
-    override fun getMissingVerifications(userId: UUID): List<ContactIdentifier> {
+    override fun getMissingVerifications(userId: UUID): List<ContactType> {
         val requiredContacts = config.getRequiredContacts()
-        return requiredContacts.filter { identifier ->
-            !isContactVerified(userId, identifier)
+        return requiredContacts.filter { type ->
+            !isContactVerified(userId, type)
         }
     }
 
-    // === Token Operations ===
-
     override suspend fun sendVerification(
         userId: UUID,
-        identifier: ContactIdentifier,
+        contactType: ContactType,
         ipAddress: String?
     ): VerificationSendResult {
-        val contact = getContact(userId, identifier)
-            ?: error("Contact not found for user $userId: ${identifier.key}")
+        val now = CurrentKotlinInstant
 
-        // Get registered sender from config
-        val sender = config.getSender(identifier)
-            ?: error("No sender configured for contact type: ${identifier.key}")
+        val contact = getContact(userId, contactType)
+            ?: error("Contact not found for user $userId: ${contactType.key}")
 
-        // Check rate limits (3-dimensional: user, contact value, IP)
-        // Use checkAndReserve for two-phase commit pattern with optional cooldown
+        val sender = config.getSender(contactType)
+            ?: error("No sender configured for contact type: ${contactType.key}")
+
+        val policy = config.getPolicy(contactType)
+        if (policy != null && policy.dependsOn.isNotEmpty()) {
+            val unmet = policy.dependsOn.filter { dep -> !isContactVerified(userId, dep) }
+            if (unmet.isNotEmpty()) {
+                val names = unmet.joinToString { it.key }
+                return VerificationSendResult.DependencyNotMet(
+                    missingDependencies = unmet,
+                    message = "Cannot send verification for ${contactType.key}: unverified dependencies: $names"
+                )
+            }
+        }
+
         val userReservation = rateLimiter.checkAndReserve(
             key = "verify:send:user:$userId",
             limit = config.maxSendAttemptsPerUser,
@@ -212,7 +228,6 @@ internal class DefaultVerificationService(
             cooldown = config.sendCooldownPeriod
         )
         if (!contactReservation.isAllowed()) {
-            // Release user reservation
             rateLimiter.releaseReservation(userReservation.reservationId)
             val reason = when (val result = contactReservation.result) {
                 is RateLimitResult.Exceeded -> result.reason
@@ -231,7 +246,6 @@ internal class DefaultVerificationService(
                 cooldown = config.sendCooldownPeriod
             )
             if (!ipReservation.isAllowed()) {
-                // Release previous reservations
                 rateLimiter.releaseReservation(userReservation.reservationId)
                 rateLimiter.releaseReservation(contactReservation.reservationId)
                 val reason = when (val result = ipReservation.result) {
@@ -243,58 +257,52 @@ internal class DefaultVerificationService(
             }
         }
 
-        // Generate token but DON'T store yet
-        val token = generateToken()
+        val token = generateToken(contactType)
 
-        // Try to send FIRST
+        storeToken(userId, contactType, token)
+
         try {
             sender.send(contact.contactValue, token)
         } catch (e: Exception) {
-            // Release ALL reservations on send failure
+            deleteStoredToken(userId, contactType, token)
             rateLimiter.releaseReservation(userReservation.reservationId)
             rateLimiter.releaseReservation(contactReservation.reservationId)
             rateLimiter.releaseReservation(ipReservation?.reservationId)
 
-            // Emit failure event
-            eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.VerificationFailed(
+            eventBus?.publish(VerificationEvent.VerificationFailed(
                 eventId = UUID.randomUUID(),
-                timestamp = CurrentKotlinInstant,
+                timestamp = now,
                 realmId = realm,
                 userId = userId,
-                verificationType = identifier.type.name,
+                verificationType = contactType.key,
                 reason = e.message ?: "Send failed"
             ))
 
-            // Return SendFailed so user can retry
             return VerificationSendResult.SendFailed(e.message ?: "Failed to send verification")
         }
 
-        // Send succeeded - NOW store token and keep rate limit reservations
-        storeToken(userId, identifier, token)
-
-        // Emit success event
-        eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.EmailVerificationSent(
+        eventBus?.publish(VerificationEvent.EmailVerificationSent(
             eventId = UUID.randomUUID(),
-            timestamp = CurrentKotlinInstant,
+            timestamp = now,
             realmId = realm,
             userId = userId,
-            email = contact.contactValue,
-            verificationCode = null
+            email = contact.contactValue
         ))
 
-        return VerificationSendResult.Success(token)
+        return VerificationSendResult.Success
     }
 
     override suspend fun verifyToken(
         userId: UUID,
-        identifier: ContactIdentifier,
+        contactType: ContactType,
         token: String,
         ipAddress: String?
     ): VerificationResult {
+        val now = CurrentKotlinInstant
+        val nowLocal = now.toLocalDateTime(timeZone)
         val startTime = System.nanoTime()
+        val typeKey = contactType.key
 
-        // SECURITY: Rate limit on (userId + IP) instead of token to prevent token enumeration
-        // Using token in rate limit key would reveal which tokens exist in database
         val rateLimitKey = "verify:attempt:user:$userId:ip:${ipAddress ?: "unknown"}"
         val userIpLimit = rateLimiter.checkLimit(
             key = rateLimitKey,
@@ -302,109 +310,105 @@ internal class DefaultVerificationService(
             window = config.verifyRateLimitWindow
         )
         if (userIpLimit is RateLimitResult.Exceeded) {
-            // Add constant-time delay before returning
             ensureMinimumResponseTime(startTime)
             return VerificationResult.RateLimitExceeded(userIpLimit.reason)
         }
 
-        val result = kodexTransaction {
-            val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
+        val hashedToken = TokenHasher.hash(token)
 
-            val tokenRecord = VerificationTokens
-                .selectAll()
+        val result = db.transaction {
+            val tokenRecord = select(tokens)
                 .where {
-                    (VerificationTokens.userId eq userId) and
-                    (VerificationTokens.token eq token) and
-                    (VerificationTokens.contactType eq identifier.type) and
-                    (VerificationTokens.customAttributeKey eq identifier.customAttributeKey)
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.token eq hashedToken) and
+                    (tokens.contactType eq typeKey)
                 }
-                .singleOrNull()
+                .singleOrNull { row ->
+                    row[tokens.expiresAt] to row[tokens.usedAt]
+                }
 
             if (tokenRecord == null) {
-                return@kodexTransaction VerificationResult.Invalid("Token not found")
+                return@transaction VerificationResult.Invalid("Token not found")
             }
 
-            // Validate token using common utility
+            val (expiresAt, usedAt) = tokenRecord
+
             val validation = TokenValidator.validate(
-                expiresAt = tokenRecord[VerificationTokens.expiresAt],
-                usedAt = tokenRecord[VerificationTokens.usedAt],
-                now = now
+                expiresAt = expiresAt,
+                usedAt = usedAt,
+                now = nowLocal
             )
 
             if (!validation.isValid) {
-                return@kodexTransaction VerificationResult.Invalid(validation.reason!!)
+                return@transaction VerificationResult.Invalid(validation.reason!!)
             }
 
-            // Mark token as used
-            VerificationTokens.update({ VerificationTokens.token eq token }) {
-                it[VerificationTokens.usedAt] = now
+            update(tokens) {
+                set(tokens.usedAt, nowLocal)
+                where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.token eq hashedToken) and
+                    (tokens.contactType eq typeKey)
+                }
             }
 
-            // Mark contact as verified
-            setVerified(userId, identifier, true)
-
-            // Clear rate limits after successful verification
-            rateLimiter.clear(rateLimitKey)
-            rateLimiter.clear("verify:send:user:$userId")
+            setVerified(userId, contactType, true)
 
             VerificationResult.Success
         }
 
-        // Emit events after transaction completes
+        if (result is VerificationResult.Success) {
+            rateLimiter.clear(rateLimitKey)
+            rateLimiter.clear("verify:send:user:$userId")
+        }
+
         when (result) {
             is VerificationResult.Success -> {
-                val contactValue = getContact(userId, identifier)?.contactValue ?: ""
-                when (identifier.type) {
-                    ContactType.EMAIL -> {
-                        eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.EmailVerified(
+                val contactValue = getContact(userId, contactType)?.contactValue ?: ""
+                when (contactType) {
+                    is ContactType.Email -> {
+                        eventBus?.publish(VerificationEvent.EmailVerified(
                             eventId = UUID.randomUUID(),
-                            timestamp = CurrentKotlinInstant,
+                            timestamp = now,
                             realmId = realm,
                             userId = userId,
                             email = contactValue
                         ))
                     }
-                    ContactType.PHONE -> {
-                        eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.PhoneVerified(
+                    is ContactType.Phone -> {
+                        eventBus?.publish(VerificationEvent.PhoneVerified(
                             eventId = UUID.randomUUID(),
-                            timestamp = CurrentKotlinInstant,
+                            timestamp = now,
                             realmId = realm,
                             userId = userId,
                             phone = contactValue
                         ))
                     }
-                    ContactType.CUSTOM_ATTRIBUTE -> {
-                        // Use generic VerificationEvent for custom attributes
-                        // Could extend VerificationEvent with CustomAttributeVerified if needed
+                    is ContactType.CustomAttribute -> {
                     }
                 }
             }
             is VerificationResult.Invalid -> {
-                eventBus?.publish(com.mustafadakhel.kodex.event.VerificationEvent.VerificationFailed(
+                eventBus?.publish(VerificationEvent.VerificationFailed(
                     eventId = UUID.randomUUID(),
-                    timestamp = CurrentKotlinInstant,
+                    timestamp = now,
                     realmId = realm,
                     userId = userId,
-                    verificationType = identifier.type.name,
+                    verificationType = contactType.key,
                     reason = result.reason
                 ))
             }
             is VerificationResult.RateLimitExceeded -> {
-                // Rate limit exceeded, no additional event needed
             }
         }
 
-        // SECURITY: Add constant-time delay to prevent timing attacks
-        // Ensures both valid and invalid tokens take similar time to verify
         ensureMinimumResponseTime(startTime)
 
         return result
     }
 
-    /**
-     * Ensures minimum response time to prevent timing attacks.
-     * Adds delay if operation completed faster than minimum.
-     */
     private suspend fun ensureMinimumResponseTime(startTimeNanos: Long) {
         val elapsedMs = (System.nanoTime() - startTimeNanos) / 1_000_000
         val minResponseTime = config.minVerificationResponseTimeMs
@@ -416,57 +420,76 @@ internal class DefaultVerificationService(
 
     override suspend fun resendVerification(
         userId: UUID,
-        identifier: ContactIdentifier,
+        contactType: ContactType,
         ipAddress: String?
     ): VerificationSendResult {
-        // Invalidate existing tokens for this contact
-        kodexTransaction {
-            VerificationTokens.deleteWhere {
-                (VerificationTokens.userId eq userId) and
-                (contactType eq identifier.type) and
-                (customAttributeKey eq identifier.customAttributeKey)
-            }
+        val typeKey = contactType.key
+
+        db.transaction {
+            deleteFrom(tokens)
+                .where {
+                    (tokens.realmId eq realm) and
+                    (tokens.userId eq userId) and
+                    (tokens.contactType eq typeKey)
+                }
+                .execute()
         }
 
-        // Send new verification (includes rate limiting)
-        return sendVerification(userId, identifier, ipAddress)
+        return sendVerification(userId, contactType, ipAddress)
     }
 
-    // === Manual Control ===
+    override fun setVerified(userId: UUID, contactType: ContactType, verified: Boolean) {
+        val typeKey = contactType.key
 
-    override fun setVerified(userId: UUID, identifier: ContactIdentifier, verified: Boolean) {
-        kodexTransaction {
+        db.transaction {
             val now = CurrentKotlinInstant.toLocalDateTime(timeZone)
 
-            VerifiableContacts.update({
-                (VerifiableContacts.userId eq userId) and
-                (VerifiableContacts.contactType eq identifier.type) and
-                (VerifiableContacts.customAttributeKey eq identifier.customAttributeKey)
-            }) {
-                it[VerifiableContacts.isVerified] = verified
-                it[VerifiableContacts.verifiedAt] = if (verified) now else null
-                it[VerifiableContacts.updatedAt] = now
+            update(contacts) {
+                set(contacts.isVerified, verified)
+                set(contacts.verifiedAt, if (verified) now else null)
+                set(contacts.updatedAt, now)
+                where {
+                    (contacts.realmId eq realm) and
+                    (contacts.userId eq userId) and
+                    (contacts.contactType eq typeKey)
+                }
             }
         }
     }
 
-    // === Private Helpers ===
+    private fun generateToken(contactType: ContactType): String {
+        val format = config.getPolicy(contactType)?.tokenFormat ?: HexFormat()
+        return TokenGenerator.generate(format)
+    }
 
-    private fun generateToken(): String = TokenGenerator.generate(HexFormat())
+    private fun storeToken(userId: UUID, contactType: ContactType, token: String) {
+        val typeKey = contactType.key
 
-    private fun storeToken(userId: UUID, identifier: ContactIdentifier, token: String) {
-        kodexTransaction {
+        db.transaction {
             val now = CurrentKotlinInstant
-            val expiration = config.getTokenExpiration(identifier)
+            val expiration = config.getTokenExpiration(contactType)
             val expiresAt = ExpirationCalculator.calculateExpiration(expiration, timeZone, now)
 
-            VerificationTokens.insert {
-                it[VerificationTokens.userId] = userId
-                it[contactType] = identifier.type
-                it[customAttributeKey] = identifier.customAttributeKey
-                it[VerificationTokens.token] = token
-                it[VerificationTokens.expiresAt] = expiresAt
+            insertInto(tokens) {
+                set(tokens.realmId, realm)
+                set(tokens.userId, userId)
+                set(tokens.contactType, typeKey)
+                set(tokens.token, TokenHasher.hash(token))
+                set(tokens.expiresAt, expiresAt)
             }
+        }
+    }
+
+    private fun deleteStoredToken(userId: UUID, contactType: ContactType, token: String) {
+        db.transaction {
+            deleteFrom(tokens)
+                .where {
+                    (tokens.realmId eq realm) and
+                        (tokens.userId eq userId) and
+                        (tokens.contactType eq contactType.key) and
+                        (tokens.token eq TokenHasher.hash(token))
+                }
+                .execute()
         }
     }
 }

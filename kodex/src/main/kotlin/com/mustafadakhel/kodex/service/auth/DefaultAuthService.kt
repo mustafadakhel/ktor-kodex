@@ -2,9 +2,14 @@ package com.mustafadakhel.kodex.service.auth
 
 import com.mustafadakhel.kodex.event.AuthEvent
 import com.mustafadakhel.kodex.event.EventBus
+import com.mustafadakhel.kodex.extension.AuthenticatedUser
 import com.mustafadakhel.kodex.extension.HookExecutor
 import com.mustafadakhel.kodex.extension.LoginMetadata
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.mustafadakhel.kodex.extension.LogoutMetadata
 import com.mustafadakhel.kodex.model.Realm
+import com.mustafadakhel.kodex.model.UserStatus
 import com.mustafadakhel.kodex.model.database.UserEntity
 import com.mustafadakhel.kodex.repository.UserRepository
 import com.mustafadakhel.kodex.service.HashingService
@@ -35,7 +40,7 @@ internal class DefaultAuthService(
     private val realm: Realm
 ) : AuthService {
 
-    private val dummyHash = hashingService.hash("dummy-password-for-timing-attack-prevention")
+    private val dummyHash by lazy { hashingService.hash("dummy-password-for-timing-attack-prevention") }
 
     override suspend fun login(
         email: String,
@@ -49,7 +54,7 @@ internal class DefaultAuthService(
             identifierType = "email",
             ipAddress = ipAddress,
             userAgent = userAgent,
-            userFetcher = { userRepository.findByEmail(it, realm.name) }
+            userFetcher = { userRepository.findByEmail(it) }
         )
 
     override suspend fun loginByPhone(
@@ -64,13 +69,13 @@ internal class DefaultAuthService(
             identifierType = "phone",
             ipAddress = ipAddress,
             userAgent = userAgent,
-            userFetcher = { userRepository.findByPhone(it, realm.name) }
+            userFetcher = { userRepository.findByPhone(it) }
         )
 
     override suspend fun changePassword(userId: UUID, oldPassword: String, newPassword: String) {
-        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
+        val timestamp = CurrentKotlinInstant
 
-        val user = userRepository.findById(userId)
+        userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         if (!authenticateInternal(oldPassword, userId)) {
@@ -78,7 +83,7 @@ internal class DefaultAuthService(
                 AuthEvent.PasswordChangeFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = timestamp,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     userId = userId,
                     actorId = userId,
                     reason = "Invalid old password"
@@ -94,11 +99,13 @@ internal class DefaultAuthService(
             throw KodexThrowable.UserNotFound("User with id $userId not found")
         }
 
+        tokenService.revoke(userId)
+
         eventBus.publish(
             AuthEvent.PasswordChanged(
                 eventId = UUID.randomUUID(),
                 timestamp = timestamp,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = userId,
                 actorId = userId
             )
@@ -106,9 +113,9 @@ internal class DefaultAuthService(
     }
 
     override suspend fun resetPassword(userId: UUID, newPassword: String) {
-        val timestamp = com.mustafadakhel.kodex.util.CurrentKotlinInstant
+        val timestamp = CurrentKotlinInstant
 
-        val user = userRepository.findById(userId)
+        userRepository.findById(userId)
             ?: throw KodexThrowable.UserNotFound("User with id $userId not found")
 
         val hashedPassword = hashingService.hash(newPassword)
@@ -118,13 +125,35 @@ internal class DefaultAuthService(
             throw KodexThrowable.UserNotFound("User with id $userId not found")
         }
 
+        tokenService.revoke(userId)
+
         eventBus.publish(
             AuthEvent.PasswordReset(
                 eventId = UUID.randomUUID(),
                 timestamp = timestamp,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = userId,
                 actorType = "ADMIN"
+            )
+        )
+    }
+
+    override suspend fun logout(
+        userId: UUID,
+        tokenFamily: UUID?,
+        ipAddress: String,
+        userAgent: String?,
+        reason: String
+    ) {
+        tokenService.revoke(userId)
+
+        hookExecutor.executeAfterLogout(
+            userId,
+            tokenFamily,
+            LogoutMetadata(
+                ipAddress = ipAddress,
+                userAgent = userAgent,
+                reason = reason
             )
         )
     }
@@ -136,13 +165,13 @@ internal class DefaultAuthService(
         ipAddress: String,
         userAgent: String?,
         userFetcher: suspend (String) -> UserEntity?
-    ): TokenPair {
+    ): TokenPair = withContext(Dispatchers.IO) {
         val timestamp = CurrentKotlinInstant
         val metadata = LoginMetadata(ipAddress, userAgent)
 
-        hookExecutor.executeBeforeLogin(identifier, metadata)
+        val transformedIdentifier = hookExecutor.executeBeforeLogin(identifier, metadata)
 
-        val user = userFetcher(identifier)
+        val user = userFetcher(transformedIdentifier)
 
         val authSuccess = if (user != null) {
             authenticateInternal(password, user.id)
@@ -163,7 +192,7 @@ internal class DefaultAuthService(
                 AuthEvent.LoginFailed(
                     eventId = UUID.randomUUID(),
                     timestamp = timestamp,
-                    realmId = realm.owner,
+                    realmId = realm.name,
                     identifier = identifier,
                     reason = actualReason,
                     method = identifierType,
@@ -175,7 +204,21 @@ internal class DefaultAuthService(
             throw KodexThrowable.Authorization.InvalidCredentials
         }
 
-        hookExecutor.executeAfterAuthentication(user!!.id)
+        when (user!!.status) {
+            UserStatus.SUSPENDED -> throw KodexThrowable.Authorization.AccountSuspended
+            UserStatus.PENDING -> throw KodexThrowable.Authorization.AccountPending
+            UserStatus.ACTIVE -> {}
+        }
+
+        val userRoles = userRepository.findRoles(user.id)
+        val authenticatedUser = AuthenticatedUser(
+            userId = user.id,
+            email = user.email,
+            phone = user.phoneNumber,
+            roles = userRoles.map { it.name },
+            status = user.status
+        )
+        hookExecutor.executeAfterAuthentication(authenticatedUser, metadata)
 
         userRepository.updateLastLogin(user.id, nowLocal(timeZone))
 
@@ -183,14 +226,14 @@ internal class DefaultAuthService(
             AuthEvent.LoginSuccess(
                 eventId = UUID.randomUUID(),
                 timestamp = timestamp,
-                realmId = realm.owner,
+                realmId = realm.name,
                 userId = user.id,
                 identifier = identifier,
                 method = identifierType
             )
         )
 
-        return generateTokenInternal(user.id)
+        generateTokenInternal(user.id, ipAddress, userAgent)
     }
 
     private fun authenticateInternal(password: String, userId: UUID): Boolean {
@@ -198,7 +241,7 @@ internal class DefaultAuthService(
         return hashingService.verify(password, storedPassword)
     }
 
-    private suspend fun generateTokenInternal(userId: UUID): TokenPair {
-        return tokenService.issue(userId)
+    private suspend fun generateTokenInternal(userId: UUID, sourceIp: String? = null, userAgent: String? = null): TokenPair {
+        return tokenService.issue(userId, sourceIp, userAgent)
     }
 }

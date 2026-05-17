@@ -1,26 +1,35 @@
 package com.mustafadakhel.kodex.audit
 
-import com.mustafadakhel.kodex.audit.database.AuditLogs
 import com.mustafadakhel.kodex.event.EventSubscriber
 import com.mustafadakhel.kodex.event.KodexEvent
 import com.mustafadakhel.kodex.extension.EventSubscriberProvider
-import com.mustafadakhel.kodex.extension.PersistentExtension
-import org.jetbrains.exposed.sql.Table
+import com.mustafadakhel.kodex.extension.RealmExtension
+import com.mustafadakhel.kodex.extension.Shutdownable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
-/**
- * Audit logging extension for Kodex.
- * Delegates audit event logging to a configurable audit provider via the event bus.
- *
- * If using DatabaseAuditProvider, this extension automatically registers
- * the AuditLogs table with the database engine.
- */
 public class AuditExtension internal constructor(
-    private val provider: AuditProvider
-) : PersistentExtension, EventSubscriberProvider {
+    private val provider: AuditProvider,
+    private val retentionScheduler: AuditRetentionScheduler?
+) : RealmExtension, EventSubscriberProvider, Shutdownable {
 
-    override fun tables(): List<Table> = listOf(AuditLogs)
+    private val retentionScope = retentionScheduler?.let {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
 
-    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> {
-        return listOf(AuditEventSubscriber(provider))
+    init {
+        retentionScheduler?.let { scheduler ->
+            retentionScope?.let { scope -> scheduler.start(scope) }
+        }
+    }
+
+    override fun getEventSubscribers(): List<EventSubscriber<out KodexEvent>> =
+        listOf(AuditEventSubscriber(provider))
+
+    override fun shutdown() {
+        retentionScheduler?.stop()
+        retentionScope?.cancel()
     }
 }

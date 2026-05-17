@@ -13,18 +13,20 @@ public class AuditEventSubscriber internal constructor(
     private val provider: AuditProvider
 ) : EventSubscriber<KodexEvent> {
 
+    private val logger = org.slf4j.LoggerFactory.getLogger(AuditEventSubscriber::class.java)
+
     override val eventType: KClass<out KodexEvent> = KodexEvent::class
 
     override suspend fun onEvent(event: KodexEvent) {
-        val auditEvent = convertToAuditEvent(event)
+        val auditEvent = convertToAuditEvent(event) ?: return
         try {
             provider.log(auditEvent)
         } catch (e: Exception) {
-            System.err.println("Failed to log audit event from ${event.eventType}: ${e.message}")
+            logger.error("Failed to log audit event from {}: {}", event.eventType, e.message, e)
         }
     }
 
-    private fun convertToAuditEvent(event: KodexEvent): AuditEvent {
+    private fun convertToAuditEvent(event: KodexEvent): AuditEvent? {
         return when (event) {
             is UserEvent.Created -> AuditEvent(
                 eventType = event.eventType,
@@ -412,7 +414,7 @@ public class AuditEventSubscriber internal constructor(
                 realmId = event.realmId
             )
 
-            else -> throw IllegalArgumentException("Unsupported event type: ${event::class.simpleName}")
+            else -> null
         }
     }
 }

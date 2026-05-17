@@ -66,18 +66,29 @@ public class MfaSessionStore(
     }
 
     public fun markAsVerified(sessionId: String): Boolean {
-        val session = sessions[sessionId] ?: return false
-        if (session.isExpired()) {
-            removeSession(sessionId)
-            return false
+        var success = false
+        sessions.compute(sessionId) { _, session ->
+            when {
+                session == null -> {
+                    success = false
+                    null
+                }
+                session.isExpired() -> {
+                    success = false
+                    userSessions[session.userId]?.remove(sessionId)
+                    null
+                }
+                session.verified -> {
+                    success = false
+                    session
+                }
+                else -> {
+                    success = true
+                    session.copy(verified = true, verifiedAt = CurrentKotlinInstant)
+                }
+            }
         }
-
-        val verifiedSession = session.copy(
-            verified = true,
-            verifiedAt = CurrentKotlinInstant
-        )
-        sessions[sessionId] = verifiedSession
-        return true
+        return success
     }
 
     private fun enforceLimits(userId: UUID) {

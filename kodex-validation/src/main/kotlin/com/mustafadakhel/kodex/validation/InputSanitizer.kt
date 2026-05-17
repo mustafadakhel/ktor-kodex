@@ -14,9 +14,6 @@ internal class InputSanitizer(
 ) {
     private val safelist = Safelist.none()
 
-    /**
-     * Removes all HTML tags from input using Jsoup's Safelist.none().
-     */
     public fun sanitizeHtml(input: String, context: InputContext = InputContext.PLAIN_TEXT): String {
         return when (context) {
             InputContext.HTML -> Jsoup.clean(input, safelist)
@@ -25,9 +22,6 @@ internal class InputSanitizer(
         }
     }
 
-    /**
-     * Escapes HTML entities to prevent XSS in HTML contexts.
-     */
     public fun escapeHtml(input: String): String {
         return input
             .replace("&", "&amp;")
@@ -38,9 +32,6 @@ internal class InputSanitizer(
             .replace("/", "&#x2F;")
     }
 
-    /**
-     * Sanitizes custom attribute key-value pairs with length limits and control character removal.
-     */
     public fun sanitizeCustomAttribute(key: String, value: String): Pair<String, String> {
         val cleanKey = sanitizeKey(key)
         val cleanValue = sanitizeValue(value)

@@ -44,10 +44,6 @@ dependencies {
     // Ktor dependencies (for KtorDsl annotation)
     implementation(libs.bundles.ktor.server)
 
-    // Exposed dependencies for database access
-    implementation(libs.bundles.exposed)
-    implementation(libs.hikari)
-
     // kotlinx.datetime for timestamp handling
     implementation(libs.kotlinx.datetime)
 

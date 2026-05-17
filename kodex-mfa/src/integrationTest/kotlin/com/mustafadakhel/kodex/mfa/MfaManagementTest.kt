@@ -54,7 +54,6 @@ class MfaManagementTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-list-methods-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -157,7 +156,6 @@ class MfaManagementTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-remove-method-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -280,7 +278,6 @@ class MfaManagementTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-set-primary-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
@@ -409,7 +406,6 @@ class MfaManagementTest : StringSpec({
 
                 val kodex = install(Kodex) {
                     database {
-                        driverClassName = "org.h2.Driver"
                         jdbcUrl = "jdbc:h2:mem:mfa-required-test;DB_CLOSE_DELAY=-1;"
                         username = "test"
                         password = "test"
