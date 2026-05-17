@@ -7,6 +7,7 @@ import com.mustafadakhel.kodex.model.Realm
 import com.mustafadakhel.kodex.model.TokenType
 import com.mustafadakhel.kodex.routes.auth.KodexPrincipal
 import com.mustafadakhel.kodex.token.JwtSignatureVerifier
+import com.mustafadakhel.kodex.throwable.KodexThrowable
 import com.mustafadakhel.kodex.token.TokenManager
 import com.mustafadakhel.kodex.token.TokenPair
 import io.kotest.core.spec.style.FunSpec
@@ -83,7 +84,13 @@ class TokenServiceTest : FunSpec({
 
     test("revokeToken with default delete should delegate to TokenManager.revokeToken") {
         val token = "some-token"
+        val decodedJwt = JWT.create()
+            .withJWTId(UUID.randomUUID().toString())
+            .withSubject(UUID.randomUUID().toString())
+            .sign(Algorithm.HMAC256("test"))
+            .let { JWT.decode(it) }
 
+        every { signatureVerifier.verify(token) } returns decodedJwt
         every { tokenManager.revokeToken(token, true) } returns Unit
 
         tokenService.revokeToken(token)
@@ -93,7 +100,13 @@ class TokenServiceTest : FunSpec({
 
     test("revokeToken with explicit delete=false should delegate correctly") {
         val token = "some-token"
+        val decodedJwt = JWT.create()
+            .withJWTId(UUID.randomUUID().toString())
+            .withSubject(UUID.randomUUID().toString())
+            .sign(Algorithm.HMAC256("test"))
+            .let { JWT.decode(it) }
 
+        every { signatureVerifier.verify(token) } returns decodedJwt
         every { tokenManager.revokeToken(token, false) } returns Unit
 
         tokenService.revokeToken(token, delete = false)
@@ -128,7 +141,7 @@ class TokenServiceTest : FunSpec({
     test("verifyAccessToken should return null when signature verification fails") {
         val rawToken = "forged-jwt-token"
 
-        every { signatureVerifier.verify(rawToken) } throws RuntimeException("Invalid signature")
+        every { signatureVerifier.verify(rawToken) } throws KodexThrowable.Authorization.SuspiciousToken("Invalid signature")
 
         val result = tokenService.verify(rawToken)
 
@@ -137,6 +150,9 @@ class TokenServiceTest : FunSpec({
 
     test("verifyAccessToken should return null for malformed JWT") {
         val malformedToken = "not.a.valid.jwt"
+
+        every { signatureVerifier.verify(malformedToken) } throws
+            KodexThrowable.Authorization.SuspiciousToken("Malformed JWT")
 
         val result = tokenService.verify(malformedToken)
 

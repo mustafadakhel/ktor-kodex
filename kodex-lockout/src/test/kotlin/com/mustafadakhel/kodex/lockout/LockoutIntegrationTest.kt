@@ -53,7 +53,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
 
             repeat(3) { service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials") }
@@ -71,7 +71,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
 
             repeat(2) { service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials") }
@@ -87,7 +87,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
 
             repeat(3) { service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials") }
@@ -124,9 +124,10 @@ class LockoutIntegrationTest : FunSpec({
             val ipAddress = "192.168.1.1"
 
             repeat(12) { index ->
+                val uid = testSetup.createTestUser(email = "ipuser$index@test.com", realmId = "test-realm")
                 service.recordFailedAttempt(
                     identifier = "user$index@example.com",
-                    userId = UUID.randomUUID(),
+                    userId = uid,
                     ipAddress = ipAddress,
                     reason = "Invalid credentials"
                 )
@@ -147,7 +148,7 @@ class LockoutIntegrationTest : FunSpec({
             )
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
@@ -165,7 +166,7 @@ class LockoutIntegrationTest : FunSpec({
             )
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
@@ -253,7 +254,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
 
             repeat(3) { service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials") }
@@ -269,7 +270,7 @@ class LockoutIntegrationTest : FunSpec({
             )
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
@@ -288,7 +289,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
 
             repeat(100) { service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials") }
@@ -301,7 +302,7 @@ class LockoutIntegrationTest : FunSpec({
             val policy = AccountLockoutPolicy.disabled()
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val identifier = "user@example.com"
             val ipAddress = "192.168.1.1"
 
@@ -318,7 +319,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
             val reason = "Invalid password"
 
@@ -351,7 +352,7 @@ class LockoutIntegrationTest : FunSpec({
             val service = accountLockoutService(db, lockoutSchema, policy, TimeZone.UTC, "test-realm")
 
             val identifier = "user@example.com"
-            val userId = UUID.randomUUID()
+            val userId = testSetup.createTestUser(email = "user-${System.nanoTime()}@test.com", realmId = "test-realm")
             val ipAddress = "192.168.1.1"
 
             repeat(2) { service.recordFailedAttempt(identifier, userId, ipAddress, "Invalid credentials") }

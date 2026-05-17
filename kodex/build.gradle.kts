@@ -80,6 +80,7 @@ tasks {
 
         useJUnitPlatform()
         shouldRunAfter(test)
+        maxHeapSize = "1g"
     }
 
     named<Task>("compileIntegrationTestKotlin") {

@@ -91,9 +91,9 @@ class TokenTypesTest : DescribeSpec({
     }
 
     describe("TokenValidity") {
-        it("should have default access duration of 2 hours") {
+        it("should have default access duration of 15 minutes") {
             val validity = TokenValidity()
-            validity.access shouldBe 2.hours
+            validity.access shouldBe 15.minutes
         }
 
         it("should have default refresh duration of 30 days") {
@@ -119,7 +119,7 @@ class TokenTypesTest : DescribeSpec({
 
         it("should have Default constant with default values") {
             val validity = TokenValidity.Default
-            validity.access shouldBe 2.hours
+            validity.access shouldBe 15.minutes
             validity.refresh shouldBe 30.days
         }
 

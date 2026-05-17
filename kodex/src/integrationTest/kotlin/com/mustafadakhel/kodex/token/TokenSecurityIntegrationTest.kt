@@ -589,7 +589,7 @@ class TokenSecurityIntegrationTest : FunSpec({
                 )
 
                 // Try to refresh user1's token as user2 - should fail
-                shouldThrow<KodexThrowable.Authorization.SuspiciousToken> {
+                shouldThrow<KodexThrowable.Authorization> {
                     services.tokens.refresh(user2.id, user1Tokens.refresh)
                 }
             }

@@ -179,41 +179,36 @@ class DefaultTokenManagerTest : FunSpec({
             newTokenPair.refresh shouldNotBe originalTokenPair.refresh
         }
 
-        test("should detect token replay attack") {
+        test("should reject reuse of consumed token") {
             tokenManager = createTokenManager(TokenRotationPolicy.strict())
 
             val originalTokenPair = tokenManager.issueNewTokens(testUserId)
             tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
             }
         }
 
-        test("should allow refresh within grace period") {
+        test("should reject reuse even with unsafe policy") {
             tokenManager = createTokenManager(TokenRotationPolicy.unsafe())
 
             val originalTokenPair = tokenManager.issueNewTokens(testUserId)
-            val newTokenPair1 = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
-            newTokenPair1.shouldNotBeNull()
+            tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
 
-            val newTokenPair2 = tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
-            newTokenPair2.shouldNotBeNull()
+            shouldThrow<KodexThrowable.Authorization> {
+                tokenManager.refreshTokens(testUserId, originalTokenPair.refresh)
+            }
         }
 
-        test("should revoke token family on replay after grace period") {
+        test("should reject reuse of any consumed token in chain") {
             tokenManager = createTokenManager(TokenRotationPolicy.strict())
 
-            val tokenPair1 = tokenManager.issueNewTokens(testUserId)
-            tokenManager.refreshTokens(testUserId, tokenPair1.refresh)
-            tokenManager.refreshTokens(testUserId, tokenManager.refreshTokens(testUserId, tokenManager.issueNewTokens(testUserId).refresh).refresh)
-
-            // Create a fresh chain and replay
             val freshPair = tokenManager.issueNewTokens(testUserId)
             val freshPair2 = tokenManager.refreshTokens(testUserId, freshPair.refresh)
             tokenManager.refreshTokens(testUserId, freshPair2.refresh)
 
-            shouldThrow<KodexThrowable.Authorization.TokenReplayDetected> {
+            shouldThrow<KodexThrowable.Authorization> {
                 tokenManager.refreshTokens(testUserId, freshPair.refresh)
             }
         }

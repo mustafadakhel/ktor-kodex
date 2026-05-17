@@ -5,6 +5,7 @@ package com.mustafadakhel.kodex.sessions
 import com.mustafadakhel.kodex.jdbc.ConnectionScope
 import com.mustafadakhel.kodex.jdbc.InternalKodexApi
 import com.mustafadakhel.kodex.jdbc.DatabaseDialect
+import com.mustafadakhel.kodex.jdbc.eq
 import com.mustafadakhel.kodex.sessions.database.SessionRepository
 import com.mustafadakhel.kodex.sessions.model.Session
 import com.mustafadakhel.kodex.sessions.model.SessionStatus
@@ -36,7 +37,8 @@ class AnomalyDetectorTest : StringSpec({
         try {
             val cs = ConnectionScope(conn, dialect)
 
-            val ddl = schema.tables().flatMap { listOf(it.createTableDDL(dialect)) + it.createIndexDDL(dialect) }
+            val coreDdl = core.tables().flatMap { listOf(it.createTableDDL(dialect)) + it.createIndexDDL(dialect) }
+            val ddl = coreDdl + schema.tables().flatMap { listOf(it.createTableDDL(dialect)) + it.createIndexDDL(dialect) }
             conn.createStatement().use { stmt ->
                 ddl.forEach { stmt.execute(it) }
             }
@@ -49,6 +51,19 @@ class AnomalyDetectorTest : StringSpec({
         }
     }
 
+    fun ConnectionScope.seedUser(userId: UUID) {
+        val users = core.users
+        val now = CurrentKotlinInstant.toLocalDateTime(TimeZone.UTC)
+        insertInto(users) {
+            set(users.id, userId)
+            set(users.email, "test-${userId}@example.com")
+            set(users.passwordHash, "hashed")
+            set(users.realmId, realmId)
+            set(users.createdAt, now)
+            set(users.updatedAt, now)
+        }
+    }
+
     fun ConnectionScope.seedSession(
         repository: SessionRepository,
         userId: UUID,
@@ -56,6 +71,7 @@ class AnomalyDetectorTest : StringSpec({
         latitude: Double? = null,
         longitude: Double? = null
     ): Session {
+        if (!select(core.users).where { core.users.id eq userId }.any()) seedUser(userId)
         val sessions = schema.sessions
         val now = CurrentKotlinInstant
         val nowLocal = now.toLocalDateTime(TimeZone.UTC)
